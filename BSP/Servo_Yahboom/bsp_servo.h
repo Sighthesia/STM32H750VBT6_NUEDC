@@ -4,20 +4,20 @@
  * @author       liusen
  * @version      V1.0
  * @date         2017.07.17
- * @brief        6¸ö¶æ»ú¿ØÖÆÇı¶¯Í·ÎÄ¼ş
+ * @brief        6ä¸ªèˆµæœºæ§åˆ¶é©±åŠ¨å¤´æ–‡ä»¶
  * @details
- * @par History  ¼ûÈçÏÂËµÃ÷
+ * @par History  è§å¦‚ä¸‹è¯´æ˜
  *
  * version:		liusen_20170717
  */
-
 #ifndef __BSP_SERVO_H__
 #define __BSP_SERVO_H__
 
 #include "Servo_Yahboom_HAL.h"
 #include "Delay_us_STM32HAL.h"
+#include "tim.h" /* æ·»åŠ å®šæ—¶å™¨å¤´æ–‡ä»¶ */
 
-/*¶¨ÒåĞèÒª³õÊ¼»¯µÄ¶æ»úºê¶¨Òå¿ª¹Ø*/
+/*å®šä¹‰éœ€è¦åˆå§‹åŒ–çš„èˆµæœºå®å®šä¹‰å¼€å…³*/
 
 #define USE_SERVO_J1
 #define USE_SERVO_J2
@@ -26,26 +26,51 @@
 // #define USE_SERVO_J5
 // #define USE_SERVO_J6
 
-extern int Angle_J1;
-extern int Angle_J2;
-// extern int Angle_J3;
-// extern int Angle_J4;
-// extern int Angle_J5;
-// extern int Angle_J6;
+extern volatile float Angle_J1;
+extern volatile float Angle_J2;
 
-#define Servo_J1_PIN GPIO_PIN_6
-#define Servo_J2_PIN GPIO_PIN_4
-// #define Servo_J3_PIN GPIO_Pin_14
-// #define Servo_J4_PIN GPIO_Pin_15
-// #define Servo_J5_PIN GPIO_Pin_8
-// #define Servo_J6_PIN GPIO_Pin_1
+#ifdef USE_SERVO_J3
+extern volatile float Angle_J3;
+#endif
+#ifdef USE_SERVO_J4
+extern volatile float Angle_J4;
+#endif
+#ifdef USE_SERVO_J5
+extern volatile float Angle_J5;
+#endif
+#ifdef USE_SERVO_J6
+extern volatile float Angle_J6;
+#endif
 
-#define Servo_J1_PORT GPIOD
-#define Servo_J2_PORT GPIOD
-// #define Servo_J3_PORT GPIOB
-// #define Servo_J4_PORT GPIOB
-// #define Servo_J5_PORT GPIOA
-// #define Servo_J6_PORT GPIOA
+#define Servo_J1_PIN GPIO_PIN_4
+#define Servo_J2_PIN GPIO_PIN_5
+#ifdef USE_SERVO_J3
+#define Servo_J3_PIN GPIO_PIN_14
+#endif
+#ifdef USE_SERVO_J4
+#define Servo_J4_PIN GPIO_PIN_15
+#endif
+#ifdef USE_SERVO_J5
+#define Servo_J5_PIN GPIO_PIN_8
+#endif
+#ifdef USE_SERVO_J6
+#define Servo_J6_PIN GPIO_PIN_1
+#endif
+
+#define Servo_J1_PORT GPIOC
+#define Servo_J2_PORT GPIOC
+#ifdef USE_SERVO_J3
+#define Servo_J3_PORT GPIOB
+#endif
+#ifdef USE_SERVO_J4
+#define Servo_J4_PORT GPIOB
+#endif
+#ifdef USE_SERVO_J5
+#define Servo_J5_PORT GPIOA
+#endif
+#ifdef USE_SERVO_J6
+#define Servo_J6_PORT GPIOA
+#endif
 
 // #define Servo_J1_RCC RCC_APB2Periph_GPIOA
 // #define Servo_J2_RCC RCC_APB2Periph_GPIOB
@@ -54,15 +79,27 @@ extern int Angle_J2;
 // #define Servo_J5_RCC RCC_APB2Periph_GPIOA
 // #define Servo_J6_RCC RCC_APB2Periph_GPIOA
 
-void Servo_J1(int v_iAngle); /*¶¨ÒåÒ»¸öÂö³åº¯Êı£¬ÓÃÀ´Ä£Äâ·½Ê½²úÉúPWMÖµ*/
-void Servo_J2(int v_iAngle); /*¶¨ÒåÒ»¸öÂö³åº¯Êı£¬ÓÃÀ´Ä£Äâ·½Ê½²úÉúPWMÖµ*/
-// void Servo_J3(int v_iAngle); /*¶¨ÒåÒ»¸öÂö³åº¯Êı£¬ÓÃÀ´Ä£Äâ·½Ê½²úÉúPWMÖµ*/
-// void Servo_J4(int v_iAngle); /*¶¨ÒåÒ»¸öÂö³åº¯Êı£¬ÓÃÀ´Ä£Äâ·½Ê½²úÉúPWMÖµ*/
-// void Servo_J5(int v_iAngle); /*¶¨ÒåÒ»¸öÂö³åº¯Êı£¬ÓÃÀ´Ä£Äâ·½Ê½²úÉúPWMÖµ*/
-// void Servo_J6(int v_iAngle); /*¶¨ÒåÒ»¸öÂö³åº¯Êı£¬ÓÃÀ´Ä£Äâ·½Ê½²úÉúPWMÖµ*/
+/* --------------------------------- è‡ªå®šä¹‰éƒ¨åˆ†ç»“æŸ -------------------------------- */
+
+void Servo_J1(int v_iAngle); /*å®šä¹‰ä¸€ä¸ªè„‰å†²å‡½æ•°ï¼Œç”¨æ¥æ¨¡æ‹Ÿæ–¹å¼äº§ç”ŸPWMå€¼*/
+void Servo_J2(int v_iAngle); /*å®šä¹‰ä¸€ä¸ªè„‰å†²å‡½æ•°ï¼Œç”¨æ¥æ¨¡æ‹Ÿæ–¹å¼äº§ç”ŸPWMå€¼*/
+#ifdef USE_SERVO_J3
+void Servo_J3(int v_iAngle); /*å®šä¹‰ä¸€ä¸ªè„‰å†²å‡½æ•°ï¼Œç”¨æ¥æ¨¡æ‹Ÿæ–¹å¼äº§ç”ŸPWMå€¼*/
+#endif
+#ifdef USE_SERVO_J4
+void Servo_J4(int v_iAngle); /*å®šä¹‰ä¸€ä¸ªè„‰å†²å‡½æ•°ï¼Œç”¨æ¥æ¨¡æ‹Ÿæ–¹å¼äº§ç”ŸPWMå€¼*/
+#endif
+#ifdef USE_SERVO_J5
+void Servo_J5(int v_iAngle); /*å®šä¹‰ä¸€ä¸ªè„‰å†²å‡½æ•°ï¼Œç”¨æ¥æ¨¡æ‹Ÿæ–¹å¼äº§ç”ŸPWMå€¼*/
+#endif
+#ifdef USE_SERVO_J6
+void Servo_J6(int v_iAngle); /*å®šä¹‰ä¸€ä¸ªè„‰å†²å‡½æ•°ï¼Œç”¨æ¥æ¨¡æ‹Ÿæ–¹å¼äº§ç”ŸPWMå€¼*/
+#endif
 
 void front_detection(void);
 void left_detection(void);
 void right_detection(void);
+
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim); /* èˆµæœºå®šæ—¶å™¨ä¸­æ–­å›è°ƒå‡½æ•° */
 
 #endif

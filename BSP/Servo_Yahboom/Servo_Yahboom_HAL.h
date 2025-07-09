@@ -13,7 +13,7 @@
 #ifndef __SERVO_YAHBOOM_HAL_H
 #define __SERVO_YAHBOOM_HAL_H
 
-#include "stm32h743xx.h"
+#include "stm32h7xx.h"
 #include "stm32h7xx_hal.h"
 
 typedef struct

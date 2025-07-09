@@ -47,11 +47,16 @@ target_link_directories(${CMAKE_PROJECT_NAME} PRIVATE
 
 # Add sources to executable
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE
+    BSP/Servo_Yahboom/Servo_Yahboom_HAL.c
+    BSP/Servo_Yahboom/bsp_servo.c
+    BSP/Delay_us_STM32HAL/Delay_us_STM32HAL.c
     # Add user sources here
 )
 
 # Add include paths
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
+    BSP/Servo_Yahboom
+    BSP/Delay_us_STM32HAL
     # Add user defined include paths
 )
 

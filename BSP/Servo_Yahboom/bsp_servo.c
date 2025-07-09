@@ -1,181 +1,216 @@
 /**
  * @par Copyright (C): 2010-2019, Shenzhen Yahboom Tech
  * @file         bsp_servo.c
- * @author       liusen
+ * @autho	servo_yahboom_hal.GPIO_SetB	servo_yahboom_hal.GPIO_SetB	servo_yahboom_hal.GPIO_SetB	servo_yahboom_hal.GPIO_SetBits(Servo_J6_PORT, Servo_J6_PIN); // å°†èˆµæœºæ¥å£ç”µå¹³ç½®é«˜
+	delay_us(pulsewidth);					   // å»¶æ—¶è„‰å®½å€¼çš„å¾®ç§’æ•°
+
+	servo_yahboom_hal.GPIO_ResetBits(Servo_J6_PORT, Servo_J6_PIN); // å°†èˆµæœºæ¥å£ç”µå¹³ç½®ä½Servo_J5_PORT, Servo_J5_PIN); // å°†èˆµæœºæ¥å£ç”µå¹³ç½®é«˜
+	delay_us(pulsewidth);					   // å»¶æ—¶è„‰å®½å€¼çš„å¾®ç§’æ•°
+
+	servo_yahboom_hal.GPIO_ResetBits(Servo_J5_PORT, Servo_J5_PIN); // å°†èˆµæœºæ¥å£ç”µå¹³ç½®ä½Servo_J4_PORT, Servo_J4_PIN); // å°†èˆµæœºæ¥å£ç”µå¹³ç½®é«˜
+	delay_us(pulsewidth);					   // å»¶æ—¶è„‰å®½å€¼çš„å¾®ç§’æ•°
+
+	servo_yahboom_hal.GPIO_ResetBits(Servo_J4_PORT, Servo_J4_PIN); // å°†èˆµæœºæ¥å£ç”µå¹³ç½®ä½Servo_J3_PORT, Servo_J3_PIN); // å°†èˆµæœºæ¥å£ç”µå¹³ç½®é«˜
+	delay_us(pulsewidth);					   // å»¶æ—¶è„‰å®½å€¼çš„å¾®ç§’æ•°
+
+	servo_yahboom_hal.GPIO_ResetBits(Servo_J3_PORT, Servo_J3_PIN); // å°†èˆµæœºæ¥å£ç”µå¹³ç½®ä½    liusen
  * @version      V1.0
  * @date         2017.07.17
- * @brief        6¸ö¶æ»ú¿ØÖÆÇı¶¯Ô´ÎÄ¼ş
+ * @brief        6ä¸ªèˆµæœºæ§åˆ¶é©±åŠ¨æºæ–‡ä»¶
  * @details
- * @par History  ¼ûÈçÏÂËµÃ÷
+ * @par History  è§å¦‚ä¸‹è¯´æ˜
  *
  * version:		liusen_20170717
  */
 
 #include "bsp_servo.h"
 
-/*½Ç¶È·¶Î§ 0~180*/
-int Angle_J1 = 0;
-int Angle_J2 = 0;
-int Angle_J3 = 0;
-int Angle_J4 = 0;
-int Angle_J5 = 0;
-int Angle_J6 = 0;
+/*è§’åº¦èŒƒå›´ 0~180*/
+volatile float Angle_J1 = 0.0f;
+volatile float Angle_J2 = 0.0f;
+#ifdef USE_SERVO_J3
+volatile float Angle_J3 = 0.0f;
+#endif
+#ifdef USE_SERVO_J4
+volatile float Angle_J4 = 0.0f;
+#endif
+#ifdef USE_SERVO_J5
+volatile float Angle_J5 = 0.0f;
+#endif
+#ifdef USE_SERVO_J6
+volatile float Angle_J6 = 0.0f;
+#endif
 
+/* å®šæ—¶å™¨ä¸­æ–­è®¡æ•°å˜é‡ */
+static volatile int num = 0;
+
+#ifdef USE_SERVO_J1
 /**
  * Function       Servo_J1
  * @author        liusen
  * @date          2017.07.17
- * @brief         ¶æ»ú1¿ØÖÆº¯Êı
- * @param[in]     v_iAngle ½Ç¶È£º0~180¡ã
+ * @brief         èˆµæœº1æ§åˆ¶å‡½æ•°
+ * @param[in]     v_iAngle è§’åº¦ï¼š0~180Â°
  * @param[out]    void
  * @retval        void
- * @par History   ÎŞ
+ * @par History   æ— 
  */
-void Servo_J1(int v_iAngle) /*¶¨ÒåÒ»¸öÂö³åº¯Êı£¬ÓÃÀ´Ä£Äâ·½Ê½²úÉúPWMÖµ*/
+void Servo_J1(int v_iAngle) /*å®šä¹‰ä¸€ä¸ªè„‰å†²å‡½æ•°ï¼Œç”¨æ¥æ¨¡æ‹Ÿæ–¹å¼äº§ç”ŸPWMå€¼*/
 {
-	int pulsewidth; // ¶¨ÒåÂö¿í±äÁ¿
+	int pulsewidth; // å®šä¹‰è„‰å®½å˜é‡
 
-	pulsewidth = (v_iAngle * 11) + 500; // ½«½Ç¶È×ª»¯Îª500-2480 µÄÂö¿íÖµ
+	pulsewidth = (v_iAngle * 11) + 500; // å°†è§’åº¦è½¬åŒ–ä¸º500-2480 çš„è„‰å®½å€¼
 
-	servo_yahboom_hal.GPIO_SetBits(Servo_J1_PORT, Servo_J1_PIN); // ½«¶æ»ú½Ó¿ÚµçÆ½ÖÃ¸ß
-	delay_us(pulsewidth);										 // ÑÓÊ±Âö¿íÖµµÄÎ¢ÃëÊı
+	servo_yahboom_hal.GPIO_SetBits(Servo_J1_PORT, Servo_J1_PIN); // å°†èˆµæœºæ¥å£ç”µå¹³ç½®é«˜
+	delay_us(pulsewidth);										 // å»¶æ—¶è„‰å®½å€¼çš„å¾®ç§’æ•°
 
-	servo_yahboom_hal.GPIO_ResetBits(Servo_J1_PORT, Servo_J1_PIN); // ½«¶æ»ú½Ó¿ÚµçÆ½ÖÃµÍ
-	HAL_Delay(20 - pulsewidth / 1000);							   // ÑÓÊ±ÖÜÆÚÄÚÊ£ÓàÊ±¼ä
+	servo_yahboom_hal.GPIO_ResetBits(Servo_J1_PORT, Servo_J1_PIN); // å°†èˆµæœºæ¥å£ç”µå¹³ç½®ä½
+	HAL_Delay(20 - pulsewidth / 1000);							   // å»¶æ—¶å‘¨æœŸå†…å‰©ä½™æ—¶é—´
 }
+#endif
 
+#ifdef USE_SERVO_J2
 /**
  * Function       Servo_J2
  * @author        liusen
  * @date          2017.07.17
- * @brief         ¶æ»ú2¿ØÖÆº¯Êı
- * @param[in]     v_iAngle ½Ç¶È£º0~180¡ã
+ * @brief         èˆµæœº2æ§åˆ¶å‡½æ•°
+ * @param[in]     v_iAngle è§’åº¦ï¼š0~180Â°
  * @param[out]    void
  * @retval        void
- * @par History   ÎŞ
+ * @par History   æ— 
  */
-void Servo_J2(int v_iAngle) /*¶¨ÒåÒ»¸öÂö³åº¯Êı£¬ÓÃÀ´Ä£Äâ·½Ê½²úÉúPWMÖµ*/
+void Servo_J2(int v_iAngle) /*å®šä¹‰ä¸€ä¸ªè„‰å†²å‡½æ•°ï¼Œç”¨æ¥æ¨¡æ‹Ÿæ–¹å¼äº§ç”ŸPWMå€¼*/
 {
-	int pulsewidth; // ¶¨ÒåÂö¿í±äÁ¿
+	int pulsewidth; // å®šä¹‰è„‰å®½å˜é‡
 
-	pulsewidth = (v_iAngle * 11) + 500; // ½«½Ç¶È×ª»¯Îª500-2480 µÄÂö¿íÖµ
+	pulsewidth = (v_iAngle * 11) + 500; // å°†è§’åº¦è½¬åŒ–ä¸º500-2480 çš„è„‰å®½å€¼
 
-	servo_yahboom_hal.GPIO_SetBits(Servo_J2_PORT, Servo_J2_PIN); // ½«¶æ»ú½Ó¿ÚµçÆ½ÖÃ¸ß
-	delay_us(pulsewidth);										 // ÑÓÊ±Âö¿íÖµµÄÎ¢ÃëÊı
+	servo_yahboom_hal.GPIO_SetBits(Servo_J2_PORT, Servo_J2_PIN); // å°†èˆµæœºæ¥å£ç”µå¹³ç½®é«˜
+	delay_us(pulsewidth);										 // å»¶æ—¶è„‰å®½å€¼çš„å¾®ç§’æ•°
 
-	servo_yahboom_hal.GPIO_ResetBits(Servo_J2_PORT, Servo_J2_PIN); // ½«¶æ»ú½Ó¿ÚµçÆ½ÖÃµÍ
-	HAL_Delay(20 - pulsewidth / 1000);							   // ÑÓÊ±ÖÜÆÚÄÚÊ£ÓàÊ±¼ä
+	servo_yahboom_hal.GPIO_ResetBits(Servo_J2_PORT, Servo_J2_PIN); // å°†èˆµæœºæ¥å£ç”µå¹³ç½®ä½
+	HAL_Delay(20 - pulsewidth / 1000);							   // å»¶æ—¶å‘¨æœŸå†…å‰©ä½™æ—¶é—´
 }
+#endif
 
-// /**
-//  * Function       Servo_J3
-//  * @author        liusen
-//  * @date          2017.07.17
-//  * @brief         ¶æ»ú3¿ØÖÆº¯Êı
-//  * @param[in]     v_iAngle ½Ç¶È£º0~180¡ã
-//  * @param[out]    void
-//  * @retval        void
-//  * @par History   ÎŞ
-//  */
-// void Servo_J3(int v_iAngle) /*¶¨ÒåÒ»¸öÂö³åº¯Êı£¬ÓÃÀ´Ä£Äâ·½Ê½²úÉúPWMÖµ*/
-// {
-// 	int pulsewidth; // ¶¨ÒåÂö¿í±äÁ¿
+#ifdef USE_SERVO_J3
+/**
+ * Function       Servo_J3
+ * @author        liusen
+ * @date          2017.07.17
+ * @brief         èˆµæœº3æ§åˆ¶å‡½æ•°
+ * @param[in]     v_iAngle è§’åº¦ï¼š0~180Â°
+ * @param[out]    void
+ * @retval        void
+ * @par History   æ— 
+ */
+void Servo_J3(int v_iAngle) /*å®šä¹‰ä¸€ä¸ªè„‰å†²å‡½æ•°ï¼Œç”¨æ¥æ¨¡æ‹Ÿæ–¹å¼äº§ç”ŸPWMå€¼*/
+{
+	int pulsewidth; // å®šä¹‰è„‰å®½å˜é‡
 
-// 	pulsewidth = (v_iAngle * 11) + 500; // ½«½Ç¶È×ª»¯Îª500-2480 µÄÂö¿íÖµ
+	pulsewidth = (v_iAngle * 11) + 500; // å°†è§’åº¦è½¬åŒ–ä¸º500-2480 çš„è„‰å®½å€¼
 
-// 	servo_yahboom_hal.GPIO_SetBits(Servo_J3_PORT, Servo_J3_PIN); // ½«¶æ»ú½Ó¿ÚµçÆ½ÖÃ¸ß
-// 	delay_us(pulsewidth);					   // ÑÓÊ±Âö¿íÖµµÄÎ¢ÃëÊı
+	servo_yahboom_hal.GPIO_SetBits(Servo_J3_PORT, Servo_J3_PIN); // å°†èˆµæœºæ¥å£ç”µå¹³ç½®é«˜
+	delay_us(pulsewidth);										 // å»¶æ—¶è„‰å®½å€¼çš„å¾®ç§’æ•°
 
-// 	GPIO_ResetBits(Servo_J3_PORT, Servo_J3_PIN); // ½«¶æ»ú½Ó¿ÚµçÆ½ÖÃµÍ
-// 	HAL_Delay(20 - pulsewidth / 1000);			 // ÑÓÊ±ÖÜÆÚÄÚÊ£ÓàÊ±¼ä
-// }
+	GPIO_ResetBits(Servo_J3_PORT, Servo_J3_PIN); // å°†èˆµæœºæ¥å£ç”µå¹³ç½®ä½
+	HAL_Delay(20 - pulsewidth / 1000);			 // å»¶æ—¶å‘¨æœŸå†…å‰©ä½™æ—¶é—´
+}
+#endif
 
-// /**
-//  * Function       Servo_J4
-//  * @author        liusen
-//  * @date          2017.07.17
-//  * @brief         ¶æ»ú4¿ØÖÆº¯Êı
-//  * @param[in]     v_iAngle ½Ç¶È£º0~180¡ã
-//  * @param[out]    void
-//  * @retval        void
-//  * @par History   ÎŞ
-//  */
-// void Servo_J4(int v_iAngle) /*¶¨ÒåÒ»¸öÂö³åº¯Êı£¬ÓÃÀ´Ä£Äâ·½Ê½²úÉúPWMÖµ*/
-// {
-// 	int pulsewidth; // ¶¨ÒåÂö¿í±äÁ¿
+#ifdef USE_SERVO_J4
+/**
+ * Function       Servo_J4
+ * @author        liusen
+ * @date          2017.07.17
+ * @brief         èˆµæœº4æ§åˆ¶å‡½æ•°
+ * @param[in]     v_iAngle è§’åº¦ï¼š0~180Â°
+ * @param[out]    void
+ * @retval        void
+ * @par History   æ— 
+ */
+void Servo_J4(int v_iAngle) /*å®šä¹‰ä¸€ä¸ªè„‰å†²å‡½æ•°ï¼Œç”¨æ¥æ¨¡æ‹Ÿæ–¹å¼äº§ç”ŸPWMå€¼*/
+{
+	int pulsewidth; // å®šä¹‰è„‰å®½å˜é‡
 
-// 	pulsewidth = (v_iAngle * 11) + 500; // ½«½Ç¶È×ª»¯Îª500-2480 µÄÂö¿íÖµ
+	pulsewidth = (v_iAngle * 11) + 500; // å°†è§’åº¦è½¬åŒ–ä¸º500-2480 çš„è„‰å®½å€¼
 
-// 	servo_yahboom_hal.GPIO_SetBits(Servo_J4_PORT, Servo_J4_PIN); // ½«¶æ»ú½Ó¿ÚµçÆ½ÖÃ¸ß
-// 	delay_us(pulsewidth);					   // ÑÓÊ±Âö¿íÖµµÄÎ¢ÃëÊı
+	servo_yahboom_hal.GPIO_SetBits(Servo_J4_PORT, Servo_J4_PIN); // å°†èˆµæœºæ¥å£ç”µå¹³ç½®é«˜
+	delay_us(pulsewidth);										 // å»¶æ—¶è„‰å®½å€¼çš„å¾®ç§’æ•°
 
-// 	GPIO_ResetBits(Servo_J4_PORT, Servo_J4_PIN); // ½«¶æ»ú½Ó¿ÚµçÆ½ÖÃµÍ
-// 	HAL_Delay(20 - pulsewidth / 1000);			 // ÑÓÊ±ÖÜÆÚÄÚÊ£ÓàÊ±¼ä
-// }
+	GPIO_ResetBits(Servo_J4_PORT, Servo_J4_PIN); // å°†èˆµæœºæ¥å£ç”µå¹³ç½®ä½
+	HAL_Delay(20 - pulsewidth / 1000);			 // å»¶æ—¶å‘¨æœŸå†…å‰©ä½™æ—¶é—´
+}
+#endif
 
-// /**
-//  * Function       Servo_J5
-//  * @author        liusen
-//  * @date          2017.07.17
-//  * @brief         ¶æ»ú5¿ØÖÆº¯Êı
-//  * @param[in]     v_iAngle ½Ç¶È£º0~180¡ã
-//  * @param[out]    void
-//  * @retval        void
-//  * @par History   ÎŞ
-//  */
-// void Servo_J5(int v_iAngle) /*¶¨ÒåÒ»¸öÂö³åº¯Êı£¬ÓÃÀ´Ä£Äâ·½Ê½²úÉúPWMÖµ*/
-// {
-// 	int pulsewidth; // ¶¨ÒåÂö¿í±äÁ¿
+#ifdef USE_SERVO_J5
+/**
+ * Function       Servo_J5
+ * @author        liusen
+ * @date          2017.07.17
+ * @brief         èˆµæœº5æ§åˆ¶å‡½æ•°
+ * @param[in]     v_iAngle è§’åº¦ï¼š0~180Â°
+ * @param[out]    void
+ * @retval        void
+ * @par History   æ— 
+ */
+void Servo_J5(int v_iAngle) /*å®šä¹‰ä¸€ä¸ªè„‰å†²å‡½æ•°ï¼Œç”¨æ¥æ¨¡æ‹Ÿæ–¹å¼äº§ç”ŸPWMå€¼*/
+{
+	int pulsewidth; // å®šä¹‰è„‰å®½å˜é‡
 
-// 	pulsewidth = (v_iAngle * 11) + 500; // ½«½Ç¶È×ª»¯Îª500-2480 µÄÂö¿íÖµ
+	pulsewidth = (v_iAngle * 11) + 500; // å°†è§’åº¦è½¬åŒ–ä¸º500-2480 çš„è„‰å®½å€¼
 
-// 	servo_yahboom_hal.GPIO_SetBits(Servo_J5_PORT, Servo_J5_PIN); // ½«¶æ»ú½Ó¿ÚµçÆ½ÖÃ¸ß
-// 	delay_us(pulsewidth);					   // ÑÓÊ±Âö¿íÖµµÄÎ¢ÃëÊı
+	servo_yahboom_hal.GPIO_SetBits(Servo_J5_PORT, Servo_J5_PIN); // å°†èˆµæœºæ¥å£ç”µå¹³ç½®é«˜
+	delay_us(pulsewidth);										 // å»¶æ—¶è„‰å®½å€¼çš„å¾®ç§’æ•°
 
-// 	GPIO_ResetBits(Servo_J5_PORT, Servo_J5_PIN); // ½«¶æ»ú½Ó¿ÚµçÆ½ÖÃµÍ
-// 	HAL_Delay(20 - pulsewidth / 1000);			 // ÑÓÊ±ÖÜÆÚÄÚÊ£ÓàÊ±¼ä
-// }
+	GPIO_ResetBits(Servo_J5_PORT, Servo_J5_PIN); // å°†èˆµæœºæ¥å£ç”µå¹³ç½®ä½
+	HAL_Delay(20 - pulsewidth / 1000);			 // å»¶æ—¶å‘¨æœŸå†…å‰©ä½™æ—¶é—´
+}
+#endif
 
-// /**
-//  * Function       Servo_J6
-//  * @author        liusen
-//  * @date          2017.07.17
-//  * @brief         ¶æ»ú5¿ØÖÆº¯Êı
-//  * @param[in]     v_iAngle ½Ç¶È£º0~180¡ã
-//  * @param[out]    void
-//  * @retval        void
-//  * @par History   ÎŞ
-//  */
-// void Servo_J6(int v_iAngle) /*¶¨ÒåÒ»¸öÂö³åº¯Êı£¬ÓÃÀ´Ä£Äâ·½Ê½²úÉúPWMÖµ*/
-// {
-// 	int pulsewidth; // ¶¨ÒåÂö¿í±äÁ¿
+#ifdef USE_SERVO_J6
+/**
+ * Function       Servo_J6
+ * @author        liusen
+ * @date          2017.07.17
+ * @brief         èˆµæœº5æ§åˆ¶å‡½æ•°
+ * @param[in]     v_iAngle è§’åº¦ï¼š0~180Â°
+ * @param[out]    void
+ * @retval        void
+ * @par History   æ— 
+ */
+void Servo_J6(int v_iAngle) /*å®šä¹‰ä¸€ä¸ªè„‰å†²å‡½æ•°ï¼Œç”¨æ¥æ¨¡æ‹Ÿæ–¹å¼äº§ç”ŸPWMå€¼*/
+{
+	int pulsewidth; // å®šä¹‰è„‰å®½å˜é‡
 
-// 	pulsewidth = (v_iAngle * 11) + 500; // ½«½Ç¶È×ª»¯Îª500-2480 µÄÂö¿íÖµ
+	pulsewidth = (v_iAngle * 11) + 500; // å°†è§’åº¦è½¬åŒ–ä¸º500-2480 çš„è„‰å®½å€¼
 
-// 	servo_yahboom_hal.GPIO_SetBits(Servo_J6_PORT, Servo_J6_PIN); // ½«¶æ»ú½Ó¿ÚµçÆ½ÖÃ¸ß
-// 	delay_us(pulsewidth);					   // ÑÓÊ±Âö¿íÖµµÄÎ¢ÃëÊı
+	servo_yahboom_hal.GPIO_SetBits(Servo_J6_PORT, Servo_J6_PIN); // å°†èˆµæœºæ¥å£ç”µå¹³ç½®é«˜
+	delay_us(pulsewidth);										 // å»¶æ—¶è„‰å®½å€¼çš„å¾®ç§’æ•°
 
-// 	GPIO_ResetBits(Servo_J6_PORT, Servo_J6_PIN); // ½«¶æ»ú½Ó¿ÚµçÆ½ÖÃµÍ
-// 	HAL_Delay(20 - pulsewidth / 1000);			 // ÑÓÊ±ÖÜÆÚÄÚÊ£ÓàÊ±¼ä
-// }
+	GPIO_ResetBits(Servo_J6_PORT, Servo_J6_PIN); // å°†èˆµæœºæ¥å£ç”µå¹³ç½®ä½
+	HAL_Delay(20 - pulsewidth / 1000);			 // å»¶æ—¶å‘¨æœŸå†…å‰©ä½™æ—¶é—´
+}
+#endif
 
 /**
  * Function       front_detection
  * @author        liusen
  * @date          2017.07.17
- * @brief         ÔÆÌ¨¶æ»úÏòÇ°
+ * @brief         äº‘å°èˆµæœºå‘å‰
  * @param[in]     void
  * @param[out]    void
  * @retval        void
- * @par History   ÎŞ
+ * @par History   æ— 
  */
 void front_detection()
 {
 	int i = 0;
-	// ´Ë´¦Ñ­»·´ÎÊı¼õÉÙ£¬ÎªÁËÔö¼ÓĞ¡³µÓöµ½ÕÏ°­ÎïµÄ·´Ó¦ËÙ¶È
-	for (i = 0; i <= 15; i++) // ²úÉúPWM¸öÊı£¬µÈĞ§ÑÓÊ±ÒÔ±£Ö¤ÄÜ×ªµ½ÏìÓ¦½Ç¶È
+	// æ­¤å¤„å¾ªç¯æ¬¡æ•°å‡å°‘ï¼Œä¸ºäº†å¢åŠ å°è½¦é‡åˆ°éšœç¢ç‰©çš„ååº”é€Ÿåº¦
+	for (i = 0; i <= 15; i++) // äº§ç”ŸPWMä¸ªæ•°ï¼Œç­‰æ•ˆå»¶æ—¶ä»¥ä¿è¯èƒ½è½¬åˆ°å“åº”è§’åº¦
 	{
-		Servo_J1(90); // Ä£Äâ²úÉúPWM
+		Servo_J1(90); // æ¨¡æ‹Ÿäº§ç”ŸPWM
 	}
 }
 
@@ -183,18 +218,18 @@ void front_detection()
  * Function       left_detection
  * @author        liusen
  * @date          2017.07.17
- * @brief         ÔÆÌ¨¶æ»úÏò×ó
+ * @brief         äº‘å°èˆµæœºå‘å·¦
  * @param[in]     void
  * @param[out]    void
  * @retval        void
- * @par History   ÎŞ
+ * @par History   æ— 
  */
 void left_detection()
 {
 	int i = 0;
-	for (i = 0; i <= 15; i++) // ²úÉúPWM¸öÊı£¬µÈĞ§ÑÓÊ±ÒÔ±£Ö¤ÄÜ×ªµ½ÏìÓ¦½Ç¶È
+	for (i = 0; i <= 15; i++) // äº§ç”ŸPWMä¸ªæ•°ï¼Œç­‰æ•ˆå»¶æ—¶ä»¥ä¿è¯èƒ½è½¬åˆ°å“åº”è§’åº¦
 	{
-		Servo_J1(175); // Ä£Äâ²úÉúPWM
+		Servo_J1(175); // æ¨¡æ‹Ÿäº§ç”ŸPWM
 	}
 }
 
@@ -202,17 +237,109 @@ void left_detection()
  * Function       right_detection
  * @author        liusen
  * @date          2017.07.17
- * @brief         ÔÆÌ¨¶æ»úÏòÓÒ
+ * @brief         äº‘å°èˆµæœºå‘å³
  * @param[in]     void
  * @param[out]    void
  * @retval        void
- * @par History   ÎŞ
+ * @par History   æ— 
  */
 void right_detection()
 {
 	int i = 0;
-	for (i = 0; i <= 15; i++) // ²úÉúPWM¸öÊı£¬µÈĞ§ÑÓÊ±ÒÔ±£Ö¤ÄÜ×ªµ½ÏìÓ¦½Ç¶È
+	for (i = 0; i <= 15; i++) // äº§ç”ŸPWMä¸ªæ•°ï¼Œç­‰æ•ˆå»¶æ—¶ä»¥ä¿è¯èƒ½è½¬åˆ°å“åº”è§’åº¦
 	{
-		Servo_J1(5); // Ä£Äâ²úÉúPWM
+		Servo_J1(5); // æ¨¡æ‹Ÿäº§ç”ŸPWM
+	}
+}
+
+/**
+ * Function       HAL_TIM_PeriodElapsedCallback
+ * @author        ä¿®æ”¹è€…
+ * @date          2025.07.09
+ * @brief         å®šæ—¶å™¨æ›´æ–°ä¸­æ–­å›è°ƒå‡½æ•° - èˆµæœºPWMæ§åˆ¶
+ * @param[in]     htim å®šæ—¶å™¨å¥æŸ„
+ * @param[out]    void
+ * @retval        void
+ * @par History   ä»main.cç§»åŠ¨åˆ°æ­¤å¤„
+ */
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+{
+	if (htim->Instance == TIM6)
+	{
+
+#ifdef USE_SERVO_J1
+		if (num <= (int)(Angle_J1 * 11.0f + 500.0f) / 10)
+		{
+			servo_yahboom_hal.GPIO_SetBits(Servo_J1_PORT, Servo_J1_PIN); // å°†èˆµæœºæ¥å£ç”µå¹³ç½®é«˜
+		}
+		else
+		{
+			servo_yahboom_hal.GPIO_ResetBits(Servo_J1_PORT, Servo_J1_PIN); // å°†èˆµæœºæ¥å£ç”µå¹³ç½®ä½
+		}
+#endif
+
+#ifdef USE_SERVO_J2
+		if (num <= (int)(Angle_J2 * 11.0f + 500.0f) / 10)
+		{
+			servo_yahboom_hal.GPIO_SetBits(Servo_J2_PORT, Servo_J2_PIN); // å°†èˆµæœºæ¥å£ç”µå¹³ç½®é«˜
+		}
+		else
+		{
+			servo_yahboom_hal.GPIO_ResetBits(Servo_J2_PORT, Servo_J2_PIN); // å°†èˆµæœºæ¥å£ç”µå¹³ç½®ä½
+		}
+#endif
+
+#ifdef USE_SERVO_J3
+		if (num <= (int)(Angle_J3 * 11.0f + 500.0f) / 10)
+		{
+			servo_yahboom_hal.GPIO_SetBits(Servo_J3_PORT, Servo_J3_PIN); // å°†èˆµæœºæ¥å£ç”µå¹³ç½®é«˜
+		}
+		else
+		{
+			servo_yahboom_hal.GPIO_ResetBits(Servo_J3_PORT, Servo_J3_PIN); // å°†èˆµæœºæ¥å£ç”µå¹³ç½®ä½
+		}
+#endif
+
+#ifdef USE_SERVO_J4
+		if (num <= (int)(Angle_J4 * 11.0f + 500.0f) / 10)
+		{
+			servo_yahboom_hal.GPIO_SetBits(Servo_J4_PORT, Servo_J4_PIN); // å°†èˆµæœºæ¥å£ç”µå¹³ç½®é«˜
+		}
+		else
+		{
+			servo_yahboom_hal.GPIO_ResetBits(Servo_J4_PORT, Servo_J4_PIN); // å°†èˆµæœºæ¥å£ç”µå¹³ç½®ä½
+		}
+#endif
+
+#ifdef USE_SERVO_J5
+		if (num <= (int)(Angle_J5 * 11.0f + 500.0f) / 10)
+		{
+			servo_yahboom_hal.GPIO_SetBits(Servo_J5_PORT, Servo_J5_PIN); // å°†èˆµæœºæ¥å£ç”µå¹³ç½®é«˜
+		}
+		else
+		{
+			servo_yahboom_hal.GPIO_ResetBits(Servo_J5_PORT, Servo_J5_PIN); // å°†èˆµæœºæ¥å£ç”µå¹³ç½®ä½
+		}
+#endif
+
+#ifdef USE_SERVO_J6
+		if (num <= (int)(Angle_J6 * 11.0f + 500.0f) / 10)
+		{
+			servo_yahboom_hal.GPIO_SetBits(Servo_J6_PORT, Servo_J6_PIN); // å°†èˆµæœºæ¥å£ç”µå¹³ç½®é«˜
+		}
+		else
+		{
+			servo_yahboom_hal.GPIO_ResetBits(Servo_J6_PORT, Servo_J6_PIN); // å°†èˆµæœºæ¥å£ç”µå¹³ç½®ä½
+		}
+#endif
+
+		if (num == 2000) // 2000*10us=20ms  20msä¸€ä¸ªå‘¨æœŸ
+		{
+			num = 0;
+		}
+		else
+		{
+			num++; // æ¯æ¬¡ä¸­æ–­é€’å¢è®¡æ•°å™¨
+		}
 	}
 }

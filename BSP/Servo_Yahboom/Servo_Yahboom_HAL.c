@@ -13,7 +13,7 @@
 #include "Servo_Yahboom_HAL.h"
 
 /* ------------------------------ 此处修改使用平台的头文件 ------------------------------ */
-#include "stm32h743xx.h"
+#include "stm32h7xx.h"
 #include "stm32h7xx_hal.h"
 
 void GPIO_SetBits(GPIO_TypeDef *GPIOx, uint16_t GPIO_Pin)

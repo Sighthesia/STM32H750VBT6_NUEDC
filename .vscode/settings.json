@@ -1,0 +1,7 @@
+{
+    "files.associations": {
+        "*.toml": "toml",
+        "bsp_servo.h": "c"
+    },
+    "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools"
+}

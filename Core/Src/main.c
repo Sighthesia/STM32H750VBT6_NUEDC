@@ -24,6 +24,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "bsp_servo.h"
 
 /* USER CODE END Includes */
 
@@ -94,13 +95,31 @@ int main(void)
   MX_GPIO_Init();
   MX_TIM6_Init();
   /* USER CODE BEGIN 2 */
-
+  // 清除定时器初始化过程中的更新中断标志，避免定时器一启动就中断
+  __HAL_TIM_CLEAR_IT(&htim6, TIM_IT_UPDATE);
+  // 使能定时器3更新中断并启动定时器
+  HAL_TIM_Base_Start_IT(&htim6);
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
+    // Servo_J1(90);
+    // Servo_J2(50);
+
+    /*定时器1控制舵机*/
+    Angle_J1 = 0.0f;
+    Angle_J2 = 0.0f;
+    HAL_Delay(1000);
+
+    Angle_J1 = 90.0f;
+    Angle_J2 = 90.0f;
+    HAL_Delay(1000);
+
+    Angle_J1 = 180.0f;
+    Angle_J2 = 180.0f;
+    HAL_Delay(1000);
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
