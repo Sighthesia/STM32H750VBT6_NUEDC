@@ -1,19 +1,6 @@
 /**
  * @par Copyright (C): 2010-2019, Shenzhen Yahboom Tech
  * @file         bsp_servo.c
- * @autho	servo_yahboom_hal.GPIO_SetB	servo_yahboom_hal.GPIO_SetB	servo_yahboom_hal.GPIO_SetB	servo_yahboom_hal.GPIO_SetBits(Servo_J6_PORT, Servo_J6_PIN); // 将舵机接口电平置高
-	delay_us(pulsewidth);					   // 延时脉宽值的微秒数
-
-	servo_yahboom_hal.GPIO_ResetBits(Servo_J6_PORT, Servo_J6_PIN); // 将舵机接口电平置低Servo_J5_PORT, Servo_J5_PIN); // 将舵机接口电平置高
-	delay_us(pulsewidth);					   // 延时脉宽值的微秒数
-
-	servo_yahboom_hal.GPIO_ResetBits(Servo_J5_PORT, Servo_J5_PIN); // 将舵机接口电平置低Servo_J4_PORT, Servo_J4_PIN); // 将舵机接口电平置高
-	delay_us(pulsewidth);					   // 延时脉宽值的微秒数
-
-	servo_yahboom_hal.GPIO_ResetBits(Servo_J4_PORT, Servo_J4_PIN); // 将舵机接口电平置低Servo_J3_PORT, Servo_J3_PIN); // 将舵机接口电平置高
-	delay_us(pulsewidth);					   // 延时脉宽值的微秒数
-
-	servo_yahboom_hal.GPIO_ResetBits(Servo_J3_PORT, Servo_J3_PIN); // 将舵机接口电平置低    liusen
  * @version      V1.0
  * @date         2017.07.17
  * @brief        6个舵机控制驱动源文件
@@ -26,8 +13,12 @@
 #include "bsp_servo.h"
 
 /*角度范围 0~180*/
+#ifdef USE_SERVO_J1
 volatile float Angle_J1 = 0.0f;
+#endif
+#ifdef USE_SERVO_J2
 volatile float Angle_J2 = 0.0f;
+#endif
 #ifdef USE_SERVO_J3
 volatile float Angle_J3 = 0.0f;
 #endif
@@ -252,6 +243,17 @@ void right_detection()
 	}
 }
 
+/** ***************************************************************************
+ * @brief 	  舵机PWM定时器初始化函数
+ */
+void Servo_PWM_TIM_Init()
+{
+	// 清除定时器初始化过程中的更新中断标志，避免定时器一启动就中断
+	__HAL_TIM_CLEAR_IT(&SERVO_TIM_HANDLE, TIM_IT_UPDATE);
+	// 使能定时器更新中断并启动定时器
+	HAL_TIM_Base_Start_IT(&SERVO_TIM_HANDLE);
+}
+
 /**
  * Function       HAL_TIM_PeriodElapsedCallback
  * @author        修改者
@@ -264,8 +266,9 @@ void right_detection()
  */
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
-	if (htim->Instance == TIM6)
+	if (htim->Instance == SERVO_TIM_INSTANCE)
 	{
+		HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_6);
 
 #ifdef USE_SERVO_J1
 		if (num <= (int)(Angle_J1 * 11.0f + 500.0f) / 10)

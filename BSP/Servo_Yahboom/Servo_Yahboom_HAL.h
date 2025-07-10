@@ -13,8 +13,8 @@
 #ifndef __SERVO_YAHBOOM_HAL_H
 #define __SERVO_YAHBOOM_HAL_H
 
-#include "stm32h7xx.h"
-#include "stm32h7xx_hal.h"
+/* ------------------------------ 此处修改所使用平台的头文件 ----------------------------- */
+#include "main.h"
 
 typedef struct
 {

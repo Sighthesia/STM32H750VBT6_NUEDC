@@ -95,10 +95,7 @@ int main(void)
   MX_GPIO_Init();
   MX_TIM6_Init();
   /* USER CODE BEGIN 2 */
-  // 清除定时器初始化过程中的更新中断标志，避免定时器一启动就中断
-  __HAL_TIM_CLEAR_IT(&htim6, TIM_IT_UPDATE);
-  // 使能定时器3更新中断并启动定时器
-  HAL_TIM_Base_Start_IT(&htim6);
+
   /* USER CODE END 2 */
 
   /* Infinite loop */

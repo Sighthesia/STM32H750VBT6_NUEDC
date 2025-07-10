@@ -15,9 +15,15 @@
 
 #include "Servo_Yahboom_HAL.h"
 #include "Delay_us_STM32HAL.h"
-#include "tim.h" /* 添加定时器头文件 */
+#include "tim.h"
 
-/*定义需要初始化的舵机宏定义开关*/
+/* ------------------------------- 定义所使用的定时器句柄 ------------------------------ */
+// htim6.Instance = TIM6;  // 句柄指向外设实例
+
+#define SERVO_TIM_HANDLE htim6  /* 舵机使用的定时器句柄 */
+#define SERVO_TIM_INSTANCE TIM6 /* 舵机使用的定时器 */
+
+/* ----------------------------- 定义需要初始化的舵机宏定义开关 ---------------------------- */
 
 #define USE_SERVO_J1
 #define USE_SERVO_J2
@@ -26,24 +32,14 @@
 // #define USE_SERVO_J5
 // #define USE_SERVO_J6
 
-extern volatile float Angle_J1;
-extern volatile float Angle_J2;
+/* ------------------------------ 定义舵机PWM引脚和端口 ------------------------------ */
 
-#ifdef USE_SERVO_J3
-extern volatile float Angle_J3;
-#endif
-#ifdef USE_SERVO_J4
-extern volatile float Angle_J4;
-#endif
-#ifdef USE_SERVO_J5
-extern volatile float Angle_J5;
-#endif
-#ifdef USE_SERVO_J6
-extern volatile float Angle_J6;
-#endif
-
+#ifdef USE_SERVO_J1
 #define Servo_J1_PIN GPIO_PIN_4
+#endif
+#ifdef USE_SERVO_J2
 #define Servo_J2_PIN GPIO_PIN_5
+#endif
 #ifdef USE_SERVO_J3
 #define Servo_J3_PIN GPIO_PIN_14
 #endif
@@ -57,8 +53,12 @@ extern volatile float Angle_J6;
 #define Servo_J6_PIN GPIO_PIN_1
 #endif
 
+#ifdef USE_SERVO_J1
 #define Servo_J1_PORT GPIOC
+#endif
+#ifdef USE_SERVO_J2
 #define Servo_J2_PORT GPIOC
+#endif
 #ifdef USE_SERVO_J3
 #define Servo_J3_PORT GPIOB
 #endif
@@ -72,17 +72,33 @@ extern volatile float Angle_J6;
 #define Servo_J6_PORT GPIOA
 #endif
 
-// #define Servo_J1_RCC RCC_APB2Periph_GPIOA
-// #define Servo_J2_RCC RCC_APB2Periph_GPIOB
-// #define Servo_J3_RCC RCC_APB2Periph_GPIOB
-// #define Servo_J4_RCC RCC_APB2Periph_GPIOB
-// #define Servo_J5_RCC RCC_APB2Periph_GPIOA
-// #define Servo_J6_RCC RCC_APB2Periph_GPIOA
-
 /* --------------------------------- 自定义部分结束 -------------------------------- */
 
+#ifdef USE_SERVO_J1
+extern volatile float Angle_J1;
+#endif
+#ifdef USE_SERVO_J2
+extern volatile float Angle_J2;
+#endif
+#ifdef USE_SERVO_J3
+extern volatile float Angle_J3;
+#endif
+#ifdef USE_SERVO_J4
+extern volatile float Angle_J4;
+#endif
+#ifdef USE_SERVO_J5
+extern volatile float Angle_J5;
+#endif
+#ifdef USE_SERVO_J6
+extern volatile float Angle_J6;
+#endif
+
+#ifdef USE_SERVO_J1
 void Servo_J1(int v_iAngle); /*定义一个脉冲函数，用来模拟方式产生PWM值*/
+#endif
+#ifdef USE_SERVO_J2
 void Servo_J2(int v_iAngle); /*定义一个脉冲函数，用来模拟方式产生PWM值*/
+#endif
 #ifdef USE_SERVO_J3
 void Servo_J3(int v_iAngle); /*定义一个脉冲函数，用来模拟方式产生PWM值*/
 #endif
