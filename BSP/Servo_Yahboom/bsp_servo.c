@@ -12,6 +12,9 @@
 
 #include "bsp_servo.h"
 
+/* 定时器中断计数变量 */
+volatile int num = 0;
+
 /*角度范围 0~180*/
 #ifdef USE_SERVO_J1
 volatile float Angle_J1 = 0.0f;
@@ -31,9 +34,6 @@ volatile float Angle_J5 = 0.0f;
 #ifdef USE_SERVO_J6
 volatile float Angle_J6 = 0.0f;
 #endif
-
-/* 定时器中断计数变量 */
-static volatile int num = 0;
 
 #ifdef USE_SERVO_J1
 /**
@@ -240,109 +240,5 @@ void right_detection()
 	for (i = 0; i <= 15; i++) // 产生PWM个数，等效延时以保证能转到响应角度
 	{
 		Servo_J1(5); // 模拟产生PWM
-	}
-}
-
-/** ***************************************************************************
- * @brief 	  舵机PWM定时器初始化函数
- */
-void Servo_PWM_TIM_Init()
-{
-	// 清除定时器初始化过程中的更新中断标志，避免定时器一启动就中断
-	__HAL_TIM_CLEAR_IT(&SERVO_TIM_HANDLE, TIM_IT_UPDATE);
-	// 使能定时器更新中断并启动定时器
-	HAL_TIM_Base_Start_IT(&SERVO_TIM_HANDLE);
-}
-
-/**
- * Function       HAL_TIM_PeriodElapsedCallback
- * @author        修改者
- * @date          2025.07.09
- * @brief         定时器更新中断回调函数 - 舵机PWM控制
- * @param[in]     htim 定时器句柄
- * @param[out]    void
- * @retval        void
- * @par History   从main.c移动到此处
- */
-void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
-{
-	if (htim->Instance == SERVO_TIM_INSTANCE)
-	{
-		HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_6);
-
-#ifdef USE_SERVO_J1
-		if (num <= (int)(Angle_J1 * 11.0f + 500.0f) / 10)
-		{
-			servo_yahboom_hal.GPIO_SetBits(Servo_J1_PORT, Servo_J1_PIN); // 将舵机接口电平置高
-		}
-		else
-		{
-			servo_yahboom_hal.GPIO_ResetBits(Servo_J1_PORT, Servo_J1_PIN); // 将舵机接口电平置低
-		}
-#endif
-
-#ifdef USE_SERVO_J2
-		if (num <= (int)(Angle_J2 * 11.0f + 500.0f) / 10)
-		{
-			servo_yahboom_hal.GPIO_SetBits(Servo_J2_PORT, Servo_J2_PIN); // 将舵机接口电平置高
-		}
-		else
-		{
-			servo_yahboom_hal.GPIO_ResetBits(Servo_J2_PORT, Servo_J2_PIN); // 将舵机接口电平置低
-		}
-#endif
-
-#ifdef USE_SERVO_J3
-		if (num <= (int)(Angle_J3 * 11.0f + 500.0f) / 10)
-		{
-			servo_yahboom_hal.GPIO_SetBits(Servo_J3_PORT, Servo_J3_PIN); // 将舵机接口电平置高
-		}
-		else
-		{
-			servo_yahboom_hal.GPIO_ResetBits(Servo_J3_PORT, Servo_J3_PIN); // 将舵机接口电平置低
-		}
-#endif
-
-#ifdef USE_SERVO_J4
-		if (num <= (int)(Angle_J4 * 11.0f + 500.0f) / 10)
-		{
-			servo_yahboom_hal.GPIO_SetBits(Servo_J4_PORT, Servo_J4_PIN); // 将舵机接口电平置高
-		}
-		else
-		{
-			servo_yahboom_hal.GPIO_ResetBits(Servo_J4_PORT, Servo_J4_PIN); // 将舵机接口电平置低
-		}
-#endif
-
-#ifdef USE_SERVO_J5
-		if (num <= (int)(Angle_J5 * 11.0f + 500.0f) / 10)
-		{
-			servo_yahboom_hal.GPIO_SetBits(Servo_J5_PORT, Servo_J5_PIN); // 将舵机接口电平置高
-		}
-		else
-		{
-			servo_yahboom_hal.GPIO_ResetBits(Servo_J5_PORT, Servo_J5_PIN); // 将舵机接口电平置低
-		}
-#endif
-
-#ifdef USE_SERVO_J6
-		if (num <= (int)(Angle_J6 * 11.0f + 500.0f) / 10)
-		{
-			servo_yahboom_hal.GPIO_SetBits(Servo_J6_PORT, Servo_J6_PIN); // 将舵机接口电平置高
-		}
-		else
-		{
-			servo_yahboom_hal.GPIO_ResetBits(Servo_J6_PORT, Servo_J6_PIN); // 将舵机接口电平置低
-		}
-#endif
-
-		if (num == 2000) // 2000*10us=20ms  20ms一个周期
-		{
-			num = 0;
-		}
-		else
-		{
-			num++; // 每次中断递增计数器
-		}
 	}
 }

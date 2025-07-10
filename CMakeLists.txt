@@ -45,18 +45,26 @@ target_link_directories(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user defined library search paths
 )
 
+# 自动收集BSP目录下的所有.c文件
+file(GLOB_RECURSE BSP_SOURCES "BSP/**/*.c")
+
+# 自动收集BSP目录下的所有头文件目录
+file(GLOB_RECURSE BSP_HEADERS "BSP/**/*.h")
+foreach(HEADER ${BSP_HEADERS})
+    get_filename_component(HEADER_DIR ${HEADER} DIRECTORY)
+    list(APPEND BSP_INCLUDE_DIRS ${HEADER_DIR})
+endforeach()
+list(REMOVE_DUPLICATES BSP_INCLUDE_DIRS)
+
 # Add sources to executable
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE
-    BSP/Servo_Yahboom/Servo_Yahboom_HAL.c
-    BSP/Servo_Yahboom/bsp_servo.c
-    BSP/Delay_us_STM32HAL/Delay_us_STM32HAL.c
+    ${BSP_SOURCES}
     # Add user sources here
 )
 
 # Add include paths
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
-    BSP/Servo_Yahboom
-    BSP/Delay_us_STM32HAL
+    ${BSP_INCLUDE_DIRS}
     # Add user defined include paths
 )
 

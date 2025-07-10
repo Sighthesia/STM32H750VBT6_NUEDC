@@ -2,6 +2,7 @@
 #define __BSP_USART_H
 
 #include "main.h"
+#include "usart.h"
 #include <stdio.h>
 #include <stdint.h>
 

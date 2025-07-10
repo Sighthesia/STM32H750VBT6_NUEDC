@@ -20,11 +20,15 @@
 #include "main.h"
 #include "memorymap.h"
 #include "tim.h"
+#include "usart.h"
 #include "gpio.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "bsp_servo.h"
+#include "control.h"
+#include "bsp_usart.h"
+#include "stdio.h"
 
 /* USER CODE END Includes */
 
@@ -46,6 +50,9 @@
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
+uint8_t grop = 0;
+float version = 1.1;
+double x_p = -0000.64, x_i = -0.0076, x_d = -00002.50, y_p = -000.96, y_i = -0.0096, y_d = -2.50; // 红色激光笔
 
 /* USER CODE END PV */
 
@@ -58,6 +65,23 @@ static void MPU_Config(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+#pragma import(__use_no_semihosting)
+// 标准库需要的支持函数
+struct __FILE
+{
+  int handle;
+};
+
+FILE __stdout;
+// 定义_sys_exit()以避免使用半主机模式
+void _sys_exit(int x)
+{
+  x = x;
+}
+void _ttywrch(int ch)
+{
+  ch = ch;
+}
 
 /* USER CODE END 0 */
 
@@ -94,29 +118,32 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_TIM6_Init();
+  MX_USART1_UART_Init();
+  MX_USART3_UART_Init();
+  MX_TIM7_Init();
   /* USER CODE BEGIN 2 */
+  // 初始化舵机PWM定时器
 
+  Kalman_Init(&kfp_x);
+  Kalman_Init(&kfp_y);
+  pid_param_init(&x_pid);
+  pid_param_init(&y_pid);
+  set_pid_param(&y_pid, y_p, y_i, y_d);
+  set_pid_param(&x_pid, x_p, x_i, x_d);
+
+  // 初始化串口接收
+  USART1_init(115200); // 初始化USART1接收
+  USART3_Init(115200); // 初始化USART3接收
+
+  Servo_PWM_TIM_Init();
+  PID_TIM_Init();
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-    // Servo_J1(90);
-    // Servo_J2(50);
-
-    /*定时器1控制舵机*/
-    Angle_J1 = 0.0f;
-    Angle_J2 = 0.0f;
-    HAL_Delay(1000);
-
-    Angle_J1 = 90.0f;
-    Angle_J2 = 90.0f;
-    HAL_Delay(1000);
-
-    Angle_J1 = 180.0f;
-    Angle_J2 = 180.0f;
-    HAL_Delay(1000);
+    mode_1();
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */

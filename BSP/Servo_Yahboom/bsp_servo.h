@@ -16,12 +16,7 @@
 #include "Servo_Yahboom_HAL.h"
 #include "Delay_us_STM32HAL.h"
 #include "tim.h"
-
-/* ------------------------------- 定义所使用的定时器句柄 ------------------------------ */
-// htim6.Instance = TIM6;  // 句柄指向外设实例
-
-#define SERVO_TIM_HANDLE htim6  /* 舵机使用的定时器句柄 */
-#define SERVO_TIM_INSTANCE TIM6 /* 舵机使用的定时器 */
+#include "TIM_STM32HAL.h"
 
 /* ----------------------------- 定义需要初始化的舵机宏定义开关 ---------------------------- */
 
@@ -52,6 +47,8 @@
 #ifdef USE_SERVO_J6
 #define Servo_J6_PIN GPIO_PIN_1
 #endif
+
+// 舵机PWM引脚端口
 
 #ifdef USE_SERVO_J1
 #define Servo_J1_PORT GPIOC
@@ -112,10 +109,10 @@ void Servo_J5(int v_iAngle); /*定义一个脉冲函数，用来模拟方式产�
 void Servo_J6(int v_iAngle); /*定义一个脉冲函数，用来模拟方式产生PWM值*/
 #endif
 
+extern volatile int num;
+
 void front_detection(void);
 void left_detection(void);
 void right_detection(void);
-
-void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim); /* 舵机定时器中断回调函数 */
 
 #endif

@@ -1,27 +1,30 @@
 /**
- * ******************************************************************************
- * @file    bsp_usart.c (HAL库版本)
- * @brief   STM32H7xx HAL库 UART驱动
+ ******************************************************************************
+ * @file    bsp_usart.c
+ * @brief   STM32H7xx HAL库 UART驱动实现
  *
- * 使用说明:
- * 1. 需要在main.c或其他地方定义以下变量:
+ * @details
+ * 1. 需要在 main.c 或其他文件定义以下变量:
  *    - UART_HandleTypeDef huart1, huart3, huart5;
- * 2. 串口初始化通过CubeMX生成，本文件只提供辅助功能
- * 3. 环形缓冲区用于数据接收和处理
- * 4. 使用HAL_UART_RxCpltCallback处理接收中断
- * ******************************************************************************
+ * 2. 串口初始化由 CubeMX 生成，本文件仅提供环形缓冲区和数据收发等辅助功能。
+ * 3. 环形缓冲区用于数据接收与处理。
+ * 4. 使用 HAL_UART_RxCpltCallback 处理接收中断。
+ ******************************************************************************
  */
 
 #include "bsp_usart.h"
-#include <stdio.h>
 
-// 接收缓冲区变量定义
+// 接收缓冲区变量
 uint8_t uart1_rx_buffer = 0;
 uint8_t uart3_rx_buffer = 0;
 
-RingBuff_t Uart2_RingBuff, Uart1_RingBuff, Uart3_RingBuff; // 定义ringBuff结构体变量
+// 环形缓冲区结构体变量
+RingBuff_t Uart2_RingBuff, Uart1_RingBuff, Uart3_RingBuff;
 
-// USART1 ---- 与PC通信，输出调试信息
+/**
+ * @brief  初始化USART1，配置环形缓冲区并开启接收中断
+ * @param  baudrate 波特率（实际初始化由CubeMX完成）
+ */
 void USART1_init(uint32_t baudrate)
 {
 	// HAL库版本的UART初始化在CubeMX中生成，这里只需要初始化环形缓冲区
@@ -31,6 +34,10 @@ void USART1_init(uint32_t baudrate)
 	HAL_UART_Receive_IT(&huart1, &uart1_rx_buffer, 1);
 }
 
+/**
+ * @brief  初始化环形缓冲区
+ * @param  ringbuff 指向环形缓冲区结构体的指针
+ */
 void RingBuff_Init(RingBuff_t *ringbuff)
 {
 	// 初始化环形缓冲区
@@ -39,6 +46,13 @@ void RingBuff_Init(RingBuff_t *ringbuff)
 	ringbuff->Lenght = 0;
 }
 
+/**
+ * @brief  向环形缓冲区写入一个字节
+ * @param  ringbuff 指向环形缓冲区结构体的指针
+ * @param  data     要写入的数据
+ * @retval RINGBUFF_OK 写入成功
+ * @retval RINGBUFF_ERR 缓冲区已满
+ */
 uint8_t Write_RingBuff(RingBuff_t *ringbuff, uint8_t data)
 {
 	if (ringbuff->Lenght >= RINGBUFF_LEN) // 缓冲区已满
@@ -52,10 +66,8 @@ uint8_t Write_RingBuff(RingBuff_t *ringbuff, uint8_t data)
 }
 
 /**
- * @Brief: UART1发送数据
- * @Note:
- * @Parm: ch:待发送的数据
- * @Retval:
+ * @brief  UART1发送单字节数据
+ * @param  ch 待发送的数据
  */
 void USART1_Send_U8(uint8_t ch)
 {
@@ -63,19 +75,22 @@ void USART1_Send_U8(uint8_t ch)
 }
 
 /**
- * @Brief: UART1发送数据
- * @Note:
- * @Parm: BufferPtr:待发送的数据  Length:数据长度
- * @Retval:
+ * @brief  UART1发送数据数组
+ * @param  BufferPtr 待发送的数据指针
+ * @param  Length    数据长度
  */
 void USART1_Send_ArrayU8(uint8_t *BufferPtr, uint16_t Length)
 {
 	HAL_UART_Transmit(&huart1, BufferPtr, Length, HAL_MAX_DELAY);
 }
 
-// HAL库中断回调函数 - 接收完成
+/**
+ * @brief  UART接收完成中断回调
+ * @param  huart UART句柄指针
+ */
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 {
+	HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_0);
 	if (huart->Instance == USART1)
 	{
 		// 将接收到的数据写入环形缓冲区
@@ -85,12 +100,20 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 	}
 	else if (huart->Instance == USART3)
 	{
+		// 将接收到的数据写入环形缓冲区
 		Write_RingBuff(&Uart3_RingBuff, uart3_rx_buffer);
+
+		// 转发USART3收到的数据到USART1（调试输出）
+		HAL_UART_Transmit_IT(&huart1, &uart3_rx_buffer, 1);
+
+		// 重新启动接收中断
 		HAL_UART_Receive_IT(&huart3, &uart3_rx_buffer, 1);
 	}
 }
 
-/// 重定向c库函数printf到串口，重定向后可使用printf函数
+/**
+ * @brief  重定向printf到USART1
+ */
 int fputc(int ch, FILE *f)
 {
 	/* 发送一个字节数据到串口 */
@@ -99,7 +122,9 @@ int fputc(int ch, FILE *f)
 	return (ch);
 }
 
-/// 重定向c库函数scanf到串口，重写向后可使用scanf、getchar等函数
+/**
+ * @brief  重定向scanf/getchar到USART1
+ */
 int fgetc(FILE *f)
 {
 	uint8_t data;
@@ -108,7 +133,10 @@ int fgetc(FILE *f)
 	return (int)data;
 }
 
-// USART3
+/**
+ * @brief  初始化USART3，配置环形缓冲区并开启接收中断
+ * @param  baudrate 波特率（实际初始化由CubeMX完成）
+ */
 void USART3_Init(uint32_t baudrate)
 {
 	// HAL库版本的UART初始化在CubeMX中生成，这里只需要初始化环形缓冲区
@@ -118,26 +146,33 @@ void USART3_Init(uint32_t baudrate)
 	HAL_UART_Receive_IT(&huart3, &uart3_rx_buffer, 1);
 }
 
+/**
+ * @brief  通用UART发送数据
+ * @param  huart UART句柄指针
+ * @param  data  数据指针
+ * @param  len   数据长度
+ */
 void usart_send(UART_HandleTypeDef *huart, uint8_t *data, uint8_t len)
 {
 	HAL_UART_Transmit(huart, data, len, HAL_MAX_DELAY);
 }
 
-// 发送一个字符
+/**
+ * @brief  USART3发送单字节数据
+ * @param  ch 待发送的数据
+ */
 void USART3_Send_U8(uint8_t ch)
 {
 	HAL_UART_Transmit(&huart3, &ch, 1, HAL_MAX_DELAY);
 }
 
-// 发送一个字符串
 /**
- * @Brief: UsART3发送数据
- * @Note:
- * @Parm: BufferPtr:待发送的数据  Length:数据长度
- * @Retval:
+ * @brief  数据解码函数，按协议解析一帧数据
+ * @param  ringbuff 环形缓冲区指针
+ * @param  data1~data4 解码后的数据指针
+ * @retval 0 解码成功
+ * @retval 1 解码失败
  */
-
-// 数据解码函数保持不变
 uint8_t DataDecode1(RingBuff_t *ringbuff, uint8_t *data1, uint8_t *data2, uint8_t *data3, uint8_t *data4)
 {
 	static uint8_t uart_dec_count;
@@ -187,26 +222,13 @@ uint8_t DataDecode1(RingBuff_t *ringbuff, uint8_t *data1, uint8_t *data2, uint8_
 	return ret;
 }
 
-// // UART5
-// void UART5_init(uint32_t baudrate)
-// {
-// 	// HAL库版本的UART初始化在CubeMX中生成
-// 	// 这里可以添加特定的初始化代码
-// }
-
-// // 发送一个字符
-// void UART5_Send_U8(uint8_t ch)
-// {
-// 	HAL_UART_Transmit(&huart5, &ch, 1, HAL_MAX_DELAY);
-// }
-
-// // 发送数组
-// void UART5_Send_ArrayU8(uint8_t *BufferPtr, uint16_t Length)
-// {
-// 	HAL_UART_Transmit(&huart5, BufferPtr, Length, HAL_MAX_DELAY);
-// }
-
-// JSON接收函数
+/**
+ * @brief  JSON格式数据接收函数，从环形缓冲区读取一帧JSON字符串
+ * @param  ringbuff 环形缓冲区指针
+ * @param  str      存储JSON字符串的缓冲区
+ * @retval 1 接收完成
+ * @retval 0 未接收到完整JSON
+ */
 int8_t receiveJson(RingBuff_t *ringbuff, char *str)
 {
 	static uint8_t reading, j;
@@ -240,6 +262,13 @@ int8_t receiveJson(RingBuff_t *ringbuff, char *str)
 	return ok;
 }
 
+/**
+ * @brief  从环形缓冲区读取一个字节
+ * @param  ringbuff 环形缓冲区指针
+ * @param  rData    读取到的数据指针
+ * @retval RINGBUFF_OK 读取成功
+ * @retval RINGBUFF_ERR 缓冲区为空
+ */
 uint8_t Read_RingBuff(RingBuff_t *ringbuff, uint8_t *rData)
 {
 	if (ringbuff->Lenght == 0) // 缓冲区空
