@@ -16,80 +16,9 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
     if (htim->Instance == SERVO_TIM_INSTANCE)
     {
-#ifdef USE_SERVO_J1
-        if (num <= (int)(Angle_J1 * 11.0f + 500.0f) / 10)
-        {
-            servo_yahboom_hal.GPIO_SetBits(Servo_J1_PORT, Servo_J1_PIN); // 将舵机接口电平置高
-        }
-        else
-        {
-            servo_yahboom_hal.GPIO_ResetBits(Servo_J1_PORT, Servo_J1_PIN); // 将舵机接口电平置低
-        }
-#endif
-
-#ifdef USE_SERVO_J2
-        if (num <= (int)(Angle_J2 * 11.0f + 500.0f) / 10)
-        {
-            servo_yahboom_hal.GPIO_SetBits(Servo_J2_PORT, Servo_J2_PIN); // 将舵机接口电平置高
-        }
-        else
-        {
-            servo_yahboom_hal.GPIO_ResetBits(Servo_J2_PORT, Servo_J2_PIN); // 将舵机接口电平置低
-        }
-#endif
-
-#ifdef USE_SERVO_J3
-        if (num <= (int)(Angle_J3 * 11.0f + 500.0f) / 10)
-        {
-            servo_yahboom_hal.GPIO_SetBits(Servo_J3_PORT, Servo_J3_PIN); // 将舵机接口电平置高
-        }
-        else
-        {
-            servo_yahboom_hal.GPIO_ResetBits(Servo_J3_PORT, Servo_J3_PIN); // 将舵机接口电平置低
-        }
-#endif
-
-#ifdef USE_SERVO_J4
-        if (num <= (int)(Angle_J4 * 11.0f + 500.0f) / 10)
-        {
-            servo_yahboom_hal.GPIO_SetBits(Servo_J4_PORT, Servo_J4_PIN); // 将舵机接口电平置高
-        }
-        else
-        {
-            servo_yahboom_hal.GPIO_ResetBits(Servo_J4_PORT, Servo_J4_PIN); // 将舵机接口电平置低
-        }
-#endif
-
-#ifdef USE_SERVO_J5
-        if (num <= (int)(Angle_J5 * 11.0f + 500.0f) / 10)
-        {
-            servo_yahboom_hal.GPIO_SetBits(Servo_J5_PORT, Servo_J5_PIN); // 将舵机接口电平置高
-        }
-        else
-        {
-            servo_yahboom_hal.GPIO_ResetBits(Servo_J5_PORT, Servo_J5_PIN); // 将舵机接口电平置低
-        }
-#endif
-
-#ifdef USE_SERVO_J6
-        if (num <= (int)(Angle_J6 * 11.0f + 500.0f) / 10)
-        {
-            servo_yahboom_hal.GPIO_SetBits(Servo_J6_PORT, Servo_J6_PIN); // 将舵机接口电平置高
-        }
-        else
-        {
-            servo_yahboom_hal.GPIO_ResetBits(Servo_J6_PORT, Servo_J6_PIN); // 将舵机接口电平置低
-        }
-#endif
-
-        if (num == 2000) // 2000*10us=20ms  20ms一个周期
-        {
-            num = 0;
-        }
-        else
-        {
-            num++; // 每次中断递增计数器
-        }
+        servo_ctr(&Xserv, x_pid.PID_out);
+        servo_ctr(&Yserv, y_pid.PID_out);
+        HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_0);
     }
     if (htim->Instance == PID_TIM_INSTANCE)
     {

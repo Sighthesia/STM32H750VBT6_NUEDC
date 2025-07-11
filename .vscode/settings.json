@@ -7,7 +7,9 @@
         "control.h": "c",
         "pid.h": "c",
         "tim_stm32hal.h": "c",
-        "kalman.h": "c"
+        "kalman.h": "c",
+        "math.h": "c",
+        "reent.h": "c"
     },
     "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools"
 }

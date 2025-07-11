@@ -4,6 +4,7 @@
 #include "pid.h"
 #include "kalman.h"
 #include "bsp_servo.h"
+#include "TIM_STM32HAL.h"
 
 uint8_t mode_flag = 0;
 uint16_t rec_step_point[4][2] = {0};
@@ -37,8 +38,8 @@ void mode_1(void)
 	if (mode_flag == 4 && step_flag == 0)
 	{
 		HAL_UART_Abort(&huart3); // HAL库关闭USART3
-		HAL_TIM_Base_Start_IT(&SERVO_TIM_HANDLE);
-		HAL_TIM_Base_Start_IT(&PID_TIM_HANDLE);
+		Servo_PWM_TIM_Init();
+		PID_TIM_Init();
 
 		go_to_point(rec_step_point[0][0], rec_step_point[0][1], rec_step_point[1][0], rec_step_point[1][1]);
 		go_to_point(rec_step_point[1][0], rec_step_point[1][1], rec_step_point[2][0], rec_step_point[2][1]);

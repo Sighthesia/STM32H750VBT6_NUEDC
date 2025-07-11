@@ -19,7 +19,7 @@
 #include "bsp_servo.h"
 #include "pid.h"
 #include "kalman.h"
-#include "stdio.h"
+#include "tim.h"
 
 /* ------------------------------- 定义所使用的定时器句柄 ------------------------------ */
 // htim6.Instance = TIM6;  // 句柄指向外设实例
