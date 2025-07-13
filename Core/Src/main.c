@@ -30,6 +30,9 @@
 #include "bsp_usart.h"
 #include "pid.h"
 #include "kalman.h"
+#include "TIM_STM32HAL.h"
+#include <stdio.h>
+#include "Servo_PWM.h"
 
 /* USER CODE END Includes */
 
@@ -67,6 +70,7 @@ static void MPU_Config(void);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 #pragma import(__use_no_semihosting)
+
 // 标准库需要的支持函数
 struct __FILE
 {
@@ -74,22 +78,43 @@ struct __FILE
 };
 
 FILE __stdout;
+
 // 定义_sys_exit()以避免使用半主机模式
 void _sys_exit(int x)
 {
   x = x;
 }
-void _ttywrch(int ch)
-{
-  ch = ch;
-}
+
+// /**
+//  * @brief 重定向fputc到UART1
+//  * @param ch 要发送的字符
+//  * @param f 文件指针
+//  * @retval 发送的字符
+//  */
+// int fputc(int ch, FILE *f)
+// {
+//   HAL_UART_Transmit(&huart1, (uint8_t *)&ch, 1, HAL_MAX_DELAY);
+//   return ch;
+// }
+
+// /**
+//  * @brief 重定向fgetc从UART1
+//  * @param f 文件指针
+//  * @retval 接收的字符
+//  */
+// int fgetc(FILE *f)
+// {
+//   uint8_t ch = 0;
+//   HAL_UART_Receive(&huart1, &ch, 1, HAL_MAX_DELAY);
+//   return ch;
+// }
 
 /* USER CODE END 0 */
 
 /**
-  * @brief  The application entry point.
-  * @retval int
-  */
+ * @brief  The application entry point.
+ * @retval int
+ */
 int main(void)
 {
 
@@ -118,13 +143,13 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
-  MX_TIM6_Init();
   MX_USART1_UART_Init();
   MX_USART3_UART_Init();
   MX_TIM7_Init();
+  MX_TIM13_Init();
+  MX_TIM3_Init();
   /* USER CODE BEGIN 2 */
   // 初始化舵机PWM定时器
-
   Kalman_Init(&kfp_x);
   Kalman_Init(&kfp_y);
   pid_param_init(&x_pid);
@@ -136,13 +161,23 @@ int main(void)
   USART1_init(115200); // 初始化USART1接收
   USART3_Init(115200); // 初始化USART3接收
 
+  Servo_TIM_PWM_Init(); // 初始化舵机PWM
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-    mode_1();
+    for (uint8_t i = 0; i < MAX_SERVO; i++)
+    {
+      if (servo_array[i].enabled)
+      {
+        Servo_Set_Angle_By_ID(servo_array[i].servo_id, 0);
+        HAL_Delay(500);
+        Servo_Set_Angle_By_ID(servo_array[i].servo_id, 90);
+        HAL_Delay(500);
+      }
+    }
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -151,27 +186,29 @@ int main(void)
 }
 
 /**
-  * @brief System Clock Configuration
-  * @retval None
-  */
+ * @brief System Clock Configuration
+ * @retval None
+ */
 void SystemClock_Config(void)
 {
   RCC_OscInitTypeDef RCC_OscInitStruct = {0};
   RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
 
   /** Supply configuration update enable
-  */
+   */
   HAL_PWREx_ConfigSupply(PWR_LDO_SUPPLY);
 
   /** Configure the main internal regulator output voltage
-  */
+   */
   __HAL_PWR_VOLTAGESCALING_CONFIG(PWR_REGULATOR_VOLTAGE_SCALE0);
 
-  while(!__HAL_PWR_GET_FLAG(PWR_FLAG_VOSRDY)) {}
+  while (!__HAL_PWR_GET_FLAG(PWR_FLAG_VOSRDY))
+  {
+  }
 
   /** Initializes the RCC Oscillators according to the specified parameters
-  * in the RCC_OscInitTypeDef structure.
-  */
+   * in the RCC_OscInitTypeDef structure.
+   */
   RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI;
   RCC_OscInitStruct.HSIState = RCC_HSI_DIV1;
   RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
@@ -191,10 +228,8 @@ void SystemClock_Config(void)
   }
 
   /** Initializes the CPU, AHB and APB buses clocks
-  */
-  RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
-                              |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2
-                              |RCC_CLOCKTYPE_D3PCLK1|RCC_CLOCKTYPE_D1PCLK1;
+   */
+  RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK | RCC_CLOCKTYPE_SYSCLK | RCC_CLOCKTYPE_PCLK1 | RCC_CLOCKTYPE_PCLK2 | RCC_CLOCKTYPE_D3PCLK1 | RCC_CLOCKTYPE_D1PCLK1;
   RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
   RCC_ClkInitStruct.SYSCLKDivider = RCC_SYSCLK_DIV1;
   RCC_ClkInitStruct.AHBCLKDivider = RCC_HCLK_DIV1;
@@ -213,7 +248,7 @@ void SystemClock_Config(void)
 
 /* USER CODE END 4 */
 
- /* MPU Configuration */
+/* MPU Configuration */
 
 void MPU_Config(void)
 {
@@ -223,7 +258,7 @@ void MPU_Config(void)
   HAL_MPU_Disable();
 
   /** Initializes and configures the Region and the memory to be protected
-  */
+   */
   MPU_InitStruct.Enable = MPU_REGION_ENABLE;
   MPU_InitStruct.Number = MPU_REGION_NUMBER0;
   MPU_InitStruct.BaseAddress = 0x0;
@@ -239,13 +274,12 @@ void MPU_Config(void)
   HAL_MPU_ConfigRegion(&MPU_InitStruct);
   /* Enables the MPU */
   HAL_MPU_Enable(MPU_PRIVILEGED_DEFAULT);
-
 }
 
 /**
-  * @brief  This function is executed in case of error occurrence.
-  * @retval None
-  */
+ * @brief  This function is executed in case of error occurrence.
+ * @retval None
+ */
 void Error_Handler(void)
 {
   /* USER CODE BEGIN Error_Handler_Debug */
@@ -257,14 +291,14 @@ void Error_Handler(void)
   /* USER CODE END Error_Handler_Debug */
 }
 
-#ifdef  USE_FULL_ASSERT
+#ifdef USE_FULL_ASSERT
 /**
-  * @brief  Reports the name of the source file and the source line number
-  *         where the assert_param error has occurred.
-  * @param  file: pointer to the source file name
-  * @param  line: assert_param error line source number
-  * @retval None
-  */
+ * @brief  Reports the name of the source file and the source line number
+ *         where the assert_param error has occurred.
+ * @param  file: pointer to the source file name
+ * @param  line: assert_param error line source number
+ * @retval None
+ */
 void assert_failed(uint8_t *file, uint32_t line)
 {
   /* USER CODE BEGIN 6 */

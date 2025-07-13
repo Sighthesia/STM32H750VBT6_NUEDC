@@ -73,6 +73,14 @@ target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user defined symbols
 )
 
+# Add compiler flags for disabling semihosting
+target_compile_options(${CMAKE_PROJECT_NAME} PRIVATE
+)
+
+# Add linker flags for disabling semihosting
+target_link_options(${CMAKE_PROJECT_NAME} PRIVATE
+)
+
 # Add linked libraries
 target_link_libraries(${CMAKE_PROJECT_NAME}
     stm32cubemx

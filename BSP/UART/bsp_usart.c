@@ -90,7 +90,6 @@ void USART1_Send_ArrayU8(uint8_t *BufferPtr, uint16_t Length)
  */
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 {
-	HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_0);
 	if (huart->Instance == USART1)
 	{
 		// 将接收到的数据写入环形缓冲区

@@ -9,7 +9,11 @@
         "tim_stm32hal.h": "c",
         "kalman.h": "c",
         "math.h": "c",
-        "reent.h": "c"
+        "reent.h": "c",
+        "delay_us_stm32hal.h": "c"
     },
-    "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools"
+    "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
+    "files.readonlyInclude": {
+        "{**/.c4z/.extsrcs/*.PROTSYM.cbl,**/.c4z/.extsrcs/*.PROTSYM.listing}": true
+    }
 }

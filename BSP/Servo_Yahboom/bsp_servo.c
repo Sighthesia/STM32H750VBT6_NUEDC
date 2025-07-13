@@ -24,7 +24,8 @@ ServTypdef Yserv = {
 	.MAXPWM = 2100,
 	.MINPWM = 400,
 	.MIDPWM = 933 // 712中间点
-}; // 红色激光笔
+};
+// 红色激光笔
 // ServTypdef Xserv = {
 //     .pwm = 1425,
 //	.MAXPWM = 2500,
@@ -32,7 +33,7 @@ ServTypdef Yserv = {
 //	.MIDPWM = 1300//712中间点
 // };
 
-///* y???? - */
+///* y轴舵机配置 */
 // ServTypdef Yserv = {
 //     .pwm = 1425,
 //	.MAXPWM = 2300,
@@ -61,9 +62,8 @@ void servo_ctr(ServTypdef *servo, int PidInput)
 #ifdef USE_SERVO_J1
 	if (servo == &Xserv)
 	{
-
 		servo_yahboom_hal.GPIO_SetBits(Servo_J1_PORT, Servo_J1_PIN); // 将舵机接口电平置高
-		delay_us(CompSet);											 // 延时脉宽值的微秒数
+		Delay_us(CompSet);											 // 延时脉宽值的微秒数
 
 		servo_yahboom_hal.GPIO_ResetBits(Servo_J1_PORT, Servo_J1_PIN); // 将舵机接口电平置低
 		HAL_Delay(20 - CompSet / 1000);
@@ -73,9 +73,8 @@ void servo_ctr(ServTypdef *servo, int PidInput)
 #ifdef USE_SERVO_J2
 	if (servo == &Yserv)
 	{
-
 		servo_yahboom_hal.GPIO_SetBits(Servo_J2_PORT, Servo_J2_PIN); // 将舵机接口电平置高
-		delay_us(CompSet);											 // 延时脉宽值的微秒数
+		Delay_us(CompSet);											 // 延时脉宽值的微秒数
 
 		servo_yahboom_hal.GPIO_ResetBits(Servo_J2_PORT, Servo_J2_PIN); // 将舵机接口电平置低
 		HAL_Delay(20 - CompSet / 1000);
@@ -128,7 +127,7 @@ void Servo_J1(int v_iAngle) /*定义一个脉冲函数，用来模拟方式产�
 	pulsewidth = (v_iAngle * 11) + 500; // 将角度转化为500-2480 的脉宽值
 
 	servo_yahboom_hal.GPIO_SetBits(Servo_J1_PORT, Servo_J1_PIN); // 将舵机接口电平置高
-	delay_us(pulsewidth);										 // 延时脉宽值的微秒数
+	Delay_us(pulsewidth);										 // 延时脉宽值的微秒数
 
 	servo_yahboom_hal.GPIO_ResetBits(Servo_J1_PORT, Servo_J1_PIN); // 将舵机接口电平置低
 	HAL_Delay(20 - pulsewidth / 1000);							   // 延时周期内剩余时间
@@ -153,7 +152,7 @@ void Servo_J2(int v_iAngle) /*定义一个脉冲函数，用来模拟方式产�
 	pulsewidth = (v_iAngle * 11) + 500; // 将角度转化为500-2480 的脉宽值
 
 	servo_yahboom_hal.GPIO_SetBits(Servo_J2_PORT, Servo_J2_PIN); // 将舵机接口电平置高
-	delay_us(pulsewidth);										 // 延时脉宽值的微秒数
+	Delay_us(pulsewidth);										 // 延时脉宽值的微秒数
 
 	servo_yahboom_hal.GPIO_ResetBits(Servo_J2_PORT, Servo_J2_PIN); // 将舵机接口电平置低
 	HAL_Delay(20 - pulsewidth / 1000);							   // 延时周期内剩余时间
@@ -178,7 +177,7 @@ void Servo_J3(int v_iAngle) /*定义一个脉冲函数，用来模拟方式产�
 	pulsewidth = (v_iAngle * 11) + 500; // 将角度转化为500-2480 的脉宽值
 
 	servo_yahboom_hal.GPIO_SetBits(Servo_J3_PORT, Servo_J3_PIN); // 将舵机接口电平置高
-	delay_us(pulsewidth);										 // 延时脉宽值的微秒数
+	Delay_us(pulsewidth);										 // 延时脉宽值的微秒数
 
 	servo_yahboom_hal.GPIO_ResetBits(Servo_J3_PORT, Servo_J3_PIN); // 将舵机接口电平置低
 	HAL_Delay(20 - pulsewidth / 1000);							   // 延时周期内剩余时间
@@ -203,7 +202,7 @@ void Servo_J4(int v_iAngle) /*定义一个脉冲函数，用来模拟方式产�
 	pulsewidth = (v_iAngle * 11) + 500; // 将角度转化为500-2480 的脉宽值
 
 	servo_yahboom_hal.GPIO_SetBits(Servo_J4_PORT, Servo_J4_PIN); // 将舵机接口电平置高
-	delay_us(pulsewidth);										 // 延时脉宽值的微秒数
+	Delay_us(pulsewidth);										 // 延时脉宽值的微秒数
 
 	servo_yahboom_hal.GPIO_ResetBits(Servo_J4_PORT, Servo_J4_PIN); // 将舵机接口电平置低
 	HAL_Delay(20 - pulsewidth / 1000);							   // 延时周期内剩余时间
@@ -228,7 +227,7 @@ void Servo_J5(int v_iAngle) /*定义一个脉冲函数，用来模拟方式产�
 	pulsewidth = (v_iAngle * 11) + 500; // 将角度转化为500-2480 的脉宽值
 
 	servo_yahboom_hal.GPIO_SetBits(Servo_J5_PORT, Servo_J5_PIN); // 将舵机接口电平置高
-	delay_us(pulsewidth);										 // 延时脉宽值的微秒数
+	Delay_us(pulsewidth);										 // 延时脉宽值的微秒数
 
 	servo_yahboom_hal.GPIO_ResetBits(Servo_J5_PORT, Servo_J5_PIN); // 将舵机接口电平置低
 	HAL_Delay(20 - pulsewidth / 1000);							   // 延时周期内剩余时间
@@ -253,7 +252,7 @@ void Servo_J6(int v_iAngle) /*定义一个脉冲函数，用来模拟方式产�
 	pulsewidth = (v_iAngle * 11) + 500; // 将角度转化为500-2480 的脉宽值
 
 	servo_yahboom_hal.GPIO_SetBits(Servo_J6_PORT, Servo_J6_PIN); // 将舵机接口电平置高
-	delay_us(pulsewidth);										 // 延时脉宽值的微秒数
+	Delay_us(pulsewidth);										 // 延时脉宽值的微秒数
 
 	servo_yahboom_hal.GPIO_ResetBits(Servo_J6_PORT, Servo_J6_PIN); // 将舵机接口电平置低
 	HAL_Delay(20 - pulsewidth / 1000);							   // 延时周期内剩余时间
@@ -278,7 +277,7 @@ void Servo_J7(int v_iAngle) /*定义一个脉冲函数，用来模拟方式产�
 	pulsewidth = (v_iAngle * 11) + 500; // 将角度转化为500-2480 的脉宽值
 
 	servo_yahboom_hal.GPIO_SetBits(Servo_J7_PORT, Servo_J7_PIN); // 将舵机接口电平置高
-	delay_us(pulsewidth);										 // 延时脉宽值的微秒数
+	Delay_us(pulsewidth);										 // 延时脉宽值的微秒数
 
 	servo_yahboom_hal.GPIO_ResetBits(Servo_J7_PORT, Servo_J7_PIN); // 将舵机接口电平置低
 	HAL_Delay(20 - pulsewidth / 1000);							   // 延时周期内剩余时间
@@ -303,7 +302,7 @@ void Servo_J8(int v_iAngle) /*定义一个脉冲函数，用来模拟方式产�
 	pulsewidth = (v_iAngle * 11) + 500; // 将角度转化为500-2480 的脉宽值
 
 	servo_yahboom_hal.GPIO_SetBits(Servo_J8_PORT, Servo_J8_PIN); // 将舵机接口电平置高
-	delay_us(pulsewidth);										 // 延时脉宽值的微秒数
+	Delay_us(pulsewidth);										 // 延时脉宽值的微秒数
 
 	servo_yahboom_hal.GPIO_ResetBits(Servo_J8_PORT, Servo_J8_PIN); // 将舵机接口电平置低
 	HAL_Delay(20 - pulsewidth / 1000);							   // 延时周期内剩余时间

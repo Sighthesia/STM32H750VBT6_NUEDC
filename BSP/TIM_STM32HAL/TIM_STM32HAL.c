@@ -14,12 +14,6 @@
 
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
-    if (htim->Instance == SERVO_TIM_INSTANCE)
-    {
-        servo_ctr(&Xserv, x_pid.PID_out);
-        servo_ctr(&Yserv, y_pid.PID_out);
-        HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_0);
-    }
     if (htim->Instance == PID_TIM_INSTANCE)
     {
         // PID控制相关代码
@@ -28,6 +22,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
     }
 }
 
+#ifdef USE_TIM_PWM
 /** ***************************************************************************
  * @brief 	  舵机PWM定时器初始化函数
  */
@@ -38,6 +33,7 @@ void Servo_PWM_TIM_Init()
     // 使能定时器更新中断并启动定时器
     HAL_TIM_Base_Start_IT(&SERVO_TIM_HANDLE);
 }
+#endif /* USE_TIM_PWM */
 
 /** ***************************************************************************
  * @brief 	  PID定时器初始化函数

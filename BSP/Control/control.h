@@ -2,8 +2,6 @@
 #define __CONTROL_H
 
 #include "main.h"
-#include "stdint.h"
-
 int GFP_abs(int p);
 void mode_1(void);
 void mode_2(void);
