@@ -15,7 +15,7 @@
 
 /* --------------------------------- 此处修改舵机配置 -------------------------------- */
 static const servo_config_t servo_config_table[MAX_SERVO] = {
-    // {定时器通道, 定时器句柄, 舵机ID, 组别ID, 是否启用, "名称", 默认PWM, 最大PWM, 最小PWM, 中位PWM},
+    // {定时器句柄, 定时器通道, 舵机ID, 组别ID, 是否启用, "名称", 默认PWM, 最大PWM, 最小PWM, 中位PWM},
     {&htim3, TIM_CHANNEL_3, SERVO_ID_J0, SERVO_GROUP_0, 1, "Servo_0X", 1097, 2400, 500, 1097}, // X轴舵机 - 云台组
     {&htim3, TIM_CHANNEL_4, SERVO_ID_J1, SERVO_GROUP_0, 1, "Servo_0Y", 933, 2100, 400, 933},   // Y轴舵机 - 云台组
 };
@@ -83,7 +83,7 @@ void Servo_TIM_PWM_Init(void)
     {
         if (servo_array[i].enabled)
         {
-            HAL_TIM_PWM_Start(servo_array[i].tim_handle, servo_array[i].tim_channel);
+            servo_hal.PWM_Start(servo_array[i].tim_handle, servo_array[i].tim_channel);
             // 设置初始位置
             Servo_Set_PWM_By_ID(servo_array[i].servo_id, servo_array[i].mid_pwm);
         }
@@ -231,11 +231,11 @@ void Servo_Enable_By_ID(uint8_t servo_id, uint8_t enable)
     {
         if (enable)
         {
-            HAL_TIM_PWM_Start(servo_array[index].tim_handle, servo_array[index].tim_channel);
+            servo_hal.PWM_Start(servo_array[index].tim_handle, servo_array[index].tim_channel);
         }
         else
         {
-            HAL_TIM_PWM_Stop(servo_array[index].tim_handle, servo_array[index].tim_channel);
+            servo_hal.PWM_Stop(servo_array[index].tim_handle, servo_array[index].tim_channel);
         }
     }
 }
@@ -279,8 +279,8 @@ static void Servo_Set_CCR(uint8_t servo_index, uint16_t ccr_value)
         return;
     }
 
-    // 根据通道设置CCR值 - 使用舵机对应的定时器句柄
-    __HAL_TIM_SET_COMPARE(servo_array[servo_index].tim_handle, servo_array[servo_index].tim_channel, ccr_value);
+    // 根据通道设置CCR值 - 使用HAL接口
+    servo_hal.Set_PWM_CCR(servo_array[servo_index].tim_handle, servo_array[servo_index].tim_channel, ccr_value);
 }
 
 /** ***************************************************************************
@@ -331,7 +331,7 @@ void Servo_Stop_All(void)
     {
         if (servo_array[i].enabled)
         {
-            HAL_TIM_PWM_Stop(servo_array[i].tim_handle, servo_array[i].tim_channel);
+            servo_hal.PWM_Stop(servo_array[i].tim_handle, servo_array[i].tim_channel);
         }
     }
 }
@@ -346,7 +346,7 @@ void Servo_Start_All(void)
     {
         if (servo_array[i].enabled)
         {
-            HAL_TIM_PWM_Start(servo_array[i].tim_handle, servo_array[i].tim_channel);
+            servo_hal.PWM_Start(servo_array[i].tim_handle, servo_array[i].tim_channel);
         }
     }
 }
@@ -365,7 +365,7 @@ void Servo_Stop_By_ID(uint8_t servo_id)
     uint8_t index = servo_id;
     if (servo_array[index].enabled)
     {
-        HAL_TIM_PWM_Stop(servo_array[index].tim_handle, servo_array[index].tim_channel);
+        servo_hal.PWM_Stop(servo_array[index].tim_handle, servo_array[index].tim_channel);
     }
 }
 
@@ -383,7 +383,7 @@ void Servo_Start_By_ID(uint8_t servo_id)
     uint8_t index = servo_id;
     if (servo_array[index].enabled)
     {
-        HAL_TIM_PWM_Start(servo_array[index].tim_handle, servo_array[index].tim_channel);
+        servo_hal.PWM_Start(servo_array[index].tim_handle, servo_array[index].tim_channel);
     }
 }
 
@@ -416,7 +416,7 @@ void Servo_Smooth_Move_By_ID(uint8_t servo_id, uint8_t target_angle, uint16_t st
         for (uint8_t angle = current_angle; angle <= target_angle; angle++)
         {
             Servo_Set_Angle_By_ID(servo_id, angle);
-            HAL_Delay(step_delay);
+            servo_hal.Delay_Ms(step_delay);
         }
     }
     else
@@ -425,7 +425,7 @@ void Servo_Smooth_Move_By_ID(uint8_t servo_id, uint8_t target_angle, uint16_t st
         for (uint8_t angle = current_angle; angle >= target_angle; angle--)
         {
             Servo_Set_Angle_By_ID(servo_id, angle);
-            HAL_Delay(step_delay);
+            servo_hal.Delay_Ms(step_delay);
             if (angle == 0)
                 break; // 防止uint8_t下溢
         }
@@ -451,16 +451,16 @@ void Servo_Calibrate_By_ID(uint8_t servo_id)
 
     // 校准序列: 0° -> 90° -> 180° -> 90°
     Servo_Set_Angle_By_ID(servo_id, 0);
-    HAL_Delay(1000);
+    servo_hal.Delay_Ms(1000);
 
     Servo_Set_Angle_By_ID(servo_id, 90);
-    HAL_Delay(1000);
+    servo_hal.Delay_Ms(1000);
 
     Servo_Set_Angle_By_ID(servo_id, 180);
-    HAL_Delay(1000);
+    servo_hal.Delay_Ms(1000);
 
     Servo_Set_Angle_By_ID(servo_id, 90);
-    HAL_Delay(1000);
+    servo_hal.Delay_Ms(1000);
 }
 
 /** ***************************************************************************
@@ -807,7 +807,7 @@ void Servo_Set_TIM_Handle_By_ID(uint8_t servo_id, TIM_HandleTypeDef *tim_handle)
     // 如果舵机正在运行，先停止
     if (servo_array[index].enabled && servo_initialized)
     {
-        HAL_TIM_PWM_Stop(servo_array[index].tim_handle, servo_array[index].tim_channel);
+        servo_hal.PWM_Stop(servo_array[index].tim_handle, servo_array[index].tim_channel);
     }
 
     // 更新定时器句柄
@@ -816,7 +816,7 @@ void Servo_Set_TIM_Handle_By_ID(uint8_t servo_id, TIM_HandleTypeDef *tim_handle)
     // 如果舵机之前是启用的，重新启动
     if (servo_array[index].enabled && servo_initialized)
     {
-        HAL_TIM_PWM_Start(servo_array[index].tim_handle, servo_array[index].tim_channel);
+        servo_hal.PWM_Start(servo_array[index].tim_handle, servo_array[index].tim_channel);
     }
 }
 
@@ -835,7 +835,7 @@ void Servo_Stop_By_TIM_Handle(TIM_HandleTypeDef *tim_handle)
     {
         if (servo_array[i].tim_handle == tim_handle && servo_array[i].enabled)
         {
-            HAL_TIM_PWM_Stop(servo_array[i].tim_handle, servo_array[i].tim_channel);
+            servo_hal.PWM_Stop(servo_array[i].tim_handle, servo_array[i].tim_channel);
         }
     }
 }
@@ -855,7 +855,7 @@ void Servo_Start_By_TIM_Handle(TIM_HandleTypeDef *tim_handle)
     {
         if (servo_array[i].tim_handle == tim_handle && servo_array[i].enabled)
         {
-            HAL_TIM_PWM_Start(servo_array[i].tim_handle, servo_array[i].tim_channel);
+            servo_hal.PWM_Start(servo_array[i].tim_handle, servo_array[i].tim_channel);
         }
     }
 }

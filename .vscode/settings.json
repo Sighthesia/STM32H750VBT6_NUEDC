@@ -10,7 +10,9 @@
         "kalman.h": "c",
         "math.h": "c",
         "reent.h": "c",
-        "delay_us_stm32hal.h": "c"
+        "delay_us_stm32hal.h": "c",
+        "servo_pwm.h": "c",
+        "servo_hal.h": "c"
     },
     "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
     "files.readonlyInclude": {

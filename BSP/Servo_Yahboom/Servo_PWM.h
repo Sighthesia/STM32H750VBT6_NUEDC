@@ -17,6 +17,7 @@
 #include "main.h"
 #include "tim.h"
 #include "stdint.h"
+#include "Servo_HAL.h"
 
 /* --------------------------------- 此处修改PWM模式选择 --------------------------------- */
 #define USE_HARDWARE_PWM // 使用硬件PWM
