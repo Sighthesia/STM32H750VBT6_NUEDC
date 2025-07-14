@@ -32,18 +32,11 @@
 
 #endif /* USE_HARDWARE_PWM */
 
-/* --------------------------------- 此处修改舵机数量配置 --------------------------------- */
-#define MAX_SERVO_COUNT 8 // 最大支持舵机数量
-#define MAX_GROUP_COUNT 4 // 最大支持组别数量
-
 /* --------------------------------- 此处修改舵机组别枚举 --------------------------------- */
 typedef enum
 {
     SERVO_GROUP_0 = 0, // 云台组
-    SERVO_GROUP_1,     // 机械臂组
-    SERVO_GROUP_2,     // 附加组
-    SERVO_GROUP_3,     // 预留组
-    MAX_GROUP = MAX_GROUP_COUNT
+    MAX_GROUP          // 自动获取最大组别数量，不要手动赋值
 } servo_group_t;
 
 /* --------------------------------- 此处修改舵机ID枚举 --------------------------------- */
@@ -51,17 +44,11 @@ typedef enum
 {
     SERVO_ID_J0 = 0, // 舵机1
     SERVO_ID_J1,     // 舵机2
-    SERVO_ID_J2,     // 舵机3
-    SERVO_ID_J3,     // 舵机4
-    SERVO_ID_J4,     // 舵机5
-    SERVO_ID_J5,     // 舵机6
-    SERVO_ID_J6,     // 舵机7
-    SERVO_ID_J7,     // 舵机8
-    MAX_SERVO = MAX_SERVO_COUNT
+    MAX_SERVO        // 自动获取最大舵机数量，不要手动赋值
 } servo_id_t;
 
 /* --------------------------------- 此处修改调试配置 --------------------------------- */
-#define SERVO_ENABLE_DEBUG 1        // 启用调试输出
+#define SERVO_ENABLE_DEBUG 0        // 启用调试输出
 #define SERVO_ENABLE_STATUS_PRINT 0 // 启用状态打印功能
 
 /* --------------------------------- 此处修改延时配置 --------------------------------- */

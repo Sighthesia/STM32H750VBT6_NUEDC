@@ -11,46 +11,14 @@
  * @Modifi_Date:
  */
 
-#ifndef SERVO_YAHBOOM_PWM_H
-#define SERVO_YAHBOOM_PWM_H
+#ifndef SERVO_PWM_H
+#define SERVO_PWM_H
 
 #include "main.h"
 #include "tim.h"
 #include "stdint.h"
 #include "Servo_HAL.h"
-
-/* --------------------------------- 此处修改PWM模式选择 --------------------------------- */
-#define USE_HARDWARE_PWM // 使用硬件PWM
-// #define USE_SOFTWARE_PWM // 使用软件模拟PWM (兼容原版)
-
-/* --------------------------------- 舵机组别枚举 --------------------------------- */
-typedef enum
-{
-    SERVO_GROUP_0 = 0, // 云台组
-    MAX_GROUP          // 自动获取最大组别数量，不要手动赋值
-} servo_group_t;
-
-/* --------------------------------- 舵机ID枚举 --------------------------------- */
-typedef enum
-{
-    SERVO_ID_J0 = 0, // 舵机1
-    SERVO_ID_J1,     // 舵机2
-    MAX_SERVO        // 自动获取最大舵机数量，不要手动赋值
-} servo_id_t;
-
-/* --------------------------------- 此处修改硬件PWM配置 --------------------------------- */
-#ifdef USE_HARDWARE_PWM
-
-#define SERVO_PWM_FREQUENCY 50        // PWM频率 50Hz
-#define SERVO_PWM_PERIOD 20000        // 周期 20ms (以μs为单位)
-#define SERVO_PWM_PRESCALER (480 - 1) // 预分频器 (480MHz/480=1MHz, 1μs分辨率)
-#define SERVO_PWM_ARR (20000 - 1)     // 自动重装值 (20ms周期)
-
-#define SERVO_PWM_MIN 500     // 最小脉宽 500μs (0°)
-#define SERVO_PWM_MAX 2500    // 最大脉宽 2500μs (180°)
-#define SERVO_PWM_CENTER 1500 // 中心脉宽 1500μs (90°)
-
-#endif /* USE_HARDWARE_PWM */
+#include "Servo_Config.h"
 
 /* --------------------------------- 舵机参数结构体 --------------------------------- */
 typedef struct
