@@ -292,7 +292,4 @@ void Control_System_Init(void)
     // 设置舵机到中心位置
     Servo_Set_Angle_By_ID(SERVO_ID_J0, 90); // X轴舵机到中心
     Servo_Set_Angle_By_ID(SERVO_ID_J1, 90); // Y轴舵机到中心
-
-    // 延时确保舵机到位
-    HAL_Delay(1000);
 }

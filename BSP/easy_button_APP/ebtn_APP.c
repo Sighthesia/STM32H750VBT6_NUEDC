@@ -86,6 +86,7 @@ static void ebtn_APP_Event_Handler(struct ebtn_btn *btn, ebtn_evt_t evt)
             /* ----------------------------------- Ë«»÷Ê± ---------------------------------- */
             else if (btn->click_cnt == 2)
             {
+                astra_selector_exit_current_item();
             }
             /* ----------------------------------- Èý»÷Ê± ---------------------------------- */
             else if (btn->click_cnt == 3)
@@ -104,7 +105,6 @@ static void ebtn_APP_Event_Handler(struct ebtn_btn *btn, ebtn_evt_t evt)
                 }
                 else
                 {
-                    astra_selector_exit_current_item();
                 }
             }
         }

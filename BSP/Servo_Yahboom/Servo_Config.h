@@ -27,10 +27,19 @@
 #define SERVO_PWM_ARR (20000 - 1)     // 自动重装值 (20ms周期)
 
 #define SERVO_PWM_MIN 500     // 最小脉宽 500μs (0°)
-#define SERVO_PWM_MAX 2500    // 最大脉宽 2500μs (180°)
-#define SERVO_PWM_CENTER 1500 // 中心脉宽 1500μs (90°)
+#define SERVO_PWM_MAX 2500    // 最大脉宽 2500μs (180°/270°)
+#define SERVO_PWM_CENTER 1500 // 中心脉宽 1500μs (90°/135°)
 
 #endif /* USE_HARDWARE_PWM */
+
+/* --------------------------------- 此处修改舵机角度类型枚举 --------------------------------- */
+typedef enum
+{
+    SERVO_ANGLE_TYPE_180 = 0, // 180度舵机 (标准舵机)
+    SERVO_ANGLE_TYPE_270,     // 270度舵机 (大角度舵机)
+    SERVO_ANGLE_TYPE_360,     // 360度舵机 (连续旋转舵机，保留)
+    MAX_ANGLE_TYPE            // 角度类型总数
+} servo_angle_type_t;
 
 /* --------------------------------- 此处修改舵机组别枚举 --------------------------------- */
 typedef enum

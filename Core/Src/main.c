@@ -41,6 +41,7 @@
 #include "astra_ui_drawer.h"
 #include "ebtn_APP.h"
 #include "bsp_servo.h"
+#include "Encoder_EXTI.h"
 
 /* USER CODE END Includes */
 
@@ -65,7 +66,9 @@
 uint8_t grop = 0;
 float version = 1.1;
 double x_p = -0000.64, x_i = -0.0076, x_d = -00002.50, y_p = -000.96, y_i = -0.0096, y_d = -2.50; // 红色激光笔
-volatile int32_t encoder_count = 0;                                                               // 编码器计数变量
+
+int16_t servo_y_angle = 0;
+int16_t servo_x_angle = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -117,37 +120,6 @@ void _sys_exit(int x)
 //   return ch;
 // }
 
-void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
-{
-  static uint8_t last_state = 0;
-
-  if (GPIO_Pin == GPIO_PIN_7 || GPIO_Pin == GPIO_PIN_8)
-  {
-    // 读取当前 A、B 相状态（0或1）
-    uint8_t a = HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_8);
-    uint8_t b = HAL_GPIO_ReadPin(GPIOD, GPIO_PIN_7);
-
-    // 构造当前状态（bit0=A, bit1=B）
-    uint8_t current_state = (a << 0) | (b << 1);
-
-    // 只在A相从低到高（上升沿）时判断方向并计数
-    // 这样确保每个脉冲周期只计数一次
-    if ((last_state & 0x01) == 0 && (current_state & 0x01) == 1) // A相上升沿
-    {
-      if (b == 0) // B相为低电平时，逆时针
-      {
-        encoder_count--;
-      }
-      else // B相为高电平时，顺时针
-      {
-        encoder_count++;
-      }
-    }
-
-    // 更新上次状态
-    last_state = current_state;
-  }
-}
 /* USER CODE END 0 */
 
 /**
@@ -210,13 +182,16 @@ int main(void)
   astra_ui_driver_init();
   astra_init_core();
 
-  astra_list_item_t *launcher_setting_list_item = astra_new_list_item("Setting");
-  astra_push_item_to_list(astra_get_root_list(), launcher_setting_list_item);
+  astra_list_item_t *Settings = astra_new_list_item("Settings");
+
+  astra_push_item_to_list(astra_get_root_list(), Settings);
+
+  astra_push_item_to_list(Settings, astra_new_slider_item("X舵机角度", &servo_x_angle, 0, 1, 270));
+  astra_push_item_to_list(Settings, astra_new_slider_item("Y舵机角度", &servo_y_angle, 0, 1, 180));
 
   char msg[100] = {};
   sprintf(msg, "启动时间: %dms.", get_ticks());
   astra_push_pop_up(msg, 1500);
-  HAL_NVIC_EnableIRQ(EXTI9_5_IRQn);
 
   /* USER CODE END 2 */
 
@@ -224,16 +199,35 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-    sprintf(msg, "Encoder Count: %d", encoder_count);
+    if (Encoder_Is_Increase())
+    {
+      if (in_astra == 1)
+      {
+        astra_selector_go_next_item();
+      }
+    }
+    else if (Encoder_Is_Increase())
+    {
+      if (in_astra == 1)
+      {
+        astra_selector_go_prev_item();
+      }
+    }
+
+    Servo_Set_Angle_By_ID(0, servo_x_angle);
+    Servo_Set_Angle_By_ID(0, servo_y_angle);
+
     oled_clear_buffer();
+
+    astra_ui_widget_core();
+    astra_ui_main_core();
+
     if (in_astra == 0)
     {
       u8g2_DrawUTF8(&u8g2, 0, 10, msg);
     }
-    astra_ui_widget_core();
-    astra_ui_main_core();
+
     oled_send_buffer();
-    Servo_Set_Angle_By_ID(0, encoder_count);
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */

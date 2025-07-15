@@ -15,15 +15,15 @@
 
 /* --------------------------------- 此处修改舵机配置 -------------------------------- */
 static const servo_config_t servo_config_table[MAX_SERVO] = {
-    // {定时器句柄, 定时器通道, 舵机ID, 组别ID, 是否启用, "名称", 默认PWM, 最大PWM, 最小PWM, 中位PWM},
-    {&htim3, TIM_CHANNEL_3, SERVO_ID_J0, SERVO_GROUP_0, 1, "Servo_0X", 1097, 2400, 500, 1097}, // X轴舵机 - 云台组
-    {&htim3, TIM_CHANNEL_4, SERVO_ID_J1, SERVO_GROUP_0, 1, "Servo_0Y", 933, 2100, 400, 933},   // Y轴舵机 - 云台组
+    // {定时器句柄, 定时器通道, 舵机ID, 组别ID, 是否启用, 角度类型, 名称(调试), 当前PWM, 最大PWM, 最小PWM, 中位PWM},
+    {&htim3, TIM_CHANNEL_3, SERVO_ID_J0, SERVO_GROUP_0, 1, SERVO_ANGLE_TYPE_270, "Servo_0X", 1097, 2400, 500, 1097}, // X轴舵机 - 270°舵机
+    {&htim3, TIM_CHANNEL_4, SERVO_ID_J1, SERVO_GROUP_0, 1, SERVO_ANGLE_TYPE_180, "Servo_0Y", 933, 2100, 400, 933},   // Y轴舵机 - 180°舵机
 };
 
 servo_typedef_t servo_array[MAX_SERVO]; // 舵机控制数组
 
-// 角度数组
-volatile int servo_angle[MAX_GROUP][MAX_SERVO];
+// 角度数组支持小数
+volatile float servo_angle[MAX_GROUP][MAX_SERVO];
 
 #ifdef USE_HARDWARE_PWM
 
@@ -56,6 +56,7 @@ static void Servo_Init_From_Config_Table(void)
         servo_array[i].servo_id = servo_config_table[i].servo_id;
         servo_array[i].group_id = servo_config_table[i].group_id;
         servo_array[i].enabled = servo_config_table[i].enabled;
+        servo_array[i].angle_type = servo_config_table[i].angle_type;
         servo_array[i].name = servo_config_table[i].name;
     }
 }
@@ -93,11 +94,11 @@ void Servo_TIM_PWM_Init(void)
 }
 
 /** ***************************************************************************
- * @brief 按ID设置舵机角度
+ * @brief 按ID设置舵机角度 (自适应角度类型)
  * @param  servo_id: 舵机ID (0-MAX_SERVO-1)
- * @param  angle: 角度 0-180°
+ * @param  angle: 角度 (根据舵机类型自动适配：180°舵机 0.0-180.0°，270°舵机 0.0-270.0°)
  */
-void Servo_Set_Angle_By_ID(uint8_t servo_id, uint8_t angle)
+void Servo_Set_Angle_By_ID(uint8_t servo_id, float angle)
 {
     if (!Servo_Validate_ID(servo_id))
     {
@@ -110,7 +111,7 @@ void Servo_Set_Angle_By_ID(uint8_t servo_id, uint8_t angle)
         return;
     }
 
-    uint16_t pwm_value = Servo_Angle_To_PWM(angle);
+    uint16_t pwm_value = Servo_Angle_To_PWM_By_Type(angle, servo_array[index].angle_type);
 
     // 限制PWM值范围
     if (pwm_value > servo_array[index].max_pwm)
@@ -177,10 +178,10 @@ void Servo_Set_PWM_By_ID(uint8_t servo_id, uint16_t pwm)
 /** ***************************************************************************
  * @brief 批量设置多个舵机角度
  * @param  servo_ids: 舵机ID数组
- * @param  angles: 角度数组
+ * @param  angles: 角度数组(支持小数)
  * @param  count: 舵机数量
  */
-void Servo_Set_Multiple_Angles(uint8_t *servo_ids, uint8_t *angles, uint8_t count)
+void Servo_Set_Multiple_Angles(uint8_t *servo_ids, float *angles, uint8_t count)
 {
     if (servo_ids == NULL || angles == NULL || count == 0)
     {
@@ -284,29 +285,95 @@ static void Servo_Set_CCR(uint8_t servo_index, uint16_t ccr_value)
 }
 
 /** ***************************************************************************
- * @brief 角度转换为PWM值
- * @param  angle: 角度 0-180
+ * @brief 角度转换为PWM值 (传统180°舵机)
+ * @param  angle: 角度 0.0-180.0°(支持小数)
  * @return uint16_t: PWM值(微秒)
+ * @note 保留原有函数以兼容旧代码
  */
-uint16_t Servo_Angle_To_PWM(uint8_t angle)
+uint16_t Servo_Angle_To_PWM(float angle)
 {
-    // 限制角度范围
-    if (angle > 180)
-    {
-        angle = 180;
-    }
-
-    // 线性映射: 0° → 500μs, 180° → 2500μs
-    return SERVO_PWM_MIN + (angle * (SERVO_PWM_MAX - SERVO_PWM_MIN)) / 180;
+    return Servo_Angle_To_PWM_By_Type(angle, SERVO_ANGLE_TYPE_180);
 }
 
 /** ***************************************************************************
- * @brief PWM值转换为角度
- * @param  pwm_value: PWM值(微秒)
- * @return uint8_t: 角度 0-180
+ * @brief 根据舵机类型将角度转换为PWM值
+ * @param  angle: 角度值(支持小数)
+ * @param  angle_type: 舵机角度类型
+ * @return uint16_t: PWM值(微秒)
  */
-uint8_t Servo_PWM_To_Angle(uint16_t pwm_value)
+uint16_t Servo_Angle_To_PWM_By_Type(float angle, servo_angle_type_t angle_type)
 {
+    float max_angle;
+
+    // 根据舵机类型确定最大角度
+    switch (angle_type)
+    {
+    case SERVO_ANGLE_TYPE_180:
+        max_angle = 180.0f;
+        break;
+    case SERVO_ANGLE_TYPE_270:
+        max_angle = 270.0f;
+        break;
+    case SERVO_ANGLE_TYPE_360:
+        max_angle = 360.0f;
+        break;
+    default:
+        max_angle = 180.0f; // 默认180°
+        break;
+    }
+
+    // 限制角度范围
+    if (angle > max_angle)
+    {
+        angle = max_angle;
+    }
+    else if (angle < 0.0f)
+    {
+        angle = 0.0f;
+    }
+
+    // 线性映射: 0° → 500μs, max_angle° → 2500μs
+    return (uint16_t)(SERVO_PWM_MIN + (angle * (SERVO_PWM_MAX - SERVO_PWM_MIN)) / max_angle);
+}
+
+/** ***************************************************************************
+ * @brief PWM值转换为角度 (传统180°舵机)
+ * @param  pwm_value: PWM值(微秒)
+ * @return float: 角度 0.0-180.0°(支持小数)
+ * @note 保留原有函数以兼容旧代码
+ */
+float Servo_PWM_To_Angle(uint16_t pwm_value)
+{
+    return Servo_PWM_To_Angle_By_Type(pwm_value, SERVO_ANGLE_TYPE_180);
+}
+
+/** ***************************************************************************
+ * @brief 根据舵机类型将PWM值转换为角度
+ * @param  pwm_value: PWM值(微秒)
+ * @param  angle_type: 舵机角度类型
+ * @return float: 角度值(支持小数)
+ */
+float Servo_PWM_To_Angle_By_Type(uint16_t pwm_value, servo_angle_type_t angle_type)
+{
+    float max_angle;
+
+    // 根据舵机类型确定最大角度
+    switch (angle_type)
+    {
+    case SERVO_ANGLE_TYPE_180:
+        max_angle = 180.0f;
+        break;
+    case SERVO_ANGLE_TYPE_270:
+        max_angle = 270.0f;
+        break;
+    case SERVO_ANGLE_TYPE_360:
+        max_angle = 360.0f;
+        break;
+    default:
+        max_angle = 180.0f; // 默认180°
+        break;
+    }
+
     // 限制PWM值范围
     if (pwm_value > SERVO_PWM_MAX)
     {
@@ -317,8 +384,8 @@ uint8_t Servo_PWM_To_Angle(uint16_t pwm_value)
         pwm_value = SERVO_PWM_MIN;
     }
 
-    // 线性映射: 500μs → 0°, 2500μs → 180°
-    return ((pwm_value - SERVO_PWM_MIN) * 180) / (SERVO_PWM_MAX - SERVO_PWM_MIN);
+    // 线性映射: 500μs → 0°, 2500μs → max_angle°
+    return ((float)(pwm_value - SERVO_PWM_MIN) * max_angle) / (float)(SERVO_PWM_MAX - SERVO_PWM_MIN);
 }
 
 /** ***************************************************************************
@@ -392,10 +459,10 @@ void Servo_Start_By_ID(uint8_t servo_id)
 /** ***************************************************************************
  * @brief 舵机平滑移动
  * @param  servo_id: 舵机ID (0-MAX_SERVO-1)
- * @param  target_angle: 目标角度 0-180
+ * @param  target_angle: 目标角度 0.0-180.0°(支持小数)
  * @param  step_delay: 每步延时(ms)
  */
-void Servo_Smooth_Move_By_ID(uint8_t servo_id, uint8_t target_angle, uint16_t step_delay)
+void Servo_Smooth_Move_By_ID(uint8_t servo_id, float target_angle, uint16_t step_delay)
 {
     if (!Servo_Validate_ID(servo_id))
     {
@@ -408,26 +475,43 @@ void Servo_Smooth_Move_By_ID(uint8_t servo_id, uint8_t target_angle, uint16_t st
         return;
     }
 
-    uint8_t current_angle = Servo_PWM_To_Angle(servo_array[index].pwm);
+    float current_angle = Servo_PWM_To_Angle(servo_array[index].pwm);
+    float step_size = 0.5f; // 每步0.5度，可以调整精度
+
+    // 限制目标角度范围
+    if (target_angle > 180.0f)
+    {
+        target_angle = 180.0f;
+    }
+    else if (target_angle < 0.0f)
+    {
+        target_angle = 0.0f;
+    }
 
     if (target_angle > current_angle)
     {
         // 正向移动
-        for (uint8_t angle = current_angle; angle <= target_angle; angle++)
+        for (float angle = current_angle; angle <= target_angle; angle += step_size)
         {
+            if (angle > target_angle)
+            {
+                angle = target_angle; // 确保最后一步到达精确位置
+            }
             Servo_Set_Angle_By_ID(servo_id, angle);
             servo_hal.Delay_Ms(step_delay);
         }
     }
-    else
+    else if (target_angle < current_angle)
     {
         // 反向移动
-        for (uint8_t angle = current_angle; angle >= target_angle; angle--)
+        for (float angle = current_angle; angle >= target_angle; angle -= step_size)
         {
+            if (angle < target_angle)
+            {
+                angle = target_angle; // 确保最后一步到达精确位置
+            }
             Servo_Set_Angle_By_ID(servo_id, angle);
             servo_hal.Delay_Ms(step_delay);
-            if (angle == 0)
-                break; // 防止uint8_t下溢
         }
     }
 }
@@ -526,9 +610,9 @@ uint8_t Servo_Get_Active_Count(void)
  * @brief 按组别和索引设置舵机角度
  * @param  group_id: 组别ID
  * @param  servo_index: 组内舵机索引 (从0开始)
- * @param  angle: 角度 0-180°
+ * @param  angle: 角度 0.0-180.0°(支持小数)
  */
-void Servo_Set_Angle_By_Group(uint8_t group_id, uint8_t servo_index, uint8_t angle)
+void Servo_Set_Angle_By_Group(uint8_t group_id, uint8_t servo_index, float angle)
 {
     uint8_t found_count = 0;
     for (uint8_t i = 0; i < MAX_SERVO; i++)
@@ -571,10 +655,10 @@ void Servo_Set_PWM_By_Group(uint8_t group_id, uint8_t servo_index, uint16_t pwm)
 /** ***************************************************************************
  * @brief 设置指定组别所有舵机的角度
  * @param  group_id: 组别ID
- * @param  angles: 角度数组
+ * @param  angles: 角度数组(支持小数)
  * @param  count: 角度数组长度
  */
-void Servo_Set_Group_Angles(uint8_t group_id, uint8_t *angles, uint8_t count)
+void Servo_Set_Group_Angles(uint8_t group_id, float *angles, uint8_t count)
 {
     if (angles == NULL || count == 0)
     {
@@ -859,4 +943,151 @@ void Servo_Start_By_TIM_Handle(TIM_HandleTypeDef *tim_handle)
         }
     }
 }
+
+/* ========================== 小数角度辅助函数 ========================== */
+
+/** ***************************************************************************
+ * @brief 获取指定舵机的当前角度 (自适应角度类型)
+ * @param  servo_id: 舵机ID (0-MAX_SERVO-1)
+ * @return float: 当前角度(支持小数，根据舵机类型自动适配范围)，失败返回-1.0f
+ */
+float Servo_Get_Current_Angle_By_ID(uint8_t servo_id)
+{
+    if (!Servo_Validate_ID(servo_id))
+    {
+        return -1.0f;
+    }
+
+    uint8_t index = servo_id;
+    if (!servo_array[index].enabled)
+    {
+        return -1.0f;
+    }
+
+    return Servo_PWM_To_Angle_By_Type(servo_array[index].pwm, servo_array[index].angle_type);
+}
+
+/** ***************************************************************************
+ * @brief 设置舵机角度(带精度限制)
+ * @param  servo_id: 舵机ID (0-MAX_SERVO-1)
+ * @param  angle: 目标角度 0.0-180.0°(支持小数)
+ * @param  precision: 精度(如0.1表示精确到0.1度)
+ */
+void Servo_Set_Angle_With_Precision(uint8_t servo_id, float angle, float precision)
+{
+    if (!Servo_Validate_ID(servo_id) || precision <= 0.0f)
+    {
+        return;
+    }
+
+    // 根据精度四舍五入角度值
+    float rounded_angle = ((int)((angle + precision / 2.0f) / precision)) * precision;
+
+    Servo_Set_Angle_By_ID(servo_id, rounded_angle);
+}
+
+/** ***************************************************************************
+ * @brief 调整舵机角度(相对当前角度增减)
+ * @param  servo_id: 舵机ID (0-MAX_SERVO-1)
+ * @param  delta_angle: 角度增量(-180.0° ~ +180.0°)
+ */
+void Servo_Adjust_Angle_By_ID(uint8_t servo_id, float delta_angle)
+{
+    if (!Servo_Validate_ID(servo_id))
+    {
+        return;
+    }
+
+    float current_angle = Servo_Get_Current_Angle_By_ID(servo_id);
+    if (current_angle < 0.0f)
+    {
+        return; // 获取当前角度失败
+    }
+
+    float new_angle = current_angle + delta_angle;
+    Servo_Set_Angle_By_ID(servo_id, new_angle);
+}
+
+/** ***************************************************************************
+ * @brief 角度范围限制函数
+ * @param  angle: 输入角度
+ * @param  min_angle: 最小角度
+ * @param  max_angle: 最大角度
+ * @return float: 限制后的角度值
+ */
+float Servo_Clamp_Angle(float angle, float min_angle, float max_angle)
+{
+    if (angle < min_angle)
+    {
+        return min_angle;
+    }
+    else if (angle > max_angle)
+    {
+        return max_angle;
+    }
+    return angle;
+}
+
+/** ***************************************************************************
+ * @brief 设置指定舵机的角度类型
+ * @param  servo_id: 舵机ID (0-MAX_SERVO-1)
+ * @param  angle_type: 舵机角度类型
+ */
+void Servo_Set_Angle_Type_By_ID(uint8_t servo_id, servo_angle_type_t angle_type)
+{
+    if (!Servo_Validate_ID(servo_id))
+    {
+        return;
+    }
+
+    uint8_t index = servo_id;
+    servo_array[index].angle_type = angle_type;
+}
+
+/** ***************************************************************************
+ * @brief 获取指定舵机的角度类型
+ * @param  servo_id: 舵机ID (0-MAX_SERVO-1)
+ * @return servo_angle_type_t: 舵机角度类型，失败返回SERVO_ANGLE_TYPE_180
+ */
+servo_angle_type_t Servo_Get_Angle_Type_By_ID(uint8_t servo_id)
+{
+    if (!Servo_Validate_ID(servo_id))
+    {
+        return SERVO_ANGLE_TYPE_180;
+    }
+
+    uint8_t index = servo_id;
+    return servo_array[index].angle_type;
+}
+
+/** ***************************************************************************
+ * @brief 获取指定舵机角度类型对应的最大角度值
+ * @param  servo_id: 舵机ID (0-MAX_SERVO-1)
+ * @return float: 最大角度值，失败返回180.0f
+ */
+float Servo_Get_Max_Angle_By_ID(uint8_t servo_id)
+{
+    if (!Servo_Validate_ID(servo_id))
+    {
+        return 180.0f;
+    }
+
+    uint8_t index = servo_id;
+    servo_angle_type_t angle_type = servo_array[index].angle_type;
+
+    switch (angle_type)
+    {
+    case SERVO_ANGLE_TYPE_180:
+        return 180.0f;
+    case SERVO_ANGLE_TYPE_270:
+        return 270.0f;
+    case SERVO_ANGLE_TYPE_360:
+        return 360.0f;
+    default:
+        return 180.0f;
+    }
+}
+
+/* ========================== 角度类型适配辅助函数 ========================== */
+
 #endif /* USE_HARDWARE_PWM */
