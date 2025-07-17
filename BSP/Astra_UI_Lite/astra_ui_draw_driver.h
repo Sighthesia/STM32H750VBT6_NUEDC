@@ -12,7 +12,7 @@
 // #include "../astra-launcher/launcher_delay.h"
 /* 此处自行添加头文件 */
 #include "main.h"
-#include "u8g2_Custom_HW_I2C_STM32HAL.h"
+#include "u8g2_Custom_HW_I2C_HAL.h"
 #include "u8g2_Custom_Fonts.h"
 
 /* 此处修改oled绘制函数 */

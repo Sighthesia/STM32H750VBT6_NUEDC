@@ -58,7 +58,7 @@ extern volatile float servo_angle[MAX_GROUP][MAX_SERVO]; // 角度数组支持�
 
 /* ---------------------------------- 函数声明 ---------------------------------- */
 // 初始化函数
-void Servo_TIM_PWM_Init(void);
+void Servo_PWM_TIM_Init(void);
 
 // 按ID控制函数
 void Servo_Set_Angle_By_ID(uint8_t servo_id, float angle);

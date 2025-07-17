@@ -1,5 +1,5 @@
 /**
- * @File Name: u8g2_Custom_HW_I2C_STM32_HAL.c
+ * @File Name: u8g2_Custom_HW_I2C.c
  * @brief u8g2硬件I2C初始化配置文件
  * @Author : Sighthesia
  * @Version : 1.2
@@ -11,7 +11,7 @@
  * @Date : 2025-04-27
  * *****************************************************************************
  */
-#include "u8g2_Custom_HW_I2C_STM32HAL.h"
+#include "u8g2_Custom_HW_I2C_HAL.h"
 
 /**
  * @brief  u8g2 GPIO和延时配置
@@ -21,7 +21,7 @@
  * @param  arg_ptr: void*结构体指针
  * @return uint8_t: 0:失败，1:成功
  ******************************************************************************/
-uint8_t u8g2_gpio_and_delay_stm32(U8X8_UNUSED u8x8_t *u8x8, U8X8_UNUSED uint8_t msg, U8X8_UNUSED uint8_t arg_int, U8X8_UNUSED void *arg_ptr)
+uint8_t u8g2_gpio_and_delay(U8X8_UNUSED u8x8_t *u8x8, U8X8_UNUSED uint8_t msg, U8X8_UNUSED uint8_t arg_int, U8X8_UNUSED void *arg_ptr)
 {
     switch (msg)
     {
@@ -96,8 +96,8 @@ uint8_t u8x8_byte_hw_i2c(u8x8_t *u8x8, uint8_t msg, uint8_t arg_int, void *arg_p
  ******************************************************************************/
 void u8g2_Init(u8g2_t *u8g2)
 {
-    u8g2_Setup_ssd1306_i2c_128x64_noname_f(u8g2, U8G2_R0, u8x8_byte_hw_i2c, u8g2_gpio_and_delay_stm32); // 初始化u8g2 结构体
-    u8g2_InitDisplay(u8g2);                                                                             // 对缓存进行初始化// 初始化u8x8_gpio_and_delay函数
-    u8g2_SetPowerSave(u8g2, 0);                                                                         // wake up 屏幕                                                      // 初始化u8x8_byte_hw_i2c函数
-    u8g2_ClearBuffer(u8g2);                                                                             // 清除缓存区                                                        //对驱动进行初始化
+    u8g2_Setup_ssd1306_i2c_128x64_noname_f(u8g2, U8G2_R0, u8x8_byte_hw_i2c, u8g2_gpio_and_delay); // 初始化u8g2 结构体
+    u8g2_InitDisplay(u8g2);                                                                       // 对缓存进行初始化// 初始化u8x8_gpio_and_delay函数
+    u8g2_SetPowerSave(u8g2, 0);                                                                   // wake up 屏幕                                                      // 初始化u8x8_byte_hw_i2c函数
+    u8g2_ClearBuffer(u8g2);                                                                       // 清除缓存区                                                        //对驱动进行初始化
 }

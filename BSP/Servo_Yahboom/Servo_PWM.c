@@ -74,7 +74,7 @@ static uint8_t Servo_Validate_ID(uint8_t servo_id)
 /** ***************************************************************************
  * @brief 硬件PWM初始化 - 数组驱动版本
  */
-void Servo_TIM_PWM_Init(void)
+void Servo_PWM_TIM_Init(void)
 {
     // 1. 从配置表初始化舵机数组
     Servo_Init_From_Config_Table();

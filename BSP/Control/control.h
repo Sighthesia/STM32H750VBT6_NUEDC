@@ -75,6 +75,16 @@ void Control_Write_Point_To_Flash(int16_t *arr);
  */
 void Control_Read_Point_From_Flash(int16_t *arr);
 
+/** ***************************************************************************
+ * @brief 舵机控制系统初始化
+ * @note 初始化舵机PWM，设置初始位置
+ */
 void Control_System_Init(void);
+
+/** ***************************************************************************
+ * @brief 测试函数 - 直接坐标控制舵机
+ * @note 用于测试直接坐标控制舵机的效果，不依赖串口数据
+ */
+void Control_Test_Direct_Control(void);
 
 #endif /* __CONTROL_H */

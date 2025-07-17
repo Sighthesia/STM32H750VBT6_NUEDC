@@ -19,7 +19,9 @@
         "astra_ui_item.h": "c",
         "astra_ui_draw_driver.h": "c",
         "ebtn.h": "c",
-        "u8g2_custom_hw_i2c_stm32hal.h": "c"
+        "u8g2_custom_hw_i2c_stm32hal.h": "c",
+        "lcd.h": "c",
+        "usart.h": "c"
     },
     "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
     "files.readonlyInclude": {

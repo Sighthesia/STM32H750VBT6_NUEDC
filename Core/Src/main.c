@@ -183,11 +183,13 @@ int main(void)
   astra_init_core();
 
   astra_list_item_t *Settings = astra_new_list_item("Settings");
+  astra_list_item_t *Config = astra_new_list_item("Config");
 
   astra_push_item_to_list(astra_get_root_list(), Settings);
+  astra_push_item_to_list(astra_get_root_list(), Config);
 
-  astra_push_item_to_list(Settings, astra_new_slider_item("X舵机角度", &servo_x_angle, 0, 1, 270));
-  astra_push_item_to_list(Settings, astra_new_slider_item("Y舵机角度", &servo_y_angle, 0, 1, 180));
+  astra_push_item_to_list(Settings, astra_new_slider_item("X_Angle", &servo_x_angle, 1, 0, 270));
+  astra_push_item_to_list(Settings, astra_new_slider_item("Y_Angle", &servo_y_angle, 1, 0, 180));
 
   char msg[100] = {};
   sprintf(msg, "启动时间: %dms.", get_ticks());
@@ -206,7 +208,7 @@ int main(void)
         astra_selector_go_next_item();
       }
     }
-    else if (Encoder_Is_Increase())
+    else if (Encoder_Is_Decrease())
     {
       if (in_astra == 1)
       {
@@ -214,8 +216,8 @@ int main(void)
       }
     }
 
-    Servo_Set_Angle_By_ID(0, servo_x_angle);
-    Servo_Set_Angle_By_ID(0, servo_y_angle);
+    Control_Mode_1(); // 控制模式1
+    printf("X_Angle: %d, Y_Angle: %d\n", servo_x_angle, servo_y_angle);
 
     oled_clear_buffer();
 
