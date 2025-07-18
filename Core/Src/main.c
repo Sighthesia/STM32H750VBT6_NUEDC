@@ -41,7 +41,6 @@
 #include "astra_ui_drawer.h"
 #include "ebtn_APP.h"
 #include "Encoder_EXTI.h"
-#include "LCD_ILI9488_HAL.h"
 
 /* USER CODE END Includes */
 
@@ -195,8 +194,6 @@ int main(void)
   char msg[100] = {};
   sprintf(msg, "启动时间: %dms.", get_ticks());
   astra_push_pop_up(msg, 1500);
-
-  bool result = lcd_ili9488_hal.Init();
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -204,29 +201,6 @@ int main(void)
 
   while (1)
   {
-    // 初始化LCD
-    if (!result)
-    {
-      // 处理初始化失败
-      return;
-    }
-
-    // 清屏为蓝色
-    lcd_ili9488_hal.Clear(LCD_ILI9488_COLOR_BLUE);
-
-    // 设置画笔颜色并画点
-    lcd_ili9488_hal.Set_Point_Color(LCD_ILI9488_COLOR_WHITE);
-    lcd_ili9488_hal.Draw_Point(160, 240);
-
-    // 画线
-    lcd_ili9488_hal.Draw_Line(0, 0, 319, 479);
-
-    // 画矩形
-    lcd_ili9488_hal.Draw_Rectangle(50, 50, 150, 100);
-
-    // 填充圆形
-    lcd_ili9488_hal.Fill_Circle(240, 360, 40, LCD_ILI9488_COLOR_RED);
-
     if (Encoder_Is_Increase())
     {
       if (in_astra == 1)

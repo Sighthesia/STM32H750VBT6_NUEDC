@@ -95,18 +95,74 @@ extern _lcd_dev lcddev; // 管理LCD重要参数
 extern u16 POINT_COLOR; // 默认红色
 extern u16 BACK_COLOR;	// 背景颜色.默认为白色
 
-////////////////////////////////////////////////////////////////////
-//-----------------LCD端口定义----------------
-#define GPIO_TYPE GPIOB // GPIO组类型
-#define LED 9			// 背光控制引脚        PB9
-#define LCD_CS 11		// 片选引脚            PB11
-#define LCD_RS 10		// 寄存器/数据选择引脚 PB10
-#define LCD_RST 12		// 复位引脚            PB12
+//-----------------LCD端口移植----------------
 
-// QDtech全系列模块采用了三极管控制背光亮灭，用户也可以接PWM调节背光亮度
-#define LCD_LED PBout(LED) // LCD背光    		 PB9
-// 如果使用官方库函数定义下列底层，速度将会下降到14帧每秒，建议采用我司推荐方法
-// 以下IO定义直接操作寄存器，快速IO操作，刷屏速率可以达到28帧每秒！
+#define RCC_LCD1 RCC_APB2Periph_GPIOA
+#define RCC_LCD2 RCC_APB2Periph_GPIOB
+
+// SCK
+#define PORT_LCD_SCL GPIOA
+#define GPIO_LCD_SCL GPIO_Pin_6
+
+// MOSI
+#define PORT_LCD_SDA GPIOA
+#define GPIO_LCD_SDA GPIO_Pin_7
+
+////MIS0
+// #define PORT_LCD_MIS    GPIOB
+// #define GPIO_LCD_MIS    GPIO_Pin_14
+
+// NSS
+#define PORT_LCD_CS GPIOB
+#define GPIO_LCD_CS GPIO_Pin_10
+
+// DC
+#define PORT_LCD_DC GPIOB
+#define GPIO_LCD_DC GPIO_Pin_0
+
+// RES
+#define PORT_LCD_RES GPIOB
+#define GPIO_LCD_RES GPIO_Pin_1
+
+// BLK/LED
+#define PORT_LCD_BLK GPIOA
+#define GPIO_LCD_BLK GPIO_Pin_5
+
+// CS2/T_CS
+#define PORT_LCD_CS2 GPIOA
+#define GPIO_LCD_CS2 GPIO_Pin_3
+
+// PEN/T_IRQ
+#define PORT_LCD_PEN GPIOA
+#define GPIO_LCD_PEN GPIO_Pin_0
+
+// T_CLK
+#define PORT_LCD_TCLK GPIOA
+#define GPIO_LCD_TCLK GPIO_Pin_4
+
+// T_DIN
+#define PORT_LCD_TDIN GPIOA
+#define GPIO_LCD_TDIN GPIO_Pin_2
+
+// T_DO
+#define PORT_LCD_TD0 GPIOA
+#define GPIO_LCD_TD0 GPIO_Pin_1
+
+// 液晶控制口置1操作语句宏定义
+#define LCD_CS_SET GPIO_WriteBit(PORT_LCD_CS, GPIO_LCD_CS, Bit_SET)
+#define LCD_RS_SET GPIO_WriteBit(PORT_LCD_DC, GPIO_LCD_DC, Bit_SET)
+#define LCD_SDA_SET GPIO_WriteBit(PORT_LCD_SDA, GPIO_LCD_SDA, Bit_SET)
+#define LCD_SCL_SET GPIO_WriteBit(PORT_LCD_SCL, GPIO_LCD_SCL, Bit_SET)
+#define LCD_RST_SET GPIO_WriteBit(PORT_LCD_RES, GPIO_LCD_RES, Bit_SET)
+#define LCD_LED_SET GPIO_WriteBit(PORT_LCD_BLK, GPIO_LCD_BLK, Bit_SET)
+
+// 液晶控制口置0操作语句宏定义
+#define LCD_CS_CLR GPIO_WriteBit(PORT_LCD_CS, GPIO_LCD_CS, Bit_RESET)	 // CS
+#define LCD_RS_CLR GPIO_WriteBit(PORT_LCD_DC, GPIO_LCD_DC, Bit_RESET)	 // DC
+#define LCD_SDA_CLR GPIO_WriteBit(PORT_LCD_SDA, GPIO_LCD_SDA, Bit_RESET) // SDA=MOSI
+#define LCD_SCL_CLR GPIO_WriteBit(PORT_LCD_SCL, GPIO_LCD_SCL, Bit_RESET) // SCL=SCLK
+#define LCD_RST_CLR GPIO_WriteBit(PORT_LCD_RES, GPIO_LCD_RES, Bit_RESET) // RES
+#define LCD_LED_CLR GPIO_WriteBit(PORT_LCD_BLK, GPIO_LCD_BLK, Bit_RESET)
 
 // GPIO置位（拉高）
 #define LCD_CS_SET GPIO_TYPE->BSRR = 1 << LCD_CS   // 片选端口  	PB11
