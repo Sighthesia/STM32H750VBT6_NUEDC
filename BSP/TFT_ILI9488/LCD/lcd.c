@@ -1,373 +1,373 @@
-// //////////////////////////////////////////////////////////////////////////////////
-// //±¾³ÌÐòÖ»¹©Ñ§Ï°Ê¹ÓÃ£¬Î´¾­×÷ÕßÐí¿É£¬²»µÃÓÃÓÚÆäËüÈÎºÎÓÃÍ¾
-// //²âÊÔÓ²¼þ£ºµ¥Æ¬»úSTM32F103RCT6,ÕýµãÔ­×ÓMiniSTM32¿ª·¢°å,Ö÷Æµ72MHZ£¬¾§Õñ12MHZ
-// //QDtech-TFTÒº¾§Çý¶¯ for STM32 IOÄ£Äâ
-// //xiao·ë@ShenZhen QDtech co.,LTD
-// //¹«Ë¾ÍøÕ¾:www.qdtft.com
-// //ÌÔ±¦ÍøÕ¾£ºhttp://qdtech.taobao.com
-// //wiki¼¼ÊõÍøÕ¾£ºhttp://www.lcdwiki.com
-// //ÎÒË¾Ìá¹©¼¼ÊõÖ§³Ö£¬ÈÎºÎ¼¼ÊõÎÊÌâ»¶Ó­ËæÊ±½»Á÷Ñ§Ï°
-// //¹Ì»°(´«Õæ) :+86 0755-23594567
-// //ÊÖ»ú:15989313508£¨·ë¹¤£©
-// //ÓÊÏä:lcdwiki01@gmail.com    support@lcdwiki.com    goodtft@163.com
-// //¼¼ÊõÖ§³ÖQQ:3002773612  3002778157
-// //¼¼Êõ½»Á÷QQÈº:324828016
-// //´´½¨ÈÕÆÚ:2018/08/09
-// //°æ±¾£ºV1.0
-// //°æÈ¨ËùÓÐ£¬µÁ°æ±Ø¾¿¡£
-// //Copyright(C) ÉîÛÚÊÐÈ«¶¯µç×Ó¼¼ÊõÓÐÏÞ¹«Ë¾ 2018-2028
-// //All rights reserved
-// /****************************************************************************************************
-// //=========================================µçÔ´½ÓÏß================================================//
-// //     LCDÄ£¿é                STM32µ¥Æ¬»ú
-// //      VCC          ½Ó        DC5V/3.3V      //µçÔ´
-// //      GND          ½Ó          GND          //µçÔ´µØ
-// //=======================================Òº¾§ÆÁÊý¾ÝÏß½ÓÏß==========================================//
-// //±¾Ä£¿éÄ¬ÈÏÊý¾Ý×ÜÏßÀàÐÍÎªSPI×ÜÏß
-// //     LCDÄ£¿é                STM32µ¥Æ¬»ú
-// //    SDI(MOSI)      ½Ó          PB15         //Òº¾§ÆÁSPI×ÜÏßÊý¾ÝÐ´ÐÅºÅ
-// //    SDO(MISO)      ½Ó          PB14         //Òº¾§ÆÁSPI×ÜÏßÊý¾Ý¶ÁÐÅºÅ£¬Èç¹û²»ÐèÒª¶Á£¬¿ÉÒÔ²»½ÓÏß
-// //=======================================Òº¾§ÆÁ¿ØÖÆÏß½ÓÏß==========================================//
-// //     LCDÄ£¿é 					      STM32µ¥Æ¬»ú
-// //       LED         ½Ó          PB9          //Òº¾§ÆÁ±³¹â¿ØÖÆÐÅºÅ£¬Èç¹û²»ÐèÒª¿ØÖÆ£¬½Ó5V»ò3.3V
-// //       SCK         ½Ó          PB13         //Òº¾§ÆÁSPI×ÜÏßÊ±ÖÓÐÅºÅ
-// //      DC/RS        ½Ó          PB10         //Òº¾§ÆÁÊý¾Ý/ÃüÁî¿ØÖÆÐÅºÅ
-// //       RST         ½Ó          PB12         //Òº¾§ÆÁ¸´Î»¿ØÖÆÐÅºÅ
-// //       CS          ½Ó          PB11         //Òº¾§ÆÁÆ¬Ñ¡¿ØÖÆÐÅºÅ
-// //=========================================´¥ÃþÆÁ´¥½ÓÏß=========================================//
-// //Èç¹ûÄ£¿é²»´ø´¥Ãþ¹¦ÄÜ»òÕß´øÓÐ´¥Ãþ¹¦ÄÜ£¬µ«ÊÇ²»ÐèÒª´¥Ãþ¹¦ÄÜ£¬Ôò²»ÐèÒª½øÐÐ´¥ÃþÆÁ½ÓÏß
-// //	   LCDÄ£¿é                STM32µ¥Æ¬»ú
-// //      T_IRQ        ½Ó          PC10         //´¥ÃþÆÁ´¥ÃþÖÐ¶ÏÐÅºÅ
-// //      T_DO         ½Ó          PC2          //´¥ÃþÆÁSPI×ÜÏß¶ÁÐÅºÅ
-// //      T_DIN        ½Ó          PC3          //´¥ÃþÆÁSPI×ÜÏßÐ´ÐÅºÅ
-// //      T_CS         ½Ó          PC13         //´¥ÃþÆÁÆ¬Ñ¡¿ØÖÆÐÅºÅ
-// //      T_CLK        ½Ó          PC0          //´¥ÃþÆÁSPI×ÜÏßÊ±ÖÓÐÅºÅ
-// **************************************************************************************************/
-//  /* @attention
-//   *
-//   * THE PRESENT FIRMWARE WHICH IS FOR GUIDANCE ONLY AIMS AT PROVIDING CUSTOMERS
-//   * WITH CODING INFORMATION REGARDING THEIR PRODUCTS IN ORDER FOR THEM TO SAVE
-//   * TIME. AS A RESULT, QD electronic SHALL NOT BE HELD LIABLE FOR ANY
-//   * DIRECT, INDIRECT OR CONSEQUENTIAL DAMAGES WITH RESPECT TO ANY CLAIMS ARISING
-//   * FROM THE CONTENT OF SUCH FIRMWARE AND/OR THE USE MADE BY CUSTOMERS OF THE
-//   * CODING INFORMATION CONTAINED HEREIN IN CONNECTION WITH THEIR PRODUCTS.
-// **************************************************************************************************/
-// #include "lcd.h"
-// #include "stdlib.h"
-// #include "delay.h"
-// #include "SPI.h"
+//////////////////////////////////////////////////////////////////////////////////
+// æœ¬ç¨‹åºåªä¾›å­¦ä¹ ä½¿ç”¨ï¼Œæœªç»ä½œè€…è®¸å¯ï¼Œä¸å¾—ç”¨äºŽå…¶å®ƒä»»ä½•ç”¨é€”
+// æµ‹è¯•ç¡¬ä»¶ï¼šå•ç‰‡æœºSTM32F103RCT6,æ­£ç‚¹åŽŸå­MiniSTM32å¼€å‘æ¿,ä¸»é¢‘72MHZï¼Œæ™¶æŒ¯12MHZ
+// QDtech-TFTæ¶²æ™¶é©±åŠ¨ for STM32 IOæ¨¡æ‹Ÿ
+// xiaoå†¯@ShenZhen QDtech co.,LTD
+// å…¬å¸ç½‘ç«™:www.qdtft.com
+// æ·˜å®ç½‘ç«™ï¼šhttp://qdtech.taobao.com
+// wikiæŠ€æœ¯ç½‘ç«™ï¼šhttp://www.lcdwiki.com
+// æˆ‘å¸æä¾›æŠ€æœ¯æ”¯æŒï¼Œä»»ä½•æŠ€æœ¯é—®é¢˜æ¬¢è¿Žéšæ—¶äº¤æµå­¦ä¹ 
+// å›ºè¯(ä¼ çœŸ) :+86 0755-23594567
+// æ‰‹æœº:15989313508ï¼ˆå†¯å·¥ï¼‰
+// é‚®ç®±:lcdwiki01@gmail.com    support@lcdwiki.com    goodtft@163.com
+// æŠ€æœ¯æ”¯æŒQQ:3002773612  3002778157
+// æŠ€æœ¯äº¤æµQQç¾¤:324828016
+// åˆ›å»ºæ—¥æœŸ:2018/08/09
+// ç‰ˆæœ¬ï¼šV1.0
+// ç‰ˆæƒæ‰€æœ‰ï¼Œç›—ç‰ˆå¿…ç©¶ã€‚
+// Copyright(C) æ·±åœ³å¸‚å…¨åŠ¨ç”µå­æŠ€æœ¯æœ‰é™å…¬å¸ 2018-2028
+// All rights reserved
+/****************************************************************************************************
+//=========================================ç”µæºæŽ¥çº¿================================================//
+//     LCDæ¨¡å—                STM32å•ç‰‡æœº
+//      VCC          æŽ¥        DC5V/3.3V      //ç”µæº
+//      GND          æŽ¥          GND          //ç”µæºåœ°
+//=======================================æ¶²æ™¶å±æ•°æ®çº¿æŽ¥çº¿==========================================//
+//æœ¬æ¨¡å—é»˜è®¤æ•°æ®æ€»çº¿ç±»åž‹ä¸ºSPIæ€»çº¿
+//     LCDæ¨¡å—                STM32å•ç‰‡æœº
+//    SDI(MOSI)      æŽ¥          PB15         //æ¶²æ™¶å±SPIæ€»çº¿æ•°æ®å†™ä¿¡å·
+//    SDO(MISO)      æŽ¥          PB14         //æ¶²æ™¶å±SPIæ€»çº¿æ•°æ®è¯»ä¿¡å·ï¼Œå¦‚æžœä¸éœ€è¦è¯»ï¼Œå¯ä»¥ä¸æŽ¥çº¿
+//=======================================æ¶²æ™¶å±æŽ§åˆ¶çº¿æŽ¥çº¿==========================================//
+//     LCDæ¨¡å— 					      STM32å•ç‰‡æœº
+//       LED         æŽ¥          PB9          //æ¶²æ™¶å±èƒŒå…‰æŽ§åˆ¶ä¿¡å·ï¼Œå¦‚æžœä¸éœ€è¦æŽ§åˆ¶ï¼ŒæŽ¥5Væˆ–3.3V
+//       SCK         æŽ¥          PB13         //æ¶²æ™¶å±SPIæ€»çº¿æ—¶é’Ÿä¿¡å·
+//      DC/RS        æŽ¥          PB10         //æ¶²æ™¶å±æ•°æ®/å‘½ä»¤æŽ§åˆ¶ä¿¡å·
+//       RST         æŽ¥          PB12         //æ¶²æ™¶å±å¤ä½æŽ§åˆ¶ä¿¡å·
+//       CS          æŽ¥          PB11         //æ¶²æ™¶å±ç‰‡é€‰æŽ§åˆ¶ä¿¡å·
+//=========================================è§¦æ‘¸å±è§¦æŽ¥çº¿=========================================//
+//å¦‚æžœæ¨¡å—ä¸å¸¦è§¦æ‘¸åŠŸèƒ½æˆ–è€…å¸¦æœ‰è§¦æ‘¸åŠŸèƒ½ï¼Œä½†æ˜¯ä¸éœ€è¦è§¦æ‘¸åŠŸèƒ½ï¼Œåˆ™ä¸éœ€è¦è¿›è¡Œè§¦æ‘¸å±æŽ¥çº¿
+//	   LCDæ¨¡å—                STM32å•ç‰‡æœº
+//      T_IRQ        æŽ¥          PC10         //è§¦æ‘¸å±è§¦æ‘¸ä¸­æ–­ä¿¡å·
+//      T_DO         æŽ¥          PC2          //è§¦æ‘¸å±SPIæ€»çº¿è¯»ä¿¡å·
+//      T_DIN        æŽ¥          PC3          //è§¦æ‘¸å±SPIæ€»çº¿å†™ä¿¡å·
+//      T_CS         æŽ¥          PC13         //è§¦æ‘¸å±ç‰‡é€‰æŽ§åˆ¶ä¿¡å·
+//      T_CLK        æŽ¥          PC0          //è§¦æ‘¸å±SPIæ€»çº¿æ—¶é’Ÿä¿¡å·
+**************************************************************************************************/
+/* @attention
+ *
+ * THE PRESENT FIRMWARE WHICH IS FOR GUIDANCE ONLY AIMS AT PROVIDING CUSTOMERS
+ * WITH CODING INFORMATION REGARDING THEIR PRODUCTS IN ORDER FOR THEM TO SAVE
+ * TIME. AS A RESULT, QD electronic SHALL NOT BE HELD LIABLE FOR ANY
+ * DIRECT, INDIRECT OR CONSEQUENTIAL DAMAGES WITH RESPECT TO ANY CLAIMS ARISING
+ * FROM THE CONTENT OF SUCH FIRMWARE AND/OR THE USE MADE BY CUSTOMERS OF THE
+ * CODING INFORMATION CONTAINED HEREIN IN CONNECTION WITH THEIR PRODUCTS.
+ **************************************************************************************************/
+#include "lcd.h"
+#include "stdlib.h"
 
-// //¹ÜÀíLCDÖØÒª²ÎÊý
-// //Ä¬ÈÏÎªÊúÆÁ
-// _lcd_dev lcddev;
+// ç®¡ç†LCDé‡è¦å‚æ•°
+// é»˜è®¤ä¸ºç«–å±
+_lcd_dev lcddev;
 
-// //»­±ÊÑÕÉ«,±³¾°ÑÕÉ«
-// u16 POINT_COLOR = 0x0000,BACK_COLOR = 0xFFFF;
-// u16 DeviceCode;
+// ç”»ç¬”é¢œè‰²,èƒŒæ™¯é¢œè‰²
+u16 POINT_COLOR = 0x0000, BACK_COLOR = 0xFFFF;
+u16 DeviceCode;
 
-// /*****************************************************************************
-//  * @name       :void LCD_WR_REG(u8 data)
-//  * @date       :2018-08-09
-//  * @function   :Write an 8-bit command to the LCD screen
-//  * @parameters :data:Command value to be written
-//  * @retvalue   :None
-// ******************************************************************************/
-// void LCD_WR_REG(u8 data)
-// {
-//    LCD_CS_CLR;
-// 	 LCD_RS_CLR;
-//    SPI_WriteByte(SPI2,data);
-//    LCD_CS_SET;
-// }
+/*****************************************************************************
+ * @name       :void LCD_WR_REG(u8 data)
+ * @date       :2018-08-09
+ * @function   :Write an 8-bit command to the LCD screen
+ * @parameters :data:Command value to be written
+ * @retvalue   :None
+ ******************************************************************************/
+void LCD_WR_REG(u8 data)
+{
+	LCD_CS_CLR;
+	LCD_RS_CLR;
+	SPI_WriteByte(SPI2, data);
+	LCD_CS_SET;
+}
 
-// /*****************************************************************************
-//  * @name       :void LCD_WR_DATA(u8 data)
-//  * @date       :2018-08-09
-//  * @function   :Write an 8-bit data to the LCD screen
-//  * @parameters :data:data value to be written
-//  * @retvalue   :None
-// ******************************************************************************/
-// void LCD_WR_DATA(u8 data)
-// {
-//    LCD_CS_CLR;
-// 	 LCD_RS_SET;
-//    SPI_WriteByte(SPI2,data);
-//    LCD_CS_SET;
-// }
+/*****************************************************************************
+ * @name       :void LCD_WR_DATA(u8 data)
+ * @date       :2018-08-09
+ * @function   :Write an 8-bit data to the LCD screen
+ * @parameters :data:data value to be written
+ * @retvalue   :None
+ ******************************************************************************/
+void LCD_WR_DATA(u8 data)
+{
+	LCD_CS_CLR;
+	LCD_RS_SET;
+	SPI_WriteByte(SPI2, data);
+	LCD_CS_SET;
+}
 
-// /*****************************************************************************
-//  * @name       :void LCD_WriteReg(u8 LCD_Reg, u16 LCD_RegValue)
-//  * @date       :2018-08-09
-//  * @function   :Write data into registers
-//  * @parameters :LCD_Reg:Register address
-//                 LCD_RegValue:Data to be written
-//  * @retvalue   :None
-// ******************************************************************************/
-// void LCD_WriteReg(u8 LCD_Reg, u16 LCD_RegValue)
-// {
-// 	LCD_WR_REG(LCD_Reg);
-// 	LCD_WR_DATA(LCD_RegValue);
-// }
+/*****************************************************************************
+ * @name       :void LCD_WriteReg(u8 LCD_Reg, u16 LCD_RegValue)
+ * @date       :2018-08-09
+ * @function   :Write data into registers
+ * @parameters :LCD_Reg:Register address
+				LCD_RegValue:Data to be written
+ * @retvalue   :None
+******************************************************************************/
+void LCD_WriteReg(u8 LCD_Reg, u16 LCD_RegValue)
+{
+	LCD_WR_REG(LCD_Reg);
+	LCD_WR_DATA(LCD_RegValue);
+}
 
-// /*****************************************************************************
-//  * @name       :void LCD_WriteRAM_Prepare(void)
-//  * @date       :2018-08-09
-//  * @function   :Write GRAM
-//  * @parameters :None
-//  * @retvalue   :None
-// ******************************************************************************/
-// void LCD_WriteRAM_Prepare(void)
-// {
-// 	LCD_WR_REG(lcddev.wramcmd);
-// }
+/*****************************************************************************
+ * @name       :void LCD_WriteRAM_Prepare(void)
+ * @date       :2018-08-09
+ * @function   :Write GRAM
+ * @parameters :None
+ * @retvalue   :None
+ ******************************************************************************/
+void LCD_WriteRAM_Prepare(void)
+{
+	LCD_WR_REG(lcddev.wramcmd);
+}
 
-// /*****************************************************************************
-//  * @name       :void Lcd_WriteData_16Bit(u16 Data)
-//  * @date       :2018-08-09
-//  * @function   :Write an 16-bit command to the LCD screen
-//  * @parameters :Data:Data to be written
-//  * @retvalue   :None
-// ******************************************************************************/
-// void Lcd_WriteData_16Bit(u16 Data)
-// {
-//   //18Bit
-// 	LCD_WR_DATA((Data>>8)&0xF8);//RED
-// 	LCD_WR_DATA((Data>>3)&0xFC);//GREEN
-// 	LCD_WR_DATA(Data<<3);//BLUE
-// }
+/*****************************************************************************
+ * @name       :void Lcd_WriteData_16Bit(u16 Data)
+ * @date       :2018-08-09
+ * @function   :Write an 16-bit command to the LCD screen
+ * @parameters :Data:Data to be written
+ * @retvalue   :None
+ ******************************************************************************/
+void Lcd_WriteData_16Bit(u16 Data)
+{
+	// 18Bit
+	LCD_WR_DATA((Data >> 8) & 0xF8); // RED
+	LCD_WR_DATA((Data >> 3) & 0xFC); // GREEN
+	LCD_WR_DATA(Data << 3);			 // BLUE
+}
 
-// /*****************************************************************************
-//  * @name       :void LCD_DrawPoint(u16 x,u16 y)
-//  * @date       :2018-08-09
-//  * @function   :Write a pixel data at a specified location
-//  * @parameters :x:the x coordinate of the pixel
-//                 y:the y coordinate of the pixel
-//  * @retvalue   :None
-// ******************************************************************************/
-// void LCD_DrawPoint(u16 x,u16 y)
-// {
-// 	LCD_SetCursor(x,y);//ÉèÖÃ¹â±êÎ»ÖÃ
-// 	Lcd_WriteData_16Bit(POINT_COLOR);
-// }
+/*****************************************************************************
+ * @name       :void LCD_DrawPoint(u16 x,u16 y)
+ * @date       :2018-08-09
+ * @function   :Write a pixel data at a specified location
+ * @parameters :x:the x coordinate of the pixel
+				y:the y coordinate of the pixel
+ * @retvalue   :None
+******************************************************************************/
+void LCD_DrawPoint(u16 x, u16 y)
+{
+	LCD_SetCursor(x, y); // è®¾ç½®å…‰æ ‡ä½ç½®
+	Lcd_WriteData_16Bit(POINT_COLOR);
+}
 
-// /*****************************************************************************
-//  * @name       :void LCD_Clear(u16 Color)
-//  * @date       :2018-08-09
-//  * @function   :Full screen filled LCD screen
-//  * @parameters :color:Filled color
-//  * @retvalue   :None
-// ******************************************************************************/
-// void LCD_Clear(u16 Color)
-// {
-//   unsigned int i,m;
-// 	LCD_SetWindows(0,0,lcddev.width-1,lcddev.height-1);
-// 	LCD_CS_CLR;
-// 	LCD_RS_SET;
-// 	for(i=0;i<lcddev.height;i++)
-// 	{
-//     for(m=0;m<lcddev.width;m++)
-//     {
-// 			Lcd_WriteData_16Bit(Color);
-// 		}
-// 	}
-// 	 LCD_CS_SET;
-// }
+/*****************************************************************************
+ * @name       :void LCD_Clear(u16 Color)
+ * @date       :2018-08-09
+ * @function   :Full screen filled LCD screen
+ * @parameters :color:Filled color
+ * @retvalue   :None
+ ******************************************************************************/
+void LCD_Clear(u16 Color)
+{
+	unsigned int i, m;
+	LCD_SetWindows(0, 0, lcddev.width - 1, lcddev.height - 1);
+	LCD_CS_CLR;
+	LCD_RS_SET;
+	for (i = 0; i < lcddev.height; i++)
+	{
+		for (m = 0; m < lcddev.width; m++)
+		{
+			Lcd_WriteData_16Bit(Color);
+		}
+	}
+	LCD_CS_SET;
+}
 
-// /*****************************************************************************
-//  * @name       :void LCD_Clear(u16 Color)
-//  * @date       :2018-08-09
-//  * @function   :Initialization LCD screen GPIO
-//  * @parameters :None
-//  * @retvalue   :None
-// ******************************************************************************/
-// void LCD_GPIOInit(void)
-// {
-// 	GPIO_InitTypeDef  GPIO_InitStructure;
-// 	RCC_APB2PeriphClockCmd( RCC_APB2Periph_GPIOB ,ENABLE);	//Ê¹ÄÜGPIOBÊ±ÖÓ
-// 	GPIO_InitStructure.GPIO_Pin = GPIO_Pin_9| GPIO_Pin_10| GPIO_Pin_11| GPIO_Pin_12; //GPIOB9,10,11,12
-// 	GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
-// 	GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP;   //ÍÆÍìÊä³ö
-// 	GPIO_Init(GPIOB, &GPIO_InitStructure);//³õÊ¼»¯
-// }
+/*****************************************************************************
+ * @name       :void LCD_Clear(u16 Color)
+ * @date       :2018-08-09
+ * @function   :Initialization LCD screen GPIO
+ * @parameters :None
+ * @retvalue   :None
+ ******************************************************************************/
+void LCD_GPIOInit(void)
+{
+	GPIO_InitTypeDef GPIO_InitStructure;
+	RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOB, ENABLE);								// ä½¿èƒ½GPIOBæ—¶é’Ÿ
+	GPIO_InitStructure.GPIO_Pin = GPIO_Pin_9 | GPIO_Pin_10 | GPIO_Pin_11 | GPIO_Pin_12; // GPIOB9,10,11,12
+	GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+	GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP; // æŽ¨æŒ½è¾“å‡º
+	GPIO_Init(GPIOB, &GPIO_InitStructure);			 // åˆå§‹åŒ–
+}
 
-// /*****************************************************************************
-//  * @name       :void LCD_RESET(void)
-//  * @date       :2018-08-09
-//  * @function   :Reset LCD screen
-//  * @parameters :None
-//  * @retvalue   :None
-// ******************************************************************************/
-// void LCD_RESET(void)
-// {
-// 	LCD_RST_CLR;
-// 	delay_ms(100);
-// 	LCD_RST_SET;
-// 	delay_ms(50);
-// }
+/*****************************************************************************
+ * @name       :void LCD_RESET(void)
+ * @date       :2018-08-09
+ * @function   :Reset LCD screen
+ * @parameters :None
+ * @retvalue   :None
+ ******************************************************************************/
+void LCD_RESET(void)
+{
+	LCD_RST_CLR;
+	delay_ms(100);
+	LCD_RST_SET;
+	delay_ms(50);
+}
 
-// /*****************************************************************************
-//  * @name       :void LCD_RESET(void)
-//  * @date       :2018-08-09
-//  * @function   :Initialization LCD screen
-//  * @parameters :None
-//  * @retvalue   :None
-// ******************************************************************************/
-// void LCD_Init(void)
-// {
-// 	SPI2_Init(); //Ó²¼þSPI2³õÊ¼»¯
-// 	LCD_GPIOInit();//LCD GPIO³õÊ¼»¯
-//  	LCD_RESET(); //LCD ¸´Î»
-// //************* ILI9488³õÊ¼»¯**********//
-// 	LCD_WR_REG(0XF7);
-// 	LCD_WR_DATA(0xA9);
-// 	LCD_WR_DATA(0x51);
-// 	LCD_WR_DATA(0x2C);
-// 	LCD_WR_DATA(0x82);
-// 	LCD_WR_REG(0xC0);
-// 	LCD_WR_DATA(0x11);
-// 	LCD_WR_DATA(0x09);
-// 	LCD_WR_REG(0xC1);
-// 	LCD_WR_DATA(0x41);
-// 	LCD_WR_REG(0XC5);
-// 	LCD_WR_DATA(0x00);
-// 	LCD_WR_DATA(0x0A);
-// 	LCD_WR_DATA(0x80);
-// 	LCD_WR_REG(0xB1);
-// 	LCD_WR_DATA(0xB0);
-// 	LCD_WR_DATA(0x11);
-// 	LCD_WR_REG(0xB4);
-// 	LCD_WR_DATA(0x02);
-// 	LCD_WR_REG(0xB6);
-// 	LCD_WR_DATA(0x02);
-// 	LCD_WR_DATA(0x42);
-// 	LCD_WR_REG(0xB7);
-// 	LCD_WR_DATA(0xc6);
-// 	LCD_WR_REG(0xBE);
-// 	LCD_WR_DATA(0x00);
-// 	LCD_WR_DATA(0x04);
-// 	LCD_WR_REG(0xE9);
-// 	LCD_WR_DATA(0x00);
-// 	LCD_WR_REG(0x36);
-// 	LCD_WR_DATA((1<<3)|(0<<7)|(1<<6)|(1<<5));
-// 	LCD_WR_REG(0x3A);
-// 	LCD_WR_DATA(0x66);
-// 	LCD_WR_REG(0xE0);
-// 	LCD_WR_DATA(0x00);
-// 	LCD_WR_DATA(0x07);
-// 	LCD_WR_DATA(0x10);
-// 	LCD_WR_DATA(0x09);
-// 	LCD_WR_DATA(0x17);
-// 	LCD_WR_DATA(0x0B);
-// 	LCD_WR_DATA(0x41);
-// 	LCD_WR_DATA(0x89);
-// 	LCD_WR_DATA(0x4B);
-// 	LCD_WR_DATA(0x0A);
-// 	LCD_WR_DATA(0x0C);
-// 	LCD_WR_DATA(0x0E);
-// 	LCD_WR_DATA(0x18);
-// 	LCD_WR_DATA(0x1B);
-// 	LCD_WR_DATA(0x0F);
-// 	LCD_WR_REG(0XE1);
-// 	LCD_WR_DATA(0x00);
-// 	LCD_WR_DATA(0x17);
-// 	LCD_WR_DATA(0x1A);
-// 	LCD_WR_DATA(0x04);
-// 	LCD_WR_DATA(0x0E);
-// 	LCD_WR_DATA(0x06);
-// 	LCD_WR_DATA(0x2F);
-// 	LCD_WR_DATA(0x45);
-// 	LCD_WR_DATA(0x43);
-// 	LCD_WR_DATA(0x02);
-// 	LCD_WR_DATA(0x0A);
-// 	LCD_WR_DATA(0x09);
-// 	LCD_WR_DATA(0x32);
-// 	LCD_WR_DATA(0x36);
-// 	LCD_WR_DATA(0x0F);
-// 	LCD_WR_REG(0x11);
-// 	delay_ms(120);
-// 	LCD_WR_REG(0x29);
+/*****************************************************************************
+ * @name       :void LCD_RESET(void)
+ * @date       :2018-08-09
+ * @function   :Initialization LCD screen
+ * @parameters :None
+ * @retvalue   :None
+ ******************************************************************************/
+void LCD_Init(void)
+{
+	SPI2_Init();	// ç¡¬ä»¶SPI2åˆå§‹åŒ–
+	LCD_GPIOInit(); // LCD GPIOåˆå§‹åŒ–
+	LCD_RESET();	// LCD å¤ä½
+	//************* ILI9488åˆå§‹åŒ–**********//
+	LCD_WR_REG(0XF7);
+	LCD_WR_DATA(0xA9);
+	LCD_WR_DATA(0x51);
+	LCD_WR_DATA(0x2C);
+	LCD_WR_DATA(0x82);
+	LCD_WR_REG(0xC0);
+	LCD_WR_DATA(0x11);
+	LCD_WR_DATA(0x09);
+	LCD_WR_REG(0xC1);
+	LCD_WR_DATA(0x41);
+	LCD_WR_REG(0XC5);
+	LCD_WR_DATA(0x00);
+	LCD_WR_DATA(0x0A);
+	LCD_WR_DATA(0x80);
+	LCD_WR_REG(0xB1);
+	LCD_WR_DATA(0xB0);
+	LCD_WR_DATA(0x11);
+	LCD_WR_REG(0xB4);
+	LCD_WR_DATA(0x02);
+	LCD_WR_REG(0xB6);
+	LCD_WR_DATA(0x02);
+	LCD_WR_DATA(0x42);
+	LCD_WR_REG(0xB7);
+	LCD_WR_DATA(0xc6);
+	LCD_WR_REG(0xBE);
+	LCD_WR_DATA(0x00);
+	LCD_WR_DATA(0x04);
+	LCD_WR_REG(0xE9);
+	LCD_WR_DATA(0x00);
+	LCD_WR_REG(0x36);
+	LCD_WR_DATA((1 << 3) | (0 << 7) | (1 << 6) | (1 << 5));
+	LCD_WR_REG(0x3A);
+	LCD_WR_DATA(0x66);
+	LCD_WR_REG(0xE0);
+	LCD_WR_DATA(0x00);
+	LCD_WR_DATA(0x07);
+	LCD_WR_DATA(0x10);
+	LCD_WR_DATA(0x09);
+	LCD_WR_DATA(0x17);
+	LCD_WR_DATA(0x0B);
+	LCD_WR_DATA(0x41);
+	LCD_WR_DATA(0x89);
+	LCD_WR_DATA(0x4B);
+	LCD_WR_DATA(0x0A);
+	LCD_WR_DATA(0x0C);
+	LCD_WR_DATA(0x0E);
+	LCD_WR_DATA(0x18);
+	LCD_WR_DATA(0x1B);
+	LCD_WR_DATA(0x0F);
+	LCD_WR_REG(0XE1);
+	LCD_WR_DATA(0x00);
+	LCD_WR_DATA(0x17);
+	LCD_WR_DATA(0x1A);
+	LCD_WR_DATA(0x04);
+	LCD_WR_DATA(0x0E);
+	LCD_WR_DATA(0x06);
+	LCD_WR_DATA(0x2F);
+	LCD_WR_DATA(0x45);
+	LCD_WR_DATA(0x43);
+	LCD_WR_DATA(0x02);
+	LCD_WR_DATA(0x0A);
+	LCD_WR_DATA(0x09);
+	LCD_WR_DATA(0x32);
+	LCD_WR_DATA(0x36);
+	LCD_WR_DATA(0x0F);
+	LCD_WR_REG(0x11);
+	delay_ms(120);
+	LCD_WR_REG(0x29);
 
-//   LCD_direction(USE_HORIZONTAL);//ÉèÖÃLCDÏÔÊ¾·½Ïò
-// 	LCD_LED=1;//µãÁÁ±³¹â
-// 	LCD_Clear(WHITE);//ÇåÈ«ÆÁ°×É«
-// }
+	LCD_direction(USE_HORIZONTAL); // è®¾ç½®LCDæ˜¾ç¤ºæ–¹å‘
+	LCD_LED = 1;				   // ç‚¹äº®èƒŒå…‰
+	LCD_Clear(WHITE);			   // æ¸…å…¨å±ç™½è‰²
+}
 
-// /*****************************************************************************
-//  * @name       :void LCD_SetWindows(u16 xStar, u16 yStar,u16 xEnd,u16 yEnd)
-//  * @date       :2018-08-09
-//  * @function   :Setting LCD display window
-//  * @parameters :xStar:the bebinning x coordinate of the LCD display window
-// 								yStar:the bebinning y coordinate of the LCD display window
-// 								xEnd:the endning x coordinate of the LCD display window
-// 								yEnd:the endning y coordinate of the LCD display window
-//  * @retvalue   :None
-// ******************************************************************************/
-// void LCD_SetWindows(u16 xStar, u16 yStar,u16 xEnd,u16 yEnd)
-// {
-// 	LCD_WR_REG(lcddev.setxcmd);
-// 	LCD_WR_DATA(xStar>>8);
-// 	LCD_WR_DATA(0x00FF&xStar);
-// 	LCD_WR_DATA(xEnd>>8);
-// 	LCD_WR_DATA(0x00FF&xEnd);
+/*****************************************************************************
+ * @name       :void LCD_SetWindows(u16 xStar, u16 yStar,u16 xEnd,u16 yEnd)
+ * @date       :2018-08-09
+ * @function   :Setting LCD display window
+ * @parameters :xStar:the bebinning x coordinate of the LCD display window
+								yStar:the bebinning y coordinate of the LCD display window
+								xEnd:the endning x coordinate of the LCD display window
+								yEnd:the endning y coordinate of the LCD display window
+ * @retvalue   :None
+******************************************************************************/
+void LCD_SetWindows(u16 xStar, u16 yStar, u16 xEnd, u16 yEnd)
+{
+	LCD_WR_REG(lcddev.setxcmd);
+	LCD_WR_DATA(xStar >> 8);
+	LCD_WR_DATA(0x00FF & xStar);
+	LCD_WR_DATA(xEnd >> 8);
+	LCD_WR_DATA(0x00FF & xEnd);
 
-// 	LCD_WR_REG(lcddev.setycmd);
-// 	LCD_WR_DATA(yStar>>8);
-// 	LCD_WR_DATA(0x00FF&yStar);
-// 	LCD_WR_DATA(yEnd>>8);
-// 	LCD_WR_DATA(0x00FF&yEnd);
+	LCD_WR_REG(lcddev.setycmd);
+	LCD_WR_DATA(yStar >> 8);
+	LCD_WR_DATA(0x00FF & yStar);
+	LCD_WR_DATA(yEnd >> 8);
+	LCD_WR_DATA(0x00FF & yEnd);
 
-// 	LCD_WriteRAM_Prepare();	//¿ªÊ¼Ð´ÈëGRAM
-// }
+	LCD_WriteRAM_Prepare(); // å¼€å§‹å†™å…¥GRAM
+}
 
-// /*****************************************************************************
-//  * @name       :void LCD_SetCursor(u16 Xpos, u16 Ypos)
-//  * @date       :2018-08-09
-//  * @function   :Set coordinate value
-//  * @parameters :Xpos:the  x coordinate of the pixel
-// 								Ypos:the  y coordinate of the pixel
-//  * @retvalue   :None
-// ******************************************************************************/
-// void LCD_SetCursor(u16 Xpos, u16 Ypos)
-// {
-// 	LCD_SetWindows(Xpos,Ypos,Xpos,Ypos);
-// }
+/*****************************************************************************
+ * @name       :void LCD_SetCursor(u16 Xpos, u16 Ypos)
+ * @date       :2018-08-09
+ * @function   :Set coordinate value
+ * @parameters :Xpos:the  x coordinate of the pixel
+								Ypos:the  y coordinate of the pixel
+ * @retvalue   :None
+******************************************************************************/
+void LCD_SetCursor(u16 Xpos, u16 Ypos)
+{
+	LCD_SetWindows(Xpos, Ypos, Xpos, Ypos);
+}
 
-// /*****************************************************************************
-//  * @name       :void LCD_direction(u8 direction)
-//  * @date       :2018-08-09
-//  * @function   :Setting the display direction of LCD screen
-//  * @parameters :direction:0-0 degree
-//                           1-90 degree
-// 													2-180 degree
-// 													3-270 degree
-//  * @retvalue   :None
-// ******************************************************************************/
-// void LCD_direction(u8 direction)
-// {
-// 			lcddev.setxcmd=0x2A;
-// 			lcddev.setycmd=0x2B;
-// 			lcddev.wramcmd=0x2C;
-// 	switch(direction){
-// 		case 0:
-// 			lcddev.width=LCD_W;
-// 			lcddev.height=LCD_H;
-// 			LCD_WriteReg(0x36,(1<<3)|(0<<6)|(0<<7));//BGR==1,MY==0,MX==0,MV==0
-// 		break;
-// 		case 1:
-// 			lcddev.width=LCD_H;
-// 			lcddev.height=LCD_W;
-// 			LCD_WriteReg(0x36,(1<<3)|(0<<7)|(1<<6)|(1<<5));//BGR==1,MY==1,MX==0,MV==1
-// 		break;
-// 		case 2:
-// 			lcddev.width=LCD_W;
-// 			lcddev.height=LCD_H;
-// 			LCD_WriteReg(0x36,(1<<3)|(1<<6)|(1<<7));//BGR==1,MY==0,MX==0,MV==0
-// 		break;
-// 		case 3:
-// 			lcddev.width=LCD_H;
-// 			lcddev.height=LCD_W;
-// 			LCD_WriteReg(0x36,(1<<3)|(1<<7)|(1<<5));//BGR==1,MY==1,MX==0,MV==1
-// 		break;
-// 		default:break;
-// 	}
-// }
+/*****************************************************************************
+ * @name       :void LCD_direction(u8 direction)
+ * @date       :2018-08-09
+ * @function   :Setting the display direction of LCD screen
+ * @parameters :direction:0-0 degree
+						  1-90 degree
+													2-180 degree
+													3-270 degree
+ * @retvalue   :None
+******************************************************************************/
+void LCD_direction(u8 direction)
+{
+	lcddev.setxcmd = 0x2A;
+	lcddev.setycmd = 0x2B;
+	lcddev.wramcmd = 0x2C;
+	switch (direction)
+	{
+	case 0:
+		lcddev.width = LCD_W;
+		lcddev.height = LCD_H;
+		LCD_WriteReg(0x36, (1 << 3) | (0 << 6) | (0 << 7)); // BGR==1,MY==0,MX==0,MV==0
+		break;
+	case 1:
+		lcddev.width = LCD_H;
+		lcddev.height = LCD_W;
+		LCD_WriteReg(0x36, (1 << 3) | (0 << 7) | (1 << 6) | (1 << 5)); // BGR==1,MY==1,MX==0,MV==1
+		break;
+	case 2:
+		lcddev.width = LCD_W;
+		lcddev.height = LCD_H;
+		LCD_WriteReg(0x36, (1 << 3) | (1 << 6) | (1 << 7)); // BGR==1,MY==0,MX==0,MV==0
+		break;
+	case 3:
+		lcddev.width = LCD_H;
+		lcddev.height = LCD_W;
+		LCD_WriteReg(0x36, (1 << 3) | (1 << 7) | (1 << 5)); // BGR==1,MY==1,MX==0,MV==1
+		break;
+	default:
+		break;
+	}
+}

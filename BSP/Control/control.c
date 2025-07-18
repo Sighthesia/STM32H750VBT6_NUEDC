@@ -283,7 +283,7 @@ uint8_t Control_Get_Point1_P(void)
 void Control_System_Init(void)
 {
     // 初始化舵机系统
-    Servo_TIM_PWM_Init(); // 初始化舵机PWM
+    Servo_PWM_TIM_Init(); // 初始化舵机PWM
 
     // 设置PID参数 (需要根据实际系统调节)
     set_pid_param(&x_pid, 1.0f, 0.1f, 0.05f); // X轴PID参数

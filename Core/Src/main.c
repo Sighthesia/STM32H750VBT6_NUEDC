@@ -20,13 +20,13 @@
 #include "main.h"
 #include "i2c.h"
 #include "memorymap.h"
+#include "spi.h"
 #include "tim.h"
 #include "usart.h"
 #include "gpio.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include "bsp_servo.h"
 #include "control.h"
 #include "bsp_usart.h"
 #include "pid.h"
@@ -35,13 +35,13 @@
 #include <stdio.h>
 #include "Servo_PWM.h"
 #include "u8g2.h"
-#include "u8g2_Custom_HW_I2C_STM32HAL.h"
+#include "u8g2_Custom_HW_I2C_HAL.h"
 #include "astra_ui_draw_driver.h"
 #include "astra_ui_core.h"
 #include "astra_ui_drawer.h"
 #include "ebtn_APP.h"
-#include "bsp_servo.h"
 #include "Encoder_EXTI.h"
+#include "LCD_ILI9488_HAL.h"
 
 /* USER CODE END Includes */
 
@@ -160,6 +160,7 @@ int main(void)
   MX_TIM13_Init();
   MX_TIM3_Init();
   MX_I2C1_Init();
+  MX_SPI1_Init();
   /* USER CODE BEGIN 2 */
   // 初始化舵机PWM定时器
   Kalman_Init(&kfp_x);
@@ -195,12 +196,37 @@ int main(void)
   sprintf(msg, "启动时间: %dms.", get_ticks());
   astra_push_pop_up(msg, 1500);
 
+  bool result = lcd_ili9488_hal.Init();
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+
   while (1)
   {
+    // 初始化LCD
+    if (!result)
+    {
+      // 处理初始化失败
+      return;
+    }
+
+    // 清屏为蓝色
+    lcd_ili9488_hal.Clear(LCD_ILI9488_COLOR_BLUE);
+
+    // 设置画笔颜色并画点
+    lcd_ili9488_hal.Set_Point_Color(LCD_ILI9488_COLOR_WHITE);
+    lcd_ili9488_hal.Draw_Point(160, 240);
+
+    // 画线
+    lcd_ili9488_hal.Draw_Line(0, 0, 319, 479);
+
+    // 画矩形
+    lcd_ili9488_hal.Draw_Rectangle(50, 50, 150, 100);
+
+    // 填充圆形
+    lcd_ili9488_hal.Fill_Circle(240, 360, 40, LCD_ILI9488_COLOR_RED);
+
     if (Encoder_Is_Increase())
     {
       if (in_astra == 1)
@@ -215,9 +241,6 @@ int main(void)
         astra_selector_go_prev_item();
       }
     }
-
-    Control_Mode_1(); // 控制模式1
-    printf("X_Angle: %d, Y_Angle: %d\n", servo_x_angle, servo_y_angle);
 
     oled_clear_buffer();
 
@@ -267,12 +290,12 @@ void SystemClock_Config(void)
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
   RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSI;
   RCC_OscInitStruct.PLL.PLLM = 4;
-  RCC_OscInitStruct.PLL.PLLN = 30;
+  RCC_OscInitStruct.PLL.PLLN = 10;
   RCC_OscInitStruct.PLL.PLLP = 2;
-  RCC_OscInitStruct.PLL.PLLQ = 2;
+  RCC_OscInitStruct.PLL.PLLQ = 1;
   RCC_OscInitStruct.PLL.PLLR = 2;
   RCC_OscInitStruct.PLL.PLLRGE = RCC_PLL1VCIRANGE_3;
-  RCC_OscInitStruct.PLL.PLLVCOSEL = RCC_PLL1VCOWIDE;
+  RCC_OscInitStruct.PLL.PLLVCOSEL = RCC_PLL1VCOMEDIUM;
   RCC_OscInitStruct.PLL.PLLFRACN = 0;
   if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
   {
@@ -285,12 +308,12 @@ void SystemClock_Config(void)
   RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
   RCC_ClkInitStruct.SYSCLKDivider = RCC_SYSCLK_DIV1;
   RCC_ClkInitStruct.AHBCLKDivider = RCC_HCLK_DIV1;
-  RCC_ClkInitStruct.APB3CLKDivider = RCC_APB3_DIV2;
-  RCC_ClkInitStruct.APB1CLKDivider = RCC_APB1_DIV2;
-  RCC_ClkInitStruct.APB2CLKDivider = RCC_APB2_DIV2;
-  RCC_ClkInitStruct.APB4CLKDivider = RCC_APB4_DIV2;
+  RCC_ClkInitStruct.APB3CLKDivider = RCC_APB3_DIV1;
+  RCC_ClkInitStruct.APB1CLKDivider = RCC_APB1_DIV1;
+  RCC_ClkInitStruct.APB2CLKDivider = RCC_APB2_DIV1;
+  RCC_ClkInitStruct.APB4CLKDivider = RCC_APB4_DIV1;
 
-  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_4) != HAL_OK)
+  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_1) != HAL_OK)
   {
     Error_Handler();
   }

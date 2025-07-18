@@ -16,7 +16,6 @@
 #include "main.h"
 
 /* -------------------------------- 包含所用的宏定义 -------------------------------- */
-#include "bsp_servo.h"
 #include "pid.h"
 #include "kalman.h"
 #include "tim.h"

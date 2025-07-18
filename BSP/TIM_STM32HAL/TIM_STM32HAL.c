@@ -29,13 +29,6 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
         /* 注释部分结束 */
 
         ebtn_APP_Key_Process();
-        /* --------------------------------- 此处修改中断串口打印 -------------------------------- */
-        {
-            char uart_buf[64];
-            int uart_len = snprintf(uart_buf, sizeof(uart_buf),
-                                    "Direct Control Mode - No PID\r\n");
-            HAL_UART_Transmit_IT(&huart1, (uint8_t *)uart_buf, uart_len);
-        }
         /* 自定义部分结束 */
     }
 }
