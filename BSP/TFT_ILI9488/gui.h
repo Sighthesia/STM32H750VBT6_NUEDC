@@ -55,23 +55,222 @@
 #ifndef __GUI_H__
 #define __GUI_H__
 
-void GUI_DrawPoint(u16 x, u16 y, u16 color);
+#include "lcd.h"
+#include "string.h"
+#include "font.h"
+#include "gui.h"
+
+/** ***************************************************************************
+ * @brief  在LCD屏幕上画点
+ * @param  x: X坐标
+ * @param  y: Y坐标
+ * @param  color: 颜色值
+ * @retval None
+ *****************************************************************************/
+void GUI_Draw_Point(u16 x, u16 y, u16 color);
+
+/** ***************************************************************************
+ * @brief  填充指定区域
+ * @param  sx: 起始X坐标
+ * @param  sy: 起始Y坐标
+ * @param  ex: 结束X坐标
+ * @param  ey: 结束Y坐标
+ * @param  color: 填充颜色
+ * @retval None
+ *****************************************************************************/
 void LCD_Fill(u16 sx, u16 sy, u16 ex, u16 ey, u16 color);
-void LCD_DrawLine(u16 x1, u16 y1, u16 x2, u16 y2);
-void LCD_DrawRectangle(u16 x1, u16 y1, u16 x2, u16 y2);
+
+/** ***************************************************************************
+ * @brief  画线
+ * @param  x1: 起点X坐标
+ * @param  y1: 起点Y坐标
+ * @param  x2: 终点X坐标
+ * @param  y2: 终点Y坐标
+ * @retval None
+ *****************************************************************************/
+void LCD_Draw_Line(u16 x1, u16 y1, u16 x2, u16 y2);
+
+/** ***************************************************************************
+ * @brief  画矩形
+ * @param  x1: 左上角X坐标
+ * @param  y1: 左上角Y坐标
+ * @param  x2: 右下角X坐标
+ * @param  y2: 右下角Y坐标
+ * @retval None
+ *****************************************************************************/
+void LCD_Draw_Rectangle(u16 x1, u16 y1, u16 x2, u16 y2);
+
+/** ***************************************************************************
+ * @brief  画圆
+ * @param  x0: 圆心X坐标
+ * @param  y0: 圆心Y坐标
+ * @param  fc: 前景色
+ * @param  r: 半径
+ * @retval None
+ *****************************************************************************/
 void Draw_Circle(u16 x0, u16 y0, u16 fc, u8 r);
-void Draw_Triangel(u16 x0, u16 y0, u16 x1, u16 y1, u16 x2, u16 y2);
-void Fill_Triangel(u16 x0, u16 y0, u16 x1, u16 y1, u16 x2, u16 y2);
-void LCD_ShowChar(u16 x, u16 y, u16 fc, u16 bc, u8 num, u8 size, u8 mode);
-void LCD_ShowNum(u16 x, u16 y, u32 num, u8 len, u8 size);
-void LCD_Show2Num(u16 x, u16 y, u16 num, u8 len, u8 size, u8 mode);
-void LCD_ShowString(u16 x, u16 y, u8 size, u8 *p, u8 mode);
-void GUI_DrawFont16(u16 x, u16 y, u16 fc, u16 bc, u8 *s, u8 mode);
-void GUI_DrawFont24(u16 x, u16 y, u16 fc, u16 bc, u8 *s, u8 mode);
-void GUI_DrawFont32(u16 x, u16 y, u16 fc, u16 bc, u8 *s, u8 mode);
+
+/** ***************************************************************************
+ * @brief  画三角形
+ * @param  x0: 第一个顶点X坐标
+ * @param  y0: 第一个顶点Y坐标
+ * @param  x1: 第二个顶点X坐标
+ * @param  y1: 第二个顶点Y坐标
+ * @param  x2: 第三个顶点X坐标
+ * @param  y2: 第三个顶点Y坐标
+ * @retval None
+ *****************************************************************************/
+void Draw_Triangle(u16 x0, u16 y0, u16 x1, u16 y1, u16 x2, u16 y2);
+
+/** ***************************************************************************
+ * @brief  填充三角形
+ * @param  x0: 第一个顶点X坐标
+ * @param  y0: 第一个顶点Y坐标
+ * @param  x1: 第二个顶点X坐标
+ * @param  y1: 第二个顶点Y坐标
+ * @param  x2: 第三个顶点X坐标
+ * @param  y2: 第三个顶点Y坐标
+ * @retval None
+ *****************************************************************************/
+void Fill_Triangle(u16 x0, u16 y0, u16 x1, u16 y1, u16 x2, u16 y2);
+
+/** ***************************************************************************
+ * @brief  显示字符
+ * @param  x: X坐标
+ * @param  y: Y坐标
+ * @param  fc: 前景色
+ * @param  bc: 背景色
+ * @param  num: 字符ASCII码
+ * @param  size: 字符大小
+ * @param  mode: 显示模式
+ * @retval None
+ *****************************************************************************/
+void LCD_Show_Char(u16 x, u16 y, u16 fc, u16 bc, u8 num, u8 size, u8 mode);
+
+/** ***************************************************************************
+ * @brief  显示数字
+ * @param  x: X坐标
+ * @param  y: Y坐标
+ * @param  num: 数字
+ * @param  len: 显示长度
+ * @param  size: 字符大小
+ * @retval None
+ *****************************************************************************/
+void LCD_Show_Num(u16 x, u16 y, u32 num, u8 len, u8 size);
+
+/** ***************************************************************************
+ * @brief  显示两位数字
+ * @param  x: X坐标
+ * @param  y: Y坐标
+ * @param  num: 数字
+ * @param  len: 显示长度
+ * @param  size: 字符大小
+ * @param  mode: 显示模式
+ * @retval None
+ *****************************************************************************/
+void LCD_Show_2Num(u16 x, u16 y, u16 num, u8 len, u8 size, u8 mode);
+
+/** ***************************************************************************
+ * @brief  显示字符串
+ * @param  x: X坐标
+ * @param  y: Y坐标
+ * @param  size: 字符大小
+ * @param  p: 字符串指针
+ * @param  mode: 显示模式
+ * @retval None
+ *****************************************************************************/
+void LCD_Show_String(u16 x, u16 y, u8 size, u8 *p, u8 mode);
+
+/** ***************************************************************************
+ * @brief  显示16x16中文字符
+ * @param  x: X坐标
+ * @param  y: Y坐标
+ * @param  fc: 前景色
+ * @param  bc: 背景色
+ * @param  s: 字符指针
+ * @param  mode: 显示模式
+ * @retval None
+ *****************************************************************************/
+void GUI_Draw_Font16(u16 x, u16 y, u16 fc, u16 bc, u8 *s, u8 mode);
+
+/** ***************************************************************************
+ * @brief  显示24x24中文字符
+ * @param  x: X坐标
+ * @param  y: Y坐标
+ * @param  fc: 前景色
+ * @param  bc: 背景色
+ * @param  s: 字符指针
+ * @param  mode: 显示模式
+ * @retval None
+ *****************************************************************************/
+void GUI_Draw_Font24(u16 x, u16 y, u16 fc, u16 bc, u8 *s, u8 mode);
+
+/** ***************************************************************************
+ * @brief  显示32x32中文字符
+ * @param  x: X坐标
+ * @param  y: Y坐标
+ * @param  fc: 前景色
+ * @param  bc: 背景色
+ * @param  s: 字符指针
+ * @param  mode: 显示模式
+ * @retval None
+ *****************************************************************************/
+void GUI_Draw_Font32(u16 x, u16 y, u16 fc, u16 bc, u8 *s, u8 mode);
+
+/** ***************************************************************************
+ * @brief  显示中英文字符串
+ * @param  x: X坐标
+ * @param  y: Y坐标
+ * @param  fc: 前景色
+ * @param  bc: 背景色
+ * @param  str: 字符串指针
+ * @param  size: 字符大小
+ * @param  mode: 显示模式
+ * @retval None
+ *****************************************************************************/
 void Show_Str(u16 x, u16 y, u16 fc, u16 bc, u8 *str, u8 size, u8 mode);
-void Gui_Drawbmp16(u16 x, u16 y, const unsigned char *p); // 显示40*40 QQ图片
-void gui_circle(int xc, int yc, u16 c, int r, int fill);
-void Gui_StrCenter(u16 x, u16 y, u16 fc, u16 bc, u8 *str, u8 size, u8 mode);
-void LCD_DrawFillRectangle(u16 x1, u16 y1, u16 x2, u16 y2);
-#endif
+
+/** ***************************************************************************
+ * @brief  显示16位BMP图片
+ * @param  x: X坐标
+ * @param  y: Y坐标
+ * @param  p: 图片数据指针
+ * @retval None
+ *****************************************************************************/
+void GUI_Draw_BMP16(u16 x, u16 y, const unsigned char *p);
+
+/** ***************************************************************************
+ * @brief  画圆
+ * @param  xc: 圆心X坐标
+ * @param  yc: 圆心Y坐标
+ * @param  c: 颜色
+ * @param  r: 半径
+ * @param  fill: 是否填充
+ * @retval None
+ *****************************************************************************/
+void GUI_Circle(int xc, int yc, u16 c, int r, int fill);
+
+/** ***************************************************************************
+ * @brief  居中显示字符串
+ * @param  x: X坐标
+ * @param  y: Y坐标
+ * @param  fc: 前景色
+ * @param  bc: 背景色
+ * @param  str: 字符串指针
+ * @param  size: 字符大小
+ * @param  mode: 显示模式
+ * @retval None
+ *****************************************************************************/
+void GUI_Str_Center(u16 x, u16 y, u16 fc, u16 bc, u8 *str, u8 size, u8 mode);
+
+/** ***************************************************************************
+ * @brief  画填充矩形
+ * @param  x1: 左上角X坐标
+ * @param  y1: 左上角Y坐标
+ * @param  x2: 右下角X坐标
+ * @param  y2: 右下角Y坐标
+ * @retval None
+ *****************************************************************************/
+void LCD_Draw_Fill_Rectangle(u16 x1, u16 y1, u16 x2, u16 y2);
+
+#endif /* __GUI_H__ */
