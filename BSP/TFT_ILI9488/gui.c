@@ -516,7 +516,7 @@ void GUI_Draw_Font16(u16 x, u16 y, u16 fc, u16 bc, u8 *s, u8 mode)
 	u16 k;
 	u16 hz_num;
 	u16 x0 = x;
-	hz_num = sizeof(tfont16) / sizeof(typFNT_GB16); // 自动统计汉字数目
+	hz_num = TFONT16_SIZE; // 使用宏定义替代sizeof操作
 
 	for (k = 0; k < hz_num; k++)
 	{
@@ -572,7 +572,7 @@ void GUI_Draw_Font24(u16 x, u16 y, u16 fc, u16 bc, u8 *s, u8 mode)
 	u16 k;
 	u16 hz_num;
 	u16 x0 = x;
-	hz_num = sizeof(tfont24) / sizeof(typFNT_GB24); // 自动统计汉字数目
+	hz_num = TFONT24_SIZE; // 使用宏定义替代sizeof操作
 
 	for (k = 0; k < hz_num; k++)
 	{
@@ -628,7 +628,7 @@ void GUI_Draw_Font32(u16 x, u16 y, u16 fc, u16 bc, u8 *s, u8 mode)
 	u16 k;
 	u16 hz_num;
 	u16 x0 = x;
-	hz_num = sizeof(tfont32) / sizeof(typFNT_GB32); // 自动统计汉字数目
+	hz_num = TFONT32_SIZE; // 使用宏定义替代sizeof操作
 	for (k = 0; k < hz_num; k++)
 	{
 		if ((tfont32[k].Index[0] == *(s)) && (tfont32[k].Index[1] == *(s + 1)))

@@ -41,7 +41,11 @@
 #include "astra_ui_drawer.h"
 #include "ebtn_APP.h"
 #include "Encoder_EXTI.h"
-
+#include "lcd.h"
+#include "gui.h"
+// 添加LCD版本的UI头文件
+#include "astra_ui_lcd_core.h"
+#include "astra_ui_lcd_driver.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -62,12 +66,31 @@
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
+/* --------------------------------- 此处添加全局变量 -------------------------------- */
+// 原有变量
 uint8_t grop = 0;
 float version = 1.1;
 double x_p = -0000.64, x_i = -0.0076, x_d = -00002.50, y_p = -000.96, y_i = -0.0096, y_d = -2.50; // 红色激光笔
 
 int16_t servo_y_angle = 0;
 int16_t servo_x_angle = 0;
+
+uint8_t lcd_test_flag = 0;
+uint32_t lcd_test_counter = 0;
+
+// LCD菜单系统变量
+astra_ui_lcd_t lcd_ui;
+
+// 双显示系统控制标志
+typedef enum
+{
+  DISPLAY_BOTH, // 双屏同时显示
+  DISPLAY_OLED, // 仅OLED显示
+  DISPLAY_LCD   // 仅LCD显示
+} display_mode_t;
+
+static display_mode_t current_display_mode = DISPLAY_BOTH;
+/* 自定义部分结束 */
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -118,13 +141,12 @@ void _sys_exit(int x)
 //   HAL_UART_Receive(&huart1, &ch, 1, HAL_MAX_DELAY);
 //   return ch;
 // }
-
 /* USER CODE END 0 */
 
 /**
-  * @brief  The application entry point.
-  * @retval int
-  */
+ * @brief  The application entry point.
+ * @retval int
+ */
 int main(void)
 {
 
@@ -179,21 +201,60 @@ int main(void)
 
   PID_TIM_Init();
 
+  LCD_Init(); // 初始化LCD显示屏
+
   astra_ui_driver_init();
   astra_init_core();
+
+  // --------------------------------- 此处添加LCD菜单系统初始化 --------------------------------
+  // 初始化LCD版本的菜单系统
+  astra_ui_lcd_init(&lcd_ui);
+  // 自定义部分结束
 
   astra_list_item_t *Settings = astra_new_list_item("Settings");
   astra_list_item_t *Config = astra_new_list_item("Config");
 
+  // --------------------------------- 此处添加LCD菜单项创建 --------------------------------
+  // 为LCD系统创建相同的菜单结构
+  astra_list_item_lcd_t *lcd_settings = astra_new_list_item_lcd("Settings");
+  astra_list_item_lcd_t *lcd_config = astra_new_list_item_lcd("Config");
+  astra_list_item_lcd_t *lcd_display = astra_new_list_item_lcd("Display");
+  // 自定义部分结束
+
   astra_push_item_to_list(astra_get_root_list(), Settings);
   astra_push_item_to_list(astra_get_root_list(), Config);
+
+  // --------------------------------- 此处添加LCD菜单项到根列表 --------------------------------
+  astra_push_item_to_list_lcd(astra_get_root_list_lcd(&lcd_ui), lcd_settings);
+  astra_push_item_to_list_lcd(astra_get_root_list_lcd(&lcd_ui), lcd_config);
+  astra_push_item_to_list_lcd(astra_get_root_list_lcd(&lcd_ui), lcd_display);
+  // 自定义部分结束
 
   astra_push_item_to_list(Settings, astra_new_slider_item("X_Angle", &servo_x_angle, 1, 0, 270));
   astra_push_item_to_list(Settings, astra_new_slider_item("Y_Angle", &servo_y_angle, 1, 0, 180));
 
+  // --------------------------------- 此处添加LCD子菜单项 --------------------------------
+  // LCD Settings 子菜单
+  astra_push_item_to_list_lcd(lcd_settings, astra_new_slider_item_lcd("X_Angle", &servo_x_angle, 1, 0, 270));
+  astra_push_item_to_list_lcd(lcd_settings, astra_new_slider_item_lcd("Y_Angle", &servo_y_angle, 1, 0, 180));
+  astra_push_item_to_list_lcd(lcd_settings, astra_new_slider_item_lcd("X_P", (int16_t *)&x_p, 100, -1000, 1000));
+  astra_push_item_to_list_lcd(lcd_settings, astra_new_slider_item_lcd("X_I", (int16_t *)&x_i, 10000, -100, 100));
+
+  // LCD Config 子菜单
+  astra_push_item_to_list_lcd(lcd_config, astra_new_switch_item_lcd("Test Mode", &lcd_test_flag));
+  astra_push_item_to_list_lcd(lcd_config, astra_new_text_item_lcd("Version", "1.1"));
+
+  // LCD Display 子菜单
+  static int16_t brightness = 80;
+  static int16_t contrast = 50;
+  astra_push_item_to_list_lcd(lcd_display, astra_new_slider_item_lcd("Brightness", &brightness, 1, 0, 100));
+  astra_push_item_to_list_lcd(lcd_display, astra_new_slider_item_lcd("Contrast", &contrast, 1, 0, 100));
+  // 自定义部分结束
+
   char msg[100] = {};
   sprintf(msg, "启动时间: %dms.", get_ticks());
   astra_push_pop_up(msg, 1500);
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -201,11 +262,14 @@ int main(void)
 
   while (1)
   {
+    // --------------------------------- 此处修改输入处理逻辑 --------------------------------
+    // 处理旋转编码器输入
     if (Encoder_Is_Increase())
     {
       if (in_astra == 1)
       {
         astra_selector_go_next_item();
+        astra_selector_go_next_item_lcd(&lcd_ui); // 同步LCD菜单导航
       }
     }
     else if (Encoder_Is_Decrease())
@@ -213,17 +277,53 @@ int main(void)
       if (in_astra == 1)
       {
         astra_selector_go_prev_item();
+        astra_selector_go_prev_item_lcd(&lcd_ui); // 同步LCD菜单导航
       }
     }
 
+    // 处理按键事件（通过easy_button库）
+    ebtn_APP_Key_Process();
+    // 自定义部分结束
+
     oled_clear_buffer();
+
+    // --------------------------------- 此处添加LCD显示处理 --------------------------------
+    // 清空LCD屏幕
+    LCD_Clear(WHITE);
+    // 自定义部分结束
 
     astra_ui_widget_core();
     astra_ui_main_core();
 
+    // --------------------------------- 此处添加LCD菜单系统处理 --------------------------------
+    // 处理LCD版本的菜单核心逻辑
+    astra_ui_widget_core_lcd(&lcd_ui);
+    astra_ui_main_core_lcd(&lcd_ui);
+    // 自定义部分结束
+
     if (in_astra == 0)
     {
+      // --------------------------------- 此处修改主界面显示 --------------------------------
+      // OLED显示基本信息
       u8g2_DrawUTF8(&u8g2, 0, 10, msg);
+
+      // LCD显示详细信息
+      GUI_ShowString(10, 10, (u8 *)msg, 16, RED);
+
+      // 显示系统状态
+      char status_info[100];
+      sprintf(status_info, "舵机角度 X:%d° Y:%d°", servo_x_angle, servo_y_angle);
+      GUI_ShowString(10, 40, (u8 *)status_info, 16, BLUE);
+
+      sprintf(status_info, "系统运行: %dms", get_ticks());
+      GUI_ShowString(10, 70, (u8 *)status_info, 16, GREEN);
+
+      sprintf(status_info, "版本: %.1f", version);
+      GUI_ShowString(10, 100, (u8 *)status_info, 16, MAGENTA);
+
+      // 在屏幕底部显示操作提示
+      GUI_ShowString(10, 440, (u8 *)"编码器选择 按键确认", 16, BLACK);
+      // 自定义部分结束
     }
 
     oled_send_buffer();
@@ -235,27 +335,29 @@ int main(void)
 }
 
 /**
-  * @brief System Clock Configuration
-  * @retval None
-  */
+ * @brief System Clock Configuration
+ * @retval None
+ */
 void SystemClock_Config(void)
 {
   RCC_OscInitTypeDef RCC_OscInitStruct = {0};
   RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
 
   /** Supply configuration update enable
-  */
+   */
   HAL_PWREx_ConfigSupply(PWR_LDO_SUPPLY);
 
   /** Configure the main internal regulator output voltage
-  */
+   */
   __HAL_PWR_VOLTAGESCALING_CONFIG(PWR_REGULATOR_VOLTAGE_SCALE0);
 
-  while(!__HAL_PWR_GET_FLAG(PWR_FLAG_VOSRDY)) {}
+  while (!__HAL_PWR_GET_FLAG(PWR_FLAG_VOSRDY))
+  {
+  }
 
   /** Initializes the RCC Oscillators according to the specified parameters
-  * in the RCC_OscInitTypeDef structure.
-  */
+   * in the RCC_OscInitTypeDef structure.
+   */
   RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI;
   RCC_OscInitStruct.HSIState = RCC_HSI_DIV1;
   RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
@@ -275,10 +377,8 @@ void SystemClock_Config(void)
   }
 
   /** Initializes the CPU, AHB and APB buses clocks
-  */
-  RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
-                              |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2
-                              |RCC_CLOCKTYPE_D3PCLK1|RCC_CLOCKTYPE_D1PCLK1;
+   */
+  RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK | RCC_CLOCKTYPE_SYSCLK | RCC_CLOCKTYPE_PCLK1 | RCC_CLOCKTYPE_PCLK2 | RCC_CLOCKTYPE_D3PCLK1 | RCC_CLOCKTYPE_D1PCLK1;
   RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
   RCC_ClkInitStruct.SYSCLKDivider = RCC_SYSCLK_DIV1;
   RCC_ClkInitStruct.AHBCLKDivider = RCC_HCLK_DIV1;
@@ -297,7 +397,7 @@ void SystemClock_Config(void)
 
 /* USER CODE END 4 */
 
- /* MPU Configuration */
+/* MPU Configuration */
 
 void MPU_Config(void)
 {
@@ -307,7 +407,7 @@ void MPU_Config(void)
   HAL_MPU_Disable();
 
   /** Initializes and configures the Region and the memory to be protected
-  */
+   */
   MPU_InitStruct.Enable = MPU_REGION_ENABLE;
   MPU_InitStruct.Number = MPU_REGION_NUMBER0;
   MPU_InitStruct.BaseAddress = 0x0;
@@ -323,13 +423,12 @@ void MPU_Config(void)
   HAL_MPU_ConfigRegion(&MPU_InitStruct);
   /* Enables the MPU */
   HAL_MPU_Enable(MPU_PRIVILEGED_DEFAULT);
-
 }
 
 /**
-  * @brief  This function is executed in case of error occurrence.
-  * @retval None
-  */
+ * @brief  This function is executed in case of error occurrence.
+ * @retval None
+ */
 void Error_Handler(void)
 {
   /* USER CODE BEGIN Error_Handler_Debug */
@@ -341,14 +440,14 @@ void Error_Handler(void)
   /* USER CODE END Error_Handler_Debug */
 }
 
-#ifdef  USE_FULL_ASSERT
+#ifdef USE_FULL_ASSERT
 /**
-  * @brief  Reports the name of the source file and the source line number
-  *         where the assert_param error has occurred.
-  * @param  file: pointer to the source file name
-  * @param  line: assert_param error line source number
-  * @retval None
-  */
+ * @brief  Reports the name of the source file and the source line number
+ *         where the assert_param error has occurred.
+ * @param  file: pointer to the source file name
+ * @param  line: assert_param error line source number
+ * @retval None
+ */
 void assert_failed(uint8_t *file, uint32_t line)
 {
   /* USER CODE BEGIN 6 */

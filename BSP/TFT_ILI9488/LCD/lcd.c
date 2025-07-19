@@ -172,12 +172,9 @@ void LCD_GPIOInit(void)
 	__HAL_RCC_GPIOB_CLK_ENABLE();
 #endif /* LCD_USE_SOFTWARE_RESET */
 
-	// 配置GPIOA引脚 (SCL, SDA, CS)
-#if LCD_USE_BACKLIGHT_CONTROL
-	GPIO_InitStruct.Pin = GPIO_LCD_SCL | GPIO_LCD_SDA | GPIO_LCD_CS;
-#else
-	GPIO_InitStruct.Pin = GPIO_LCD_SCL | GPIO_LCD_SDA | GPIO_LCD_CS;
-#endif											/* LCD_USE_BACKLIGHT_CONTROL */
+	// 注意：PA5和PA7已被SPI1使用，不要重新配置
+	// 只配置CS引脚 (PA15)
+	GPIO_InitStruct.Pin = GPIO_LCD_CS;
 	GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP; // 推挽输出模式
 	GPIO_InitStruct.Pull = GPIO_NOPULL;
 	GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
@@ -211,6 +208,16 @@ void LCD_GPIOInit(void)
 	GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
 	HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 #endif /* LCD_USE_TOUCH */
+
+	// 设置GPIO初始电平
+	LCD_CS_SET;   // CS拉高（空闲状态）
+	LCD_RS_SET;   // DC拉高（数据模式）
+#if LCD_USE_SOFTWARE_RESET
+	LCD_RST_SET;  // RST拉高（非复位状态）
+#endif
+#if LCD_USE_BACKLIGHT_CONTROL
+	LCD_LED_SET;  // 背光开启
+#endif
 	/* 自定义部分结束 */
 }
 

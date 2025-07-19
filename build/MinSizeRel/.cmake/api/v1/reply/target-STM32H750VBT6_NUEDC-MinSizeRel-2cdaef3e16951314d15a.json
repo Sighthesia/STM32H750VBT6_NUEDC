@@ -56,7 +56,7 @@
 			"compileCommandFragments" : 
 			[
 				{
-					"fragment" : " -mcpu=cortex-m7 -mfpu=fpv5-d16 -mfloat-abi=hard  -Wall -Wextra -Wpedantic -fdata-sections -ffunction-sections -mcpu=cortex-m7 -mfpu=fpv5-d16 -mfloat-abi=hard  -Wall -Wextra -Wpedantic -fdata-sections -ffunction-sections -mcpu=cortex-m7 -mfpu=fpv5-d16 -mfloat-abi=hard  -Wall -Wextra -Wpedantic -fdata-sections -ffunction-sections -Os -DNDEBUG -std=gnu11"
+					"fragment" : " -mcpu=cortex-m7 -mfpu=fpv5-d16 -mfloat-abi=hard  -Wall -Wextra -Wpedantic -fdata-sections -ffunction-sections -Os -DNDEBUG -std=gnu11"
 				}
 			],
 			"defines" : 
@@ -76,6 +76,10 @@
 			],
 			"includes" : 
 			[
+				{
+					"backtrace" : 3,
+					"path" : "/home/Sighthesia/0_Files/1_Producing/Hardware/MCU/STM32/STM32H750VBT6_NUEDC/BSP/Astra_UI_LCD"
+				},
 				{
 					"backtrace" : 3,
 					"path" : "/home/Sighthesia/0_Files/1_Producing/Hardware/MCU/STM32/STM32H750VBT6_NUEDC/BSP/Astra_UI_Lite"
@@ -277,14 +281,19 @@
 				98,
 				99,
 				100,
-				101
+				101,
+				102,
+				103,
+				104,
+				105,
+				106
 			]
 		},
 		{
 			"compileCommandFragments" : 
 			[
 				{
-					"fragment" : " -mcpu=cortex-m7 -mfpu=fpv5-d16 -mfloat-abi=hard  -Wall -Wextra -Wpedantic -fdata-sections -ffunction-sections -mcpu=cortex-m7 -mfpu=fpv5-d16 -mfloat-abi=hard  -Wall -Wextra -Wpedantic -fdata-sections -ffunction-sections -mcpu=cortex-m7 -mfpu=fpv5-d16 -mfloat-abi=hard  -Wall -Wextra -Wpedantic -fdata-sections -ffunction-sections -x assembler-with-cpp -MMD -MP -Os -DNDEBUG"
+					"fragment" : " -mcpu=cortex-m7 -mfpu=fpv5-d16 -mfloat-abi=hard  -Wall -Wextra -Wpedantic -fdata-sections -ffunction-sections -x assembler-with-cpp -MMD -MP -Os -DNDEBUG"
 				}
 			],
 			"defines" : 
@@ -304,6 +313,10 @@
 			],
 			"includes" : 
 			[
+				{
+					"backtrace" : 3,
+					"path" : "/home/Sighthesia/0_Files/1_Producing/Hardware/MCU/STM32/STM32H750VBT6_NUEDC/BSP/Astra_UI_LCD"
+				},
 				{
 					"backtrace" : 3,
 					"path" : "/home/Sighthesia/0_Files/1_Producing/Hardware/MCU/STM32/STM32H750VBT6_NUEDC/BSP/Astra_UI_Lite"
@@ -396,7 +409,7 @@
 			"language" : "ASM",
 			"sourceIndexes" : 
 			[
-				102
+				107
 			]
 		}
 	],
@@ -406,7 +419,7 @@
 		"commandFragments" : 
 		[
 			{
-				"fragment" : "-mcpu=cortex-m7 -mfpu=fpv5-d16 -mfloat-abi=hard  -Wall -Wextra -Wpedantic -fdata-sections -ffunction-sections -mcpu=cortex-m7 -mfpu=fpv5-d16 -mfloat-abi=hard  -Wall -Wextra -Wpedantic -fdata-sections -ffunction-sections -mcpu=cortex-m7 -mfpu=fpv5-d16 -mfloat-abi=hard  -Wall -Wextra -Wpedantic -fdata-sections -ffunction-sections -Os -DNDEBUG",
+				"fragment" : "-mcpu=cortex-m7 -mfpu=fpv5-d16 -mfloat-abi=hard  -Wall -Wextra -Wpedantic -fdata-sections -ffunction-sections -Os -DNDEBUG",
 				"role" : "flags"
 			}
 		],
@@ -526,19 +539,48 @@
 				98,
 				99,
 				100,
-				101
+				101,
+				102,
+				103,
+				104,
+				105,
+				106
 			]
 		},
 		{
 			"name" : "",
 			"sourceIndexes" : 
 			[
-				102
+				107
 			]
 		}
 	],
 	"sources" : 
 	[
+		{
+			"backtrace" : 4,
+			"compileGroupIndex" : 0,
+			"path" : "BSP/Astra_UI_LCD/astra_ui_lcd_core.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 4,
+			"compileGroupIndex" : 0,
+			"path" : "BSP/Astra_UI_LCD/astra_ui_lcd_drawer.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 4,
+			"compileGroupIndex" : 0,
+			"path" : "BSP/Astra_UI_LCD/astra_ui_lcd_driver.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 4,
+			"compileGroupIndex" : 0,
+			"path" : "BSP/Astra_UI_LCD/astra_ui_lcd_example.c",
+			"sourceGroupIndex" : 0
+		},
 		{
 			"backtrace" : 4,
 			"compileGroupIndex" : 0,
@@ -621,6 +663,12 @@
 			"backtrace" : 4,
 			"compileGroupIndex" : 0,
 			"path" : "BSP/Servo_Yahboom/Servo_Yahboom_PWM.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 4,
+			"compileGroupIndex" : 0,
+			"path" : "BSP/TFT_ILI9488/LCD/font.c",
 			"sourceGroupIndex" : 0
 		},
 		{

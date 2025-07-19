@@ -64,9 +64,8 @@
  *****************************************************************************/
 uint8_t SPI_Write_Byte(SPI_HandleTypeDef *hspi, uint8_t byte)
 {
-	uint8_t rx_data = 0;
-	HAL_SPI_TransmitReceive(hspi, &byte, &rx_data, 1, HAL_MAX_DELAY);
-	return rx_data;
+	HAL_SPI_Transmit(hspi, &byte, 1, HAL_MAX_DELAY);
+	return 0;
 }
 
 /** ***************************************************************************

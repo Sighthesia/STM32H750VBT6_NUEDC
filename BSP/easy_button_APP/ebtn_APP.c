@@ -19,6 +19,8 @@
 #include "ebtn_APP.h"
 #include "ebtn_Custom_HAL.h"
 #include "ebtn_Custom_Config.h"
+// 添加LCD UI头文件
+#include "astra_ui_lcd_core.h"
 
 /* ---------------------------- 此函数中可自定义按键状态获取方式 ---------------------------- */
 
@@ -81,12 +83,26 @@ static void ebtn_APP_Event_Handler(struct ebtn_btn *btn, ebtn_evt_t evt)
             /* ----------------------------------- 单击时 ---------------------------------- */
             if (btn->click_cnt == 1)
             {
+                // --------------------------------- 此处修改单击事件 --------------------------------
+                // 原有OLED菜单操作
                 astra_selector_jump_to_selected_item();
+
+                // 添加LCD菜单同步操作（声明为外部变量）
+                // extern astra_ui_lcd_t lcd_ui;
+                // astra_selector_jump_to_selected_item_lcd(&lcd_ui);
+                // 自定义部分结束
             }
             /* ----------------------------------- 双击时 ---------------------------------- */
             else if (btn->click_cnt == 2)
             {
+                // --------------------------------- 此处修改双击事件 --------------------------------
+                // 原有OLED菜单操作
                 astra_selector_exit_current_item();
+
+                // 添加LCD菜单同步操作（声明为外部变量）
+                // extern astra_ui_lcd_t lcd_ui;
+                // astra_selector_exit_current_item_lcd(&lcd_ui);
+                // 自定义部分结束
             }
             /* ----------------------------------- 三击时 ---------------------------------- */
             else if (btn->click_cnt == 3)
