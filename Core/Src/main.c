@@ -221,7 +221,7 @@ int main(void)
 
     // --------------------------------- 此处添加LCD显示处理 --------------------------------
     // 清空LCD屏幕
-    LCD_Clear(WHITE);
+    LCD_Clear(RED);
     // 自定义部分结束
 
     astra_ui_widget_core();

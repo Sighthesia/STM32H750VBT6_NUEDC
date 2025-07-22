@@ -57,28 +57,43 @@ typedef struct
 void GUI_HAL_Register(const GUI_HAL_t *hal);
 
 /* --------------------------------- 此处修改GUI HAL封装函数声明 -------------------------------- */
-/** ***************************************************************************
- * @brief  GUI HAL层底层硬件操作函数
- *****************************************************************************/
-void GUI_HAL_SET_CURSOR(u16 x, u16 y);
-void GUI_HAL_SET_WINDOWS(u16 x1, u16 y1, u16 x2, u16 y2);
-void GUI_HAL_WRITE_DATA_16BIT(u16 data);
-u16 GUI_HAL_READ_POINT(u16 x, u16 y);
+// 暴露HAL指针供inline函数使用
+extern const GUI_HAL_t *gui_hal_ptr;
 
 /** ***************************************************************************
- * @brief  GUI HAL层显示控制函数
+ * @brief  GUI HAL层高频操作函数 - inline优化
  *****************************************************************************/
-void GUI_HAL_DISPLAY_ON(void);
-void GUI_HAL_DISPLAY_OFF(void);
-void GUI_HAL_SET_BACKLIGHT(u8 state);
-void GUI_HAL_SET_DIRECTION(u8 direction);
-void GUI_HAL_CLEAR_SCREEN(u16 color);
+static inline void GUI_HAL_Set_Cursor(u16 x, u16 y) {
+    gui_hal_ptr->Set_Cursor(x, y);
+}
+
+static inline void GUI_HAL_Write_Data_16Bit(u16 data) {
+    gui_hal_ptr->Write_Data_16Bit(data);
+}
+
+static inline void GUI_HAL_Set_Windows(u16 x1, u16 y1, u16 x2, u16 y2) {
+    gui_hal_ptr->Set_Windows(x1, y1, x2, y2);
+}
+
+/** ***************************************************************************
+ * @brief  GUI HAL层中频操作函数
+ *****************************************************************************/
+u16 GUI_HAL_Read_Point(u16 x, u16 y);
+void GUI_HAL_Clear_Screen(u16 color);
+
+/** ***************************************************************************
+ * @brief  GUI HAL层低频控制函数
+ *****************************************************************************/
+void GUI_HAL_Display_On(void);
+void GUI_HAL_Display_Off(void);
+void GUI_HAL_Set_Backlight(u8 state);
+void GUI_HAL_Set_Direction(u8 direction);
 
 /** ***************************************************************************
  * @brief  GUI HAL层寄存器操作函数
  *****************************************************************************/
-void GUI_HAL_WRITE_REGISTER(u8 reg, u16 value);
-u16 GUI_HAL_READ_REGISTER(u8 reg);
+void GUI_HAL_Write_Register(u8 reg, u16 value);
+u16 GUI_HAL_Read_Register(u8 reg);
 
 /** ***************************************************************************
  * @brief  初始化STM32平台GUI硬件抽象层
