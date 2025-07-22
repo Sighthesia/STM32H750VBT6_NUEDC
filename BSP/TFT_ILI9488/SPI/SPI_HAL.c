@@ -8,7 +8,7 @@
 
 /* --------------------------------- 此处修改SPI HAL实现相关代码 -------------------------------- */
 // SPI HAL实现指针，用于存储注册的硬件实现
-static const SPI_HAL_t *spi_hal_ptr = NULL;
+const SPI_HAL_t *spi_hal_ptr = NULL;  // 暴露给inline函数使用
 
 /** ***************************************************************************
  * @brief  注册SPI硬件抽象层实现
@@ -21,117 +21,56 @@ void SPI_HAL_Register(const SPI_HAL_t *hal)
 }
 
 /** ***************************************************************************
- * @brief  SPI HAL层写入字节函数
- * @param  data: 要发送的数据
- * @retval 接收到的数据
+ * @brief  SPI HAL层中频操作函数实现
  *****************************************************************************/
-u8 SPI_HAL_WRITE_BYTE(u8 data)
+void SPI_HAL_Write_Buffer(u8 *data, u16 len)
 {
-    if (spi_hal_ptr && spi_hal_ptr->SPI_Write_Byte)
-    {
-        return spi_hal_ptr->SPI_Write_Byte(data);
-    }
-    return 0;
-}
-
-/** ***************************************************************************
- * @brief  SPI HAL层读取字节函数
- * @retval 接收到的数据
- *****************************************************************************/
-u8 SPI_HAL_READ_BYTE(void)
-{
-    if (spi_hal_ptr && spi_hal_ptr->SPI_Read_Byte)
-    {
-        return spi_hal_ptr->SPI_Read_Byte();
-    }
-    return 0;
-}
-
-/** ***************************************************************************
- * @brief  SPI HAL层写入缓冲区函数
- * @param  data: 要发送的数据缓冲区
- * @param  len: 数据长度
- * @retval None
- *****************************************************************************/
-void SPI_HAL_WRITE_BUFFER(u8 *data, u16 len)
-{
-    if (spi_hal_ptr && spi_hal_ptr->SPI_Write_Buffer)
-    {
+    if (spi_hal_ptr && spi_hal_ptr->SPI_Write_Buffer) {
         spi_hal_ptr->SPI_Write_Buffer(data, len);
     }
 }
 
-/** ***************************************************************************
- * @brief  SPI HAL层读取缓冲区函数
- * @param  data: 接收数据缓冲区
- * @param  len: 数据长度
- * @retval None
- *****************************************************************************/
-void SPI_HAL_READ_BUFFER(u8 *data, u16 len)
+void SPI_HAL_Read_Buffer(u8 *data, u16 len)
 {
-    if (spi_hal_ptr && spi_hal_ptr->SPI_Read_Buffer)
-    {
+    if (spi_hal_ptr && spi_hal_ptr->SPI_Read_Buffer) {
         spi_hal_ptr->SPI_Read_Buffer(data, len);
     }
 }
 
 /** ***************************************************************************
- * @brief  SPI HAL层速度设置函数
- * @param  speed: SPI速度设置，0-高速，1-低速
- * @retval None
+ * @brief  SPI HAL层低频配置函数实现
  *****************************************************************************/
-void SPI_HAL_SET_SPEED(u8 speed)
+void SPI_HAL_Set_Speed(u8 speed)
 {
-    if (spi_hal_ptr && spi_hal_ptr->SPI_Set_Speed)
-    {
+    if (spi_hal_ptr && spi_hal_ptr->SPI_Set_Speed) {
         spi_hal_ptr->SPI_Set_Speed(speed);
     }
 }
 
-/** ***************************************************************************
- * @brief  SPI HAL层初始化函数
- * @retval None
- *****************************************************************************/
-void SPI_HAL_INIT(void)
+void SPI_HAL_Init(void)
 {
-    if (spi_hal_ptr && spi_hal_ptr->SPI_Init)
-    {
+    if (spi_hal_ptr && spi_hal_ptr->SPI_Init) {
         spi_hal_ptr->SPI_Init();
     }
 }
 
-/** ***************************************************************************
- * @brief  SPI HAL层反初始化函数
- * @retval None
- *****************************************************************************/
-void SPI_HAL_DEINIT(void)
+void SPI_HAL_DeInit(void)
 {
-    if (spi_hal_ptr && spi_hal_ptr->SPI_DeInit)
-    {
+    if (spi_hal_ptr && spi_hal_ptr->SPI_DeInit) {
         spi_hal_ptr->SPI_DeInit();
     }
 }
 
-/** ***************************************************************************
- * @brief  SPI HAL层MSP初始化函数
- * @retval None
- *****************************************************************************/
-void SPI_HAL_MSP_INIT(void)
+void SPI_HAL_MSP_Init(void)
 {
-    if (spi_hal_ptr && spi_hal_ptr->SPI_MSP_Init)
-    {
+    if (spi_hal_ptr && spi_hal_ptr->SPI_MSP_Init) {
         spi_hal_ptr->SPI_MSP_Init();
     }
 }
 
-/** ***************************************************************************
- * @brief  SPI HAL层MSP反初始化函数
- * @retval None
- *****************************************************************************/
-void SPI_HAL_MSP_DEINIT(void)
+void SPI_HAL_MSP_DeInit(void)
 {
-    if (spi_hal_ptr && spi_hal_ptr->SPI_MSP_DeInit)
-    {
+    if (spi_hal_ptr && spi_hal_ptr->SPI_MSP_DeInit) {
         spi_hal_ptr->SPI_MSP_DeInit();
     }
 }

@@ -11,7 +11,7 @@ extern _lcd_dev lcddev;
 
 /* --------------------------------- 此处修改GUI HAL实现相关代码 -------------------------------- */
 // GUI HAL实现指针，用于存储注册的硬件实现
-const GUI_HAL_t *gui_hal_ptr = NULL;  // 暴露给inline函数使用
+const GUI_HAL_t *gui_hal_ptr = NULL; // 暴露给inline函数使用
 
 /** ***************************************************************************
  * @brief  注册GUI硬件抽象层实现
@@ -28,7 +28,8 @@ void GUI_HAL_Register(const GUI_HAL_t *hal)
  *****************************************************************************/
 u16 GUI_HAL_Read_Point(u16 x, u16 y)
 {
-    if (gui_hal_ptr && gui_hal_ptr->Read_Point) {
+    if (gui_hal_ptr && gui_hal_ptr->Read_Point)
+    {
         return gui_hal_ptr->Read_Point(x, y);
     }
     return 0;
@@ -36,7 +37,8 @@ u16 GUI_HAL_Read_Point(u16 x, u16 y)
 
 void GUI_HAL_Clear_Screen(u16 color)
 {
-    if (gui_hal_ptr && gui_hal_ptr->Clear_Screen) {
+    if (gui_hal_ptr && gui_hal_ptr->Clear_Screen)
+    {
         gui_hal_ptr->Clear_Screen(color);
     }
 }
@@ -81,7 +83,7 @@ static void STM32_Display_On(void)
 
 static void STM32_Display_Off(void)
 {
-    // 原始LCD驱动没有单独的显示开关函数  
+    // 原始LCD驱动没有单独的显示开关函数
     // 可以通过背光控制或其他方式实现
 #if LCD_USE_BACKLIGHT_CONTROL
     LCD_Set_Backlight(0);
