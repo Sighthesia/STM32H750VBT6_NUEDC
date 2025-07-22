@@ -12,6 +12,9 @@
 			"path" : "build/MinSizeRel/CMakeFiles/4.0.3-dirty/CMakeSystem.cmake"
 		},
 		{
+			"path" : "cmake/gcc-arm-none-eabi.cmake"
+		},
+		{
 			"isCMake" : true,
 			"isExternal" : true,
 			"path" : "/usr/share/cmake/Modules/CMakeSystemSpecificInitialize.cmake"
