@@ -71,8 +71,8 @@ void GUI_Draw_Point(u16 x, u16 y, u16 color)
 	POINT_COLOR = color;
 
 	// 仅替换底层硬件调用
-	GUI_HAL_Set_Cursor(x, y);
-	GUI_HAL_Write_Data_16Bit(color);
+	gui_hal.Set_Cursor(x, y);
+	gui_hal.Write_Data_16Bit(color);
 }
 
 /** ***************************************************************************
@@ -92,13 +92,13 @@ void LCD_Fill(u16 sx, u16 sy, u16 ex, u16 ey, u16 color)
 	u16 height = ey - sy + 1; // 高度
 
 	// 仅替换底层硬件调用
-	GUI_HAL_Set_Windows(sx, sy, ex, ey); // 设置显示窗口
+	gui_hal.Set_Windows(sx, sy, ex, ey); // 设置显示窗口
 	for (i = 0; i < height; i++)
 	{
 		for (j = 0; j < width; j++)
-			GUI_HAL_Write_Data_16Bit(color); // 写入数据
+			gui_hal.Write_Data_16Bit(color); // 写入数据
 	}
-	GUI_HAL_Set_Windows(0, 0, lcddev.width - 1, lcddev.height - 1); // 恢复窗口设置为全屏
+	gui_hal.Set_Windows(0, 0, lcddev.width - 1, lcddev.height - 1); // 恢复窗口设置为全屏
 }
 
 /** ***************************************************************************

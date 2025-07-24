@@ -69,10 +69,10 @@ u16 DeviceCode;
  *****************************************************************************/
 void LCD_WR_REG(u8 data)
 {
-	LCD_HAL_CS_CLR();
-	LCD_HAL_DC_CLR();
-	LCD_HAL_SPI_WRITE_BYTE(data);
-	LCD_HAL_CS_SET();
+	lcd_hal.GPIO_CS_Clr();
+	lcd_hal.GPIO_DC_Clr();
+	lcd_hal.SPI_Write_Byte(data);
+	lcd_hal.GPIO_CS_Set();
 }
 
 /** ***************************************************************************
@@ -82,10 +82,10 @@ void LCD_WR_REG(u8 data)
  *****************************************************************************/
 void LCD_WR_DATA(u8 data)
 {
-	LCD_HAL_CS_CLR();
-	LCD_HAL_DC_SET();
-	LCD_HAL_SPI_WRITE_BYTE(data);
-	LCD_HAL_CS_SET();
+	lcd_hal.GPIO_CS_Clr();
+	lcd_hal.GPIO_DC_Set();
+	lcd_hal.SPI_Write_Byte(data);
+	lcd_hal.GPIO_CS_Set();
 }
 
 /** ***************************************************************************
@@ -143,8 +143,8 @@ void LCD_Clear(u16 color)
 {
 	unsigned int i, m;
 	LCD_Set_Windows(0, 0, lcddev.width - 1, lcddev.height - 1);
-	LCD_HAL_CS_CLR();
-	LCD_HAL_DC_SET();
+	lcd_hal.GPIO_CS_Clr();
+	lcd_hal.GPIO_DC_Set();
 	for (i = 0; i < lcddev.height; i++)
 	{
 		for (m = 0; m < lcddev.width; m++)
@@ -152,7 +152,7 @@ void LCD_Clear(u16 color)
 			LCD_Write_Data_16Bit(color);
 		}
 	}
-	LCD_HAL_CS_SET();
+	lcd_hal.GPIO_CS_Set();
 }
 
 /** ***************************************************************************
@@ -210,15 +210,15 @@ void LCD_GPIOInit(void)
 #endif /* LCD_USE_TOUCH */
 
 	// 设置GPIO初始电平
-	LCD_HAL_CS_SET(); // CS拉高（空闲状态）
-	LCD_HAL_DC_SET(); // DC拉高（数据模式）
+	lcd_hal.GPIO_CS_Set(); // CS拉高（空闲状态）
+	lcd_hal.GPIO_DC_Set(); // DC拉高（数据模式）
 #if LCD_USE_SOFTWARE_RESET
-	LCD_HAL_RST_SET(); // RST拉高（非复位状态）
-#endif
+	lcd_hal.GPIO_RST_Set(); // RST拉高（非复位状态）
+#endif						/* LCD_USE_SOFTWARE_RESET */
 #if LCD_USE_BACKLIGHT_CONTROL
-	LCD_HAL_BLK_SET(); // 背光开启
-#endif
-	/* 自定义部分结束 */
+	lcd_hal.GPIO_BLK_Set(); // 背光开启
+#endif						/* LCD_USE_BACKLIGHT_CONTROL */
+							/* 自定义部分结束 */
 }
 
 #if LCD_USE_SOFTWARE_RESET
@@ -229,10 +229,10 @@ void LCD_GPIOInit(void)
  *****************************************************************************/
 void LCD_RESET(void)
 {
-	LCD_HAL_RST_CLR();
-	LCD_HAL_DELAY_MS(100);
-	LCD_HAL_RST_SET();
-	LCD_HAL_DELAY_MS(50);
+	lcd_hal.GPIO_RST_Clr();
+	lcd_hal.Delay_Ms(100);
+	lcd_hal.GPIO_RST_Set();
+	lcd_hal.Delay_Ms(50);
 }
 #endif /* LCD_USE_SOFTWARE_RESET */
 
@@ -246,11 +246,11 @@ void LCD_Set_Backlight(u8 state)
 {
 	if (state)
 	{
-		LCD_HAL_BLK_SET();
+		lcd_hal.GPIO_BLK_Set();
 	}
 	else
 	{
-		LCD_HAL_BLK_CLR();
+		lcd_hal.GPIO_BLK_Clr();
 	}
 }
 #endif /* LCD_USE_BACKLIGHT_CONTROL */
@@ -262,11 +262,8 @@ void LCD_Set_Backlight(u8 state)
  *****************************************************************************/
 void LCD_Init(void)
 {
-	// 首先注册HAL层实现
-	STM32_LCD_HAL_Init();
-
-	// SPI初始化
-	LCD_HAL_SPI_INIT();
+	// SPI初始化（直接调用结构体成员）
+	lcd_hal.SPI_Init();
 
 	// LCD GPIO初始化
 	LCD_GPIOInit();
@@ -342,13 +339,10 @@ void LCD_Init(void)
 	LCD_WR_DATA(0x36);
 	LCD_WR_DATA(0x0F);
 	LCD_WR_REG(0x11);
-	LCD_HAL_DELAY_MS(120);
+	lcd_hal.Delay_Ms(120);
 	LCD_WR_REG(0x29);
 
 	LCD_Direction(USE_HORIZONTAL); // 设置LCD显示方向
-
-	// 初始化GUI HAL层
-	STM32_GUI_HAL_Init();
 
 #if LCD_USE_BACKLIGHT_CONTROL
 	LCD_Set_Backlight(1); // 点亮背光

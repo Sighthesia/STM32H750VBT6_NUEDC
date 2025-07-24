@@ -47,60 +47,13 @@ typedef struct
     u16 (*Read_Register)(u8 reg);              // 读寄存器
 
 } GUI_HAL_t;
-/* 自定义部分结束 */
 
+/* --------------------------------- 此处修改外部结构体声明 -------------------------------- */
 /** ***************************************************************************
- * @brief  注册GUI硬件抽象层实现
- * @param  hal: 指向硬件抽象层实现结构体的指针
- * @retval None
+ * @brief  GUI硬件抽象层实例声明
+ * @note   由平台实现文件导出，应用层直接调用 gui_hal.Function_Name()
  *****************************************************************************/
-void GUI_HAL_Register(const GUI_HAL_t *hal);
-
-/* --------------------------------- 此处修改GUI HAL封装函数声明 -------------------------------- */
-// 暴露HAL指针供inline函数使用
-extern const GUI_HAL_t *gui_hal_ptr;
-
-/** ***************************************************************************
- * @brief  GUI HAL层高频操作函数 - inline优化
- *****************************************************************************/
-static inline void GUI_HAL_Set_Cursor(u16 x, u16 y) {
-    gui_hal_ptr->Set_Cursor(x, y);
-}
-
-static inline void GUI_HAL_Write_Data_16Bit(u16 data) {
-    gui_hal_ptr->Write_Data_16Bit(data);
-}
-
-static inline void GUI_HAL_Set_Windows(u16 x1, u16 y1, u16 x2, u16 y2) {
-    gui_hal_ptr->Set_Windows(x1, y1, x2, y2);
-}
-
-/** ***************************************************************************
- * @brief  GUI HAL层中频操作函数
- *****************************************************************************/
-u16 GUI_HAL_Read_Point(u16 x, u16 y);
-void GUI_HAL_Clear_Screen(u16 color);
-
-/** ***************************************************************************
- * @brief  GUI HAL层低频控制函数
- *****************************************************************************/
-void GUI_HAL_Display_On(void);
-void GUI_HAL_Display_Off(void);
-void GUI_HAL_Set_Backlight(u8 state);
-void GUI_HAL_Set_Direction(u8 direction);
-
-/** ***************************************************************************
- * @brief  GUI HAL层寄存器操作函数
- *****************************************************************************/
-void GUI_HAL_Write_Register(u8 reg, u16 value);
-u16 GUI_HAL_Read_Register(u8 reg);
-
-/** ***************************************************************************
- * @brief  初始化STM32平台GUI硬件抽象层
- * @retval None
- * @note   在系统初始化时调用此函数进行HAL层注册
- *****************************************************************************/
-void STM32_GUI_HAL_Init(void);
+extern const GUI_HAL_t gui_hal;
 /* 自定义部分结束 */
 
 #endif /* __GUI_HAL_H */
