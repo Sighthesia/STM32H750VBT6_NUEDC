@@ -1,10 +1,11 @@
 #ifndef __UART_HAL_H
 #define __UART_HAL_H
 
+#include "stm32h7xx_hal.h"
 #include <stdint.h>
 
 /* --------------------------------- 此处修改UART HAL配置 -------------------------------- */
-#define UART_HAL_MAX_CHANNELS 5    // 最大UART通道数
+#define UART_HAL_MAX_CHANNELS 6    // 最大UART通道数
 #define UART_HAL_RX_BUFFER_SIZE 80 // 接收缓冲区大小
 
 // UART通道枚举
@@ -14,7 +15,8 @@ typedef enum
     UART_HAL_CHANNEL_2,
     UART_HAL_CHANNEL_3,
     UART_HAL_CHANNEL_4,
-    UART_HAL_CHANNEL_5
+    UART_HAL_CHANNEL_5,
+    UART_HAL_CHANNEL_6
 } uart_hal_channel_t;
 
 // UART配置结构体

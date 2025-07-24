@@ -2,7 +2,6 @@
 #define __GYRO_HAL_H
 
 #include <stdint.h>
-#include "UART_HAL.h"
 
 /* --------------------------------- 此处修改陀螺仪数据接收配置 -------------------------------- */
 // 帧格式定义
@@ -15,6 +14,23 @@
 
 // 数据缓冲区大小
 #define GYRO_HAL_MAX_FRAME_SIZE 80 // 最大帧长度
+
+// UART通道宏定义
+#define UART_HAL_CHANNEL_1 1
+#define UART_HAL_CHANNEL_2 2
+#define UART_HAL_CHANNEL_3 3
+#define UART_HAL_CHANNEL_4 4
+#define UART_HAL_CHANNEL_5 5
+#define UART_HAL_CHANNEL_6 6
+
+// UART实例获取宏定义
+#define GET_UART_INSTANCE(channel)                                                       \
+    ((channel) == UART_HAL_CHANNEL_1 ? USART1 : (channel) == UART_HAL_CHANNEL_2 ? USART2 \
+                                            : (channel) == UART_HAL_CHANNEL_3   ? USART3 \
+                                            : (channel) == UART_HAL_CHANNEL_4   ? UART4  \
+                                            : (channel) == UART_HAL_CHANNEL_5   ? UART5  \
+                                            : (channel) == UART_HAL_CHANNEL_6   ? USART6 \
+                                                                                : UART5)
 
 // 数据包状态
 typedef enum
@@ -72,7 +88,7 @@ typedef void (*gyro_hal_ahrs_callback_t)(const gyro_hal_ahrs_data_t *ahrs_data);
 /** ***************************************************************************
  * @brief 陀螺仪数据接收硬件抽象层函数指针结构体
  *
- * 提供统一的陀螺仪数据接收接口，支持IMU和AHRS数据解析
+ * 提供统一的陀螺仪底层硬件接口
  */
 typedef struct
 {
@@ -81,19 +97,13 @@ typedef struct
      * @param uart_channel 使用的UART通道
      * @param baud_rate 波特率
      */
-    void (*GYRO_HAL_Init)(uart_hal_channel_t uart_channel, uint32_t baud_rate);
+    void (*GYRO_HAL_Init)(uint8_t uart_channel, uint32_t baud_rate);
 
     /** ***************************************************************************
-     * @brief 设置IMU数据接收回调函数
-     * @param callback IMU数据回调函数
+     * @brief 设置接收回调函数
+     * @param callback 接收回调函数
      */
-    void (*GYRO_HAL_Set_IMU_Callback)(gyro_hal_imu_callback_t callback);
-
-    /** ***************************************************************************
-     * @brief 设置AHRS数据接收回调函数
-     * @param callback AHRS数据回调函数
-     */
-    void (*GYRO_HAL_Set_AHRS_Callback)(gyro_hal_ahrs_callback_t callback);
+    void (*GYRO_HAL_Set_RX_Callback)(void (*callback)(uint8_t data));
 
     /** ***************************************************************************
      * @brief 启动陀螺仪数据接收
@@ -105,26 +115,12 @@ typedef struct
      */
     void (*GYRO_HAL_Stop_Receive)(void);
 
-    /** ***************************************************************************
-     * @brief 处理接收到的数据（供主循环调用）
-     * @return 处理的数据包数量
-     */
-    uint8_t (*GYRO_HAL_Process_Data)(void);
-
-    /** ***************************************************************************
-     * @brief 获取接收状态
-     * @return 当前接收状态
-     */
-    gyro_hal_status_t (*GYRO_HAL_Get_Status)(void);
-
-    /** ***************************************************************************
-     * @brief 重置接收状态机
-     */
-    void (*GYRO_HAL_Reset)(void);
-
 } gyro_hal_t;
 
 /// 全局实例（由具体平台实现）
 extern const gyro_hal_t gyro_hal;
+
+extern UART_HandleTypeDef g_huart;
+extern uint8_t g_rx_byte;
 
 #endif /* __GYRO_HAL_H */

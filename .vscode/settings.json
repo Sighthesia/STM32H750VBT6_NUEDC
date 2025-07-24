@@ -30,7 +30,9 @@
         "span": "c",
         "cstdlib": "c",
         "lcd_hal.h": "c",
-        "gui_hal.h": "c"
+        "gui_hal.h": "c",
+        "gyro_app.h": "c",
+        "gyro_hal.h": "c"
     },
     "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
     "files.readonlyInclude": {
