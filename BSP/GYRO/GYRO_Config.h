@@ -20,18 +20,26 @@
 
 /* ------------------------------- 此处定义串口相关配置 ------------------------------- */
 #if USE_SEND_UART
-#define GYRO_SEND_UART_INSTANCE UART5 // 选择发送陀螺仪数据的串口实例(调试用)
-#define GYRO_SEND_UART_HANDLE huart5  // 选择发送陀螺仪数据的串口实例(调试用)
-#endif                                // USE_SEND_UART
+#define GYRO_SEND_UART_INSTANCE USART3 // 选择发送陀螺仪数据的串口实例(调试用)
+#define GYRO_SEND_UART_HANDLE huart3   // 选择发送陀螺仪数据的串口实例(调试用)
+#endif                                 // USE_SEND_UART
 
-#define GYRO_RECEIVE_UART_INSTANCE UART5 // 选择接收陀螺仪数据的串口实例
-#define GYRO_RECEIVE_UART_HANDLE huart5  // 选择接收陀螺仪数据的串口实例
+#define GYRO_RECEIVE_UART_INSTANCE USART3 // 选择接收陀螺仪数据的串口实例
+#define GYRO_RECEIVE_UART_HANDLE huart3   // 选择接收陀螺仪数据的串口实例
 
 /* ------------------------------ 此处定义RS485相关配置 ----------------------------- */
 
 #if USE_RS485
-#define RS485_RX_DE PAout(11) // 485模式控制.0,接收;1,发送.
-#define RS485_RX_RE PAout(12) // 485模式控制.0,接收;1,发送.
-#endif
+// 使用HAL库的GPIO操作
+#define RS485_DE_GPIO_Port GPIOA
+#define RS485_DE_Pin GPIO_PIN_11
+#define RS485_RE_GPIO_Port GPIOA
+#define RS485_RE_Pin GPIO_PIN_12
+
+#define RS485_RX_DE HAL_GPIO_WritePin(RS485_DE_GPIO_Port, RS485_DE_Pin, GPIO_PIN_RESET) // 485模式控制.0,接收;1,发送.
+#define RS485_RX_RE HAL_GPIO_WritePin(RS485_RE_GPIO_Port, RS485_RE_Pin, GPIO_PIN_RESET) // 485模式控制.0,接收;1,发送.
+#define RS485_TX_DE HAL_GPIO_WritePin(RS485_DE_GPIO_Port, RS485_DE_Pin, GPIO_PIN_SET)   // 485模式控制.0,接收;1,发送.
+#define RS485_TX_RE HAL_GPIO_WritePin(RS485_RE_GPIO_Port, RS485_RE_Pin, GPIO_PIN_SET)   // 485模式控制.0,接收;1,发送.
+#endif                                                                                  /* USE_RS485 */
 
 #endif // __GYRO_CONFIG_H

@@ -22,75 +22,43 @@ int rs_imutype = 0;
 int rs_ahrstype = 0;
 extern int Time_count;
 
-/**************************************************************************
-Function: Serial port 5 initialization
-Input   : none
-Output  : none
-º¯Êı¹¦ÄÜ£º´®¿Ú5³õÊ¼»¯
-Èë¿Ú²ÎÊı£ºÎŞ
-·µ »Ø Öµ£ºÎŞ
-**************************************************************************/
-void uart5_init(u32 bound)
+/* -------------------------------- æ­¤å¤„ä¿®æ”¹æ¥æ”¶ç¼“å†²åŒº ------------------------------- */
+static uint8_t uart_rx_buffer[1]; // å•å­—èŠ‚æ¥æ”¶ç¼“å†²åŒº
+/* ---------------------------------- è‡ªå®šä¹‰éƒ¨åˆ†ç»“æŸ --------------------------------- */
+
+/** ***************************************************************************
+ * @brief å¯åŠ¨UARTä¸­æ–­æ¥æ”¶
+ */
+void GYRO_UART_Start_Receive_IT(void)
 {
-	GPIO_InitTypeDef GPIO_InitStructure;
-	USART_InitTypeDef USART_InitStructure;
-	NVIC_InitTypeDef NVIC_InitStructure;
-
-	RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOC | RCC_APB2Periph_GPIOD, ENABLE); // Enable the gpio clock //Ê¹ÄÜGPIOÊ±ÖÓ
-
-	RCC_APB1PeriphClockCmd(RCC_APB1Periph_UART5, ENABLE); // Enable the Usart clock //Ê¹ÄÜUSARTÊ±ÖÓ
-
-	// USART_TX
-	GPIO_InitStructure.GPIO_Pin = GPIO_Pin_12; // PC12  Tx
-	GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
-	GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AF_PP; // Reuse push-pull output //¸´ÓÃÍÆÍìÊä³ö
-	GPIO_Init(GPIOC, &GPIO_InitStructure);
-
-	// USART_RX
-	GPIO_InitStructure.GPIO_Pin = GPIO_Pin_2;	  // PD2 RX
-	GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IPU; // Float input //¸¡¿ÕÊäÈë
-	GPIO_Init(GPIOD, &GPIO_InitStructure);
-
-	// UsartNVIC configuration //UsartNVICÅäÖÃ
-	NVIC_InitStructure.NVIC_IRQChannel = UART5_IRQn;
-	// Preempt priority //ÇÀÕ¼ÓÅÏÈ¼¶
-	NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 1;
-	// Subpriority //×ÓÓÅÏÈ¼¶
-	NVIC_InitStructure.NVIC_IRQChannelSubPriority = 0;
-	// Enable the IRQ channel //IRQÍ¨µÀÊ¹ÄÜ
-	NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;
-	// Initialize the VIC register with the specified parameters
-	// ¸ù¾İÖ¸¶¨µÄ²ÎÊı³õÊ¼»¯VIC¼Ä´æÆ÷
-	NVIC_Init(&NVIC_InitStructure);
-
-	// USART Initialization Settings ³õÊ¼»¯ÉèÖÃ
-	USART_InitStructure.USART_BaudRate = bound;										// Port rate //´®¿Ú²¨ÌØÂÊ
-	USART_InitStructure.USART_WordLength = USART_WordLength_8b;						// The word length is 8 bit data format //×Ö³¤Îª8Î»Êı¾İ¸ñÊ½
-	USART_InitStructure.USART_StopBits = USART_StopBits_1;							// A stop bit //Ò»¸öÍ£Ö¹Î»
-	USART_InitStructure.USART_Parity = USART_Parity_No;								// Prosaic parity bits //ÎŞÆæÅ¼Ğ£ÑéÎ»
-	USART_InitStructure.USART_HardwareFlowControl = USART_HardwareFlowControl_None; // No hardware data flow control //ÎŞÓ²¼şÊı¾İÁ÷¿ØÖÆ
-	USART_InitStructure.USART_Mode = USART_Mode_Rx | USART_Mode_Tx;					// Sending and receiving mode //ÊÕ·¢Ä£Ê½
-	USART_Init(UART5, &USART_InitStructure);										// Initialize serial port 1 //³õÊ¼»¯´®¿Ú1
-
-	USART_ITConfig(UART5, USART_IT_RXNE, ENABLE); // Open the serial port to accept interrupts //¿ªÆô´®¿Ú½ÓÊÜÖĞ¶Ï
-	USART_Cmd(UART5, ENABLE);					  // Enable serial port 1 //Ê¹ÄÜ´®¿Ú1
+	HAL_UART_Receive_IT(&huart3, uart_rx_buffer, 1);
 }
 
-int UART5_IRQHandler(void)
+/** ***************************************************************************
+ * @brief UARTæ¥æ”¶ä¸­æ–­å›è°ƒå‡½æ•°
+ * @param huart: UARTå¥æŸ„æŒ‡é’ˆ
+ */
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 {
-	static uint8_t Count = 0;
-	static uint8_t rs_count = 0;
-	static uint8_t last_rsnum = 0;
-	uint8_t Usart_Receive;
-	static uint8_t rsimu_flag = 0;
-	static uint8_t rsacc_flag = 0;
-	RS485_RX_RE = 0;
-	RS485_RX_DE = 0;
-	ttl_receive = 1;
-	if (USART_GetITStatus(UART5, USART_IT_RXNE) != RESET) // Check if data is received //ÅĞ¶ÏÊÇ·ñ½ÓÊÕµ½Êı¾İ
+	if (huart == &huart3) // ä½¿ç”¨UART3å¥æŸ„
 	{
-		Usart_Receive = USART_ReceiveData(UART5); // Read the data //¶ÁÈ¡Êı¾İ
-		Fd_data[Count] = Usart_Receive;			  // ´®¿ÚÊı¾İÌîÈëÊı×é
+		static uint8_t Count = 0;
+		static uint8_t rs_count = 0;
+		static uint8_t last_rsnum = 0;
+		uint8_t Usart_Receive;
+		static uint8_t rsimu_flag = 0;
+		static uint8_t rsacc_flag = 0;
+
+#if USE_RS485
+		RS485_RX_RE;
+		RS485_RX_DE;
+#endif /* USE_RS485 */
+
+		ttl_receive = 1;
+
+		Usart_Receive = uart_rx_buffer[0]; // è¯»å–æ¥æ”¶åˆ°çš„æ•°æ®
+		Fd_data[Count] = Usart_Receive;	   // ä¸²å£æ•°æ®å¡«å…¥æ•°ç»„
+
 		if (((last_rsnum == FRAME_END) && (Usart_Receive == FRAME_HEAD)) || Count > 0)
 		{
 			rs_count = 1;
@@ -104,12 +72,12 @@ int UART5_IRQHandler(void)
 			Count = 0;
 		last_rsnum = Usart_Receive;
 
-		if (rsimu_flag == 1 && Count == IMU_RS) // ½«±¾Ö¡Êı¾İ±£´æÖÁFd_rsimuÊı×éÖĞ
+		if (rsimu_flag == 1 && Count == IMU_RS) // å°†æœ¬å¸§æ•°æ®ä¿å­˜è‡³Fd_rsimuæ•°ç»„ä¸­
 		{
 			Count = 0;
 			rsimu_flag = 0;
 			rs_imutype = 1;
-			if (Fd_data[IMU_RS - 1] == FRAME_END) // Ö¡Î²Ğ£Ñé
+			if (Fd_data[IMU_RS - 1] == FRAME_END) // å¸§å°¾æ ¡éªŒ
 				memcpy(Fd_rsimu, Fd_data, sizeof(Fd_data));
 		}
 		if (rsacc_flag == 1 && Count == AHRS_RS) //
@@ -122,11 +90,13 @@ int UART5_IRQHandler(void)
 			for (int i = 0; i < sizeof(Fd_data); i++)
 				Fd_data[i] = 0;
 		}
+
+		// é‡æ–°å¯åŠ¨ä¸­æ–­æ¥æ”¶
+		HAL_UART_Receive_IT(&huart3, uart_rx_buffer, 1);
 	}
-	return 0;
 }
 /*******************************
-16½øÖÆ×ª¸¡µãĞÍÊı¾İ
+16è¿›åˆ¶è½¬æµ®ç‚¹å‹æ•°æ®
 *******************************/
 uint8_t TTL_Hex2Dec(void)
 {
@@ -135,19 +105,19 @@ uint8_t TTL_Hex2Dec(void)
 	{
 		if (Fd_rsahrs[1] == TYPE_AHRS && Fd_rsahrs[2] == AHRS_LEN)
 		{
-			AHRSData_Packet.RollSpeed = DATA_Trans(Fd_rsahrs[7], Fd_rsahrs[8], Fd_rsahrs[9], Fd_rsahrs[10]);	   // ºá¹ö½ÇËÙ¶È
-			AHRSData_Packet.PitchSpeed = DATA_Trans(Fd_rsahrs[11], Fd_rsahrs[12], Fd_rsahrs[13], Fd_rsahrs[14]);   // ¸©Ñö½ÇËÙ¶È
-			AHRSData_Packet.HeadingSpeed = DATA_Trans(Fd_rsahrs[15], Fd_rsahrs[16], Fd_rsahrs[17], Fd_rsahrs[18]); // Æ«º½½ÇËÙ¶È
+			AHRSData_Packet.RollSpeed = DATA_Trans(Fd_rsahrs[7], Fd_rsahrs[8], Fd_rsahrs[9], Fd_rsahrs[10]);	   // æ¨ªæ»šè§’é€Ÿåº¦
+			AHRSData_Packet.PitchSpeed = DATA_Trans(Fd_rsahrs[11], Fd_rsahrs[12], Fd_rsahrs[13], Fd_rsahrs[14]);   // ä¿¯ä»°è§’é€Ÿåº¦
+			AHRSData_Packet.HeadingSpeed = DATA_Trans(Fd_rsahrs[15], Fd_rsahrs[16], Fd_rsahrs[17], Fd_rsahrs[18]); // åèˆªè§’é€Ÿåº¦
 
-			AHRSData_Packet.Roll = DATA_Trans(Fd_rsahrs[19], Fd_rsahrs[20], Fd_rsahrs[21], Fd_rsahrs[22]);	  // ºá¹ö½Ç
-			AHRSData_Packet.Pitch = DATA_Trans(Fd_rsahrs[23], Fd_rsahrs[24], Fd_rsahrs[25], Fd_rsahrs[26]);	  // ¸©Ñö½Ç
-			AHRSData_Packet.Heading = DATA_Trans(Fd_rsahrs[27], Fd_rsahrs[28], Fd_rsahrs[29], Fd_rsahrs[30]); // Æ«º½½Ç
+			AHRSData_Packet.Roll = DATA_Trans(Fd_rsahrs[19], Fd_rsahrs[20], Fd_rsahrs[21], Fd_rsahrs[22]);	  // æ¨ªæ»šè§’
+			AHRSData_Packet.Pitch = DATA_Trans(Fd_rsahrs[23], Fd_rsahrs[24], Fd_rsahrs[25], Fd_rsahrs[26]);	  // ä¿¯ä»°è§’
+			AHRSData_Packet.Heading = DATA_Trans(Fd_rsahrs[27], Fd_rsahrs[28], Fd_rsahrs[29], Fd_rsahrs[30]); // åèˆªè§’
 
-			AHRSData_Packet.Qw = DATA_Trans(Fd_rsahrs[31], Fd_rsahrs[32], Fd_rsahrs[33], Fd_rsahrs[34]); // ËÄÔªÊı
+			AHRSData_Packet.Qw = DATA_Trans(Fd_rsahrs[31], Fd_rsahrs[32], Fd_rsahrs[33], Fd_rsahrs[34]); // å››å…ƒæ•°
 			AHRSData_Packet.Qx = DATA_Trans(Fd_rsahrs[35], Fd_rsahrs[36], Fd_rsahrs[37], Fd_rsahrs[38]);
 			AHRSData_Packet.Qy = DATA_Trans(Fd_rsahrs[39], Fd_rsahrs[40], Fd_rsahrs[41], Fd_rsahrs[42]);
 			AHRSData_Packet.Qz = DATA_Trans(Fd_rsahrs[43], Fd_rsahrs[44], Fd_rsahrs[45], Fd_rsahrs[46]);
-			AHRSData_Packet.Timestamp = timestamp(Fd_rsahrs[47], Fd_rsahrs[48], Fd_rsahrs[49], Fd_rsahrs[50]); // Ê±¼ä´Á
+			AHRSData_Packet.Timestamp = timestamp(Fd_rsahrs[47], Fd_rsahrs[48], Fd_rsahrs[49], Fd_rsahrs[50]); // æ—¶é—´æˆ³
 			AHRSData2PC();
 		}
 		rs_ahrstype = 0;
@@ -156,19 +126,19 @@ uint8_t TTL_Hex2Dec(void)
 	{
 		if (Fd_rsimu[1] == TYPE_IMU && Fd_rsimu[2] == IMU_LEN)
 		{
-			IMUData_Packet.gyroscope_x = DATA_Trans(Fd_rsimu[7], Fd_rsimu[8], Fd_rsimu[9], Fd_rsimu[10]); // ½ÇËÙ¶È
+			IMUData_Packet.gyroscope_x = DATA_Trans(Fd_rsimu[7], Fd_rsimu[8], Fd_rsimu[9], Fd_rsimu[10]); // è§’é€Ÿåº¦
 			IMUData_Packet.gyroscope_y = DATA_Trans(Fd_rsimu[11], Fd_rsimu[12], Fd_rsimu[13], Fd_rsimu[14]);
 			IMUData_Packet.gyroscope_z = DATA_Trans(Fd_rsimu[15], Fd_rsimu[16], Fd_rsimu[17], Fd_rsimu[18]);
 
-			IMUData_Packet.accelerometer_x = DATA_Trans(Fd_rsimu[19], Fd_rsimu[20], Fd_rsimu[21], Fd_rsimu[22]); // Ïß¼ÓËÙ¶È
+			IMUData_Packet.accelerometer_x = DATA_Trans(Fd_rsimu[19], Fd_rsimu[20], Fd_rsimu[21], Fd_rsimu[22]); // çº¿åŠ é€Ÿåº¦
 			IMUData_Packet.accelerometer_y = DATA_Trans(Fd_rsimu[23], Fd_rsimu[24], Fd_rsimu[25], Fd_rsimu[26]);
 			IMUData_Packet.accelerometer_z = DATA_Trans(Fd_rsimu[27], Fd_rsimu[28], Fd_rsimu[29], Fd_rsimu[30]);
 
-			IMUData_Packet.magnetometer_x = DATA_Trans(Fd_rsimu[31], Fd_rsimu[32], Fd_rsimu[33], Fd_rsimu[34]); // ´ÅÁ¦¼ÆÊı¾İ
+			IMUData_Packet.magnetometer_x = DATA_Trans(Fd_rsimu[31], Fd_rsimu[32], Fd_rsimu[33], Fd_rsimu[34]); // ç£åŠ›è®¡æ•°æ®
 			IMUData_Packet.magnetometer_y = DATA_Trans(Fd_rsimu[35], Fd_rsimu[36], Fd_rsimu[37], Fd_rsimu[38]);
 			IMUData_Packet.magnetometer_z = DATA_Trans(Fd_rsimu[39], Fd_rsimu[40], Fd_rsimu[41], Fd_rsimu[42]);
 
-			IMUData_Packet.Timestamp = timestamp(Fd_rsimu[55], Fd_rsimu[56], Fd_rsimu[57], Fd_rsimu[58]); // Ê±¼ä´Á
+			IMUData_Packet.Timestamp = timestamp(Fd_rsimu[55], Fd_rsimu[56], Fd_rsimu[57], Fd_rsimu[58]); // æ—¶é—´æˆ³
 			IMUData2PC();
 		}
 		rs_imutype = 0;
@@ -176,7 +146,7 @@ uint8_t TTL_Hex2Dec(void)
 	return 0;
 }
 /*************
-ÊµÏÖ16½øÖÆµÄcanÊı¾İ×ª»»³É¸¡µãĞÍÊı¾İ
+å®ç°16è¿›åˆ¶çš„canæ•°æ®è½¬æ¢æˆæµ®ç‚¹å‹æ•°æ®
 ****************/
 float DATA_Trans(uint8_t Data_1, uint8_t Data_2, uint8_t Data_3, uint8_t Data_4)
 {
@@ -190,17 +160,17 @@ float DATA_Trans(uint8_t Data_1, uint8_t Data_2, uint8_t Data_3, uint8_t Data_4)
 	transition_32 |= Data_3 << 16;
 	transition_32 |= Data_2 << 8;
 	transition_32 |= Data_1;
-	sign = (transition_32 & 0x80000000) ? -1 : 1; // ·ûºÅÎ»
-	// ÏÈÓÒÒÆ²Ù×÷£¬ÔÙ°´Î»Óë¼ÆËã£¬³öÀ´½á¹ûÊÇ30µ½23Î»¶ÔÓ¦µÄe
+	sign = (transition_32 & 0x80000000) ? -1 : 1; // ç¬¦å·ä½
+	// å…ˆå³ç§»æ“ä½œï¼Œå†æŒ‰ä½ä¸è®¡ç®—ï¼Œå‡ºæ¥ç»“æœæ˜¯30åˆ°23ä½å¯¹åº”çš„e
 	exponent = ((transition_32 >> 23) & 0xff) - 127;
-	// ½«22~0×ª»¯Îª10½øÖÆ£¬µÃµ½¶ÔÓ¦µÄxÏµÊı
+	// å°†22~0è½¬åŒ–ä¸º10è¿›åˆ¶ï¼Œå¾—åˆ°å¯¹åº”çš„xç³»æ•°
 	mantissa = 1 + ((float)(transition_32 & 0x7fffff) / 0x7fffff);
 	tmp = sign * mantissa * pow(2, exponent);
 	return tmp;
 }
 long long timestamp(uint8_t Data_1, uint8_t Data_2, uint8_t Data_3, uint8_t Data_4)
 {
-	u32 transition_32;
+	unsigned int transition_32;
 	transition_32 = 0;
 	transition_32 |= Data_4 << 24;
 	transition_32 |= Data_3 << 16;
@@ -237,45 +207,20 @@ void IMUData2PC(void)
 	printf("IMU:The Timestamp =  %d\r\n", IMUData_Packet.Timestamp);
 	// printf("Now the data of IMU has been sent.\r\n");
 }
-/**************************************************************************
-Function: Serial port 1 sends data
-Input   : The data to send
-Output  : none
-º¯Êı¹¦ÄÜ£º´®¿Ú1·¢ËÍÊı¾İ
-Èë¿Ú²ÎÊı£ºÒª·¢ËÍµÄÊı¾İ
-·µ»Ø  Öµ£ºÎŞ
-**************************************************************************/
-void usart1_send(uint8_t data)
+/** ***************************************************************************
+ * @brief ä¸²å£1å‘é€æ•°æ®
+ * @param data: è¦å‘é€çš„æ•°æ®
+ */
+void Usart1_Send(uint8_t data)
 {
-	USART1->DR = data;
-	while ((USART1->SR & 0x40) == 0)
-		;
+	HAL_UART_Transmit(&huart1, &data, 1, HAL_MAX_DELAY);
 }
-/**************************************************************************
-Function: Serial port 2 sends data
-Input   : The data to send
-Output  : none
-º¯Êı¹¦ÄÜ£º´®¿Ú2·¢ËÍÊı¾İ
-Èë¿Ú²ÎÊı£ºÒª·¢ËÍµÄÊı¾İ
-·µ»Ø  Öµ£ºÎŞ
-**************************************************************************/
-void usart2_send(uint8_t data)
+
+/** ***************************************************************************
+ * @brief ä¸²å£3å‘é€æ•°æ®
+ * @param data: è¦å‘é€çš„æ•°æ®
+ */
+void Usart3_Send(uint8_t data)
 {
-	USART2->DR = data;
-	while ((USART2->SR & 0x40) == 0)
-		;
-}
-/**************************************************************************
-Function: Serial port 3 sends data
-Input   : The data to send
-Output  : none
-º¯Êı¹¦ÄÜ£º´®¿Ú3·¢ËÍÊı¾İ
-Èë¿Ú²ÎÊı£ºÒª·¢ËÍµÄÊı¾İ
-·µ»Ø  Öµ£ºÎŞ
-**************************************************************************/
-void usart3_send(uint8_t data)
-{
-	USART3->DR = data;
-	while ((USART3->SR & 0x40) == 0)
-		;
+	HAL_UART_Transmit(&huart3, &data, 1, HAL_MAX_DELAY);
 }
