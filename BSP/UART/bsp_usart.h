@@ -44,6 +44,4 @@ void UART5_Send_ArrayU8(uint8_t *BufferPtr, uint16_t Length);
 void usart_send(UART_HandleTypeDef *huart, uint8_t *data, uint8_t len);
 int8_t receiveJson(RingBuff_t *ringbuff, char *str);
 
-void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart);
-
 #endif

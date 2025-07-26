@@ -13,7 +13,7 @@
 #include "main.h"
 #include "usart.h"
 #include "bsp_usart.h"
-#include "Gyro_APP.h"
+#include "Gyro_HAL.h"
 
 /**
  * @brief  UART接收完成中断回调
@@ -31,21 +31,12 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
     else if (huart->Instance == USART3)
     {
         // 将接收到的数据写入环形缓冲区
-        Write_RingBuff(&Uart3_RingBuff, uart3_rx_buffer);
+        // Write_RingBuff(&Uart3_RingBuff, uart3_rx_buffer);
 
         // 转发USART3收到的数据到USART1（调试输出）
         HAL_UART_Transmit_IT(&huart1, &uart3_rx_buffer, 1);
 
         // 重新启动接收中断
         HAL_UART_Receive_IT(&huart3, &uart3_rx_buffer, 1);
-    }
-
-    if (huart->Instance == g_huart.Instance)
-    {
-        // 处理接收到的字节
-        UART_RX_Callback(g_uart_channel, g_rx_byte);
-
-        // 重新启动接收
-        HAL_UART_Receive_IT(&g_huart, &g_rx_byte, 1);
     }
 }

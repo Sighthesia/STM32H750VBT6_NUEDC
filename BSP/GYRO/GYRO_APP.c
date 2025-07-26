@@ -1,5 +1,18 @@
-#include "Gyro_APP.h"
-#include "Gyro_HAL.h"
+/** ***************************************************************************
+ * @File Name: GYRO_APP.c
+ * @brief
+ * @Author : Sighthesia
+ * @Version : 1.0.0
+ * @Creat Date : 2025-07-25
+ * ----------------------------------------------------------------------------
+ * @Modification
+ * @Author : Sighthesia
+ * @Changes :
+ * @Modifi Date :
+ */
+#include "GYRO_APP.h"
+#include "GYRO_HAL.h"
+#include "GYRO_Config.h"
 #include <string.h>
 #include <math.h>
 
@@ -10,21 +23,21 @@ static uint8_t g_data_updated = 0;
 
 // 接收状态机变量
 static gyro_hal_status_t g_gyro_status = GYRO_HAL_STATUS_IDLE;
-static uint8_t g_rx_buffer[GYRO_HAL_MAX_FRAME_SIZE];
+static uint8_t g_rx_buffer[GYRO_MAX_FRAME_SIZE];
 static uint8_t g_rx_count = 0;
 static uint8_t g_last_byte = 0;
 static gyro_hal_packet_type_t g_current_packet_type = GYRO_HAL_PACKET_TYPE_NONE;
 
 // 数据包缓冲区
-static uint8_t g_imu_buffer[GYRO_HAL_MAX_FRAME_SIZE];
-static uint8_t g_ahrs_buffer[GYRO_HAL_MAX_FRAME_SIZE];
+static uint8_t g_imu_buffer[GYRO_MAX_FRAME_SIZE];
+static uint8_t g_ahrs_buffer[GYRO_MAX_FRAME_SIZE];
 static uint8_t g_imu_ready = 0;
 static uint8_t g_ahrs_ready = 0;
 
 // 配置参数
 static gyro_app_config_t g_config = {
-    .uart_channel = UART_HAL_CHANNEL_5, // 使用UART5
-    .baud_rate = 921600,
+    .uart_handle = GYRO_DEFAULT_UART_CHANNEL, // 使用配置文件中的默认值
+    .baud_rate = GYRO_DEFAULT_BAUD_RATE,
     .enable_imu = 1,
     .enable_ahrs = 1};
 
@@ -47,7 +60,7 @@ static void UART_RX_Callback(uint8_t data)
     g_rx_buffer[g_rx_count] = data;
 
     // 检测帧头
-    if (((g_last_byte == GYRO_HAL_FRAME_END) && (data == GYRO_HAL_FRAME_HEAD)) || g_rx_count > 0)
+    if (((g_last_byte == GYRO_FRAME_END) && (data == GYRO_FRAME_HEAD)) || g_rx_count > 0)
     {
         g_gyro_status = GYRO_HAL_STATUS_RECEIVING;
         g_rx_count++;
@@ -55,30 +68,30 @@ static void UART_RX_Callback(uint8_t data)
         // 检测数据类型
         if (g_rx_count >= 3)
         {
-            if (g_rx_buffer[2] == GYRO_HAL_TYPE_IMU)
+            if (g_rx_buffer[2] == GYRO_TYPE_IMU)
             {
                 g_current_packet_type = GYRO_HAL_PACKET_TYPE_IMU;
             }
-            else if (g_rx_buffer[2] == GYRO_HAL_TYPE_AHRS)
+            else if (g_rx_buffer[2] == GYRO_TYPE_AHRS)
             {
                 g_current_packet_type = GYRO_HAL_PACKET_TYPE_AHRS;
             }
         }
 
         // 检查帧完成
-        if (g_current_packet_type == GYRO_HAL_PACKET_TYPE_IMU && g_rx_count >= GYRO_HAL_IMU_LEN)
+        if (g_current_packet_type == GYRO_HAL_PACKET_TYPE_IMU && g_rx_count >= GYRO_IMU_LEN)
         {
             // IMU数据包接收完成
-            memcpy(g_imu_buffer, g_rx_buffer, GYRO_HAL_IMU_LEN);
+            memcpy(g_imu_buffer, g_rx_buffer, GYRO_IMU_LEN);
             g_imu_ready = 1;
             g_gyro_status = GYRO_HAL_STATUS_COMPLETE;
             g_rx_count = 0;
             g_current_packet_type = GYRO_HAL_PACKET_TYPE_NONE;
         }
-        else if (g_current_packet_type == GYRO_HAL_PACKET_TYPE_AHRS && g_rx_count >= GYRO_HAL_AHRS_LEN)
+        else if (g_current_packet_type == GYRO_HAL_PACKET_TYPE_AHRS && g_rx_count >= GYRO_AHRS_LEN)
         {
             // AHRS数据包接收完成
-            memcpy(g_ahrs_buffer, g_rx_buffer, GYRO_HAL_AHRS_LEN);
+            memcpy(g_ahrs_buffer, g_rx_buffer, GYRO_AHRS_LEN);
             g_ahrs_ready = 1;
             g_gyro_status = GYRO_HAL_STATUS_COMPLETE;
             g_rx_count = 0;
@@ -86,7 +99,7 @@ static void UART_RX_Callback(uint8_t data)
         }
 
         // 防止缓冲区溢出
-        if (g_rx_count >= GYRO_HAL_MAX_FRAME_SIZE)
+        if (g_rx_count >= GYRO_MAX_FRAME_SIZE)
         {
             g_rx_count = 0;
             g_gyro_status = GYRO_HAL_STATUS_IDLE;
@@ -290,13 +303,13 @@ gyro_app_status_t GYRO_APP_Init(const gyro_app_config_t *config)
     memset(g_ahrs_buffer, 0, sizeof(g_ahrs_buffer));
 
     // 初始化HAL层
-    gyro_hal.GYRO_HAL_Init(g_config.uart_channel, g_config.baud_rate);
+    gyro_hal.GYRO_Init(g_config.uart_handle, g_config.baud_rate);
 
     // 设置接收回调函数
-    gyro_hal.GYRO_HAL_Set_RX_Callback(UART_RX_Callback);
+    gyro_hal.Set_RX_Callback(UART_RX_Callback);
 
     // 启动接收
-    gyro_hal.GYRO_HAL_Start_Receive();
+    gyro_hal.Start_Receive();
 
     return GYRO_APP_STATUS_OK;
 }
@@ -306,7 +319,7 @@ gyro_app_status_t GYRO_APP_Init(const gyro_app_config_t *config)
  */
 void GYRO_APP_Start(void)
 {
-    gyro_hal.GYRO_HAL_Start_Receive();
+    gyro_hal.Start_Receive();
 }
 
 /** ***************************************************************************
@@ -314,7 +327,7 @@ void GYRO_APP_Start(void)
  */
 void GYRO_APP_Stop(void)
 {
-    gyro_hal.GYRO_HAL_Stop_Receive();
+    gyro_hal.Stop_Receive();
 }
 
 /** ***************************************************************************
@@ -507,24 +520,24 @@ gyro_app_status_t GYRO_APP_Get_Quaternion(float *qw, float *qx, float *qy, float
     return GYRO_APP_STATUS_OK;
 }
 
-/** ***************************************************************************
- * @brief 获取接收状态
- * @return 接收状态
- */
-gyro_hal_status_t GYRO_APP_Get_Status(void)
-{
-    return gyro_hal.GYRO_HAL_Get_Status();
-}
+// /** ***************************************************************************
+//  * @brief 获取接收状态
+//  * @return 接收状态
+//  */
+// gyro_hal_status_t GYRO_APP_Get_Status(void)
+// {
+//     return gyro_hal.GYRO_HAL_Get_Status();
+// }
 
-/** ***************************************************************************
- * @brief 重置陀螺仪
- */
-void GYRO_APP_Reset(void)
-{
-    gyro_hal.GYRO_HAL_Reset();
-    memset(&g_gyro_data, 0, sizeof(gyro_app_data_t));
-    g_data_updated = 0;
-}
+// /** ***************************************************************************
+//  * @brief 重置陀螺仪
+//  */
+// void GYRO_APP_Reset(void)
+// {
+//     gyro_hal.GYRO_HAL_Reset();
+//     memset(&g_gyro_data, 0, sizeof(gyro_app_data_t));
+//     g_data_updated = 0;
+// }
 
 /** ***************************************************************************
  * @brief 获取处理后的陀螺仪数据（结构体方式）

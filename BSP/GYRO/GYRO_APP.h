@@ -1,7 +1,19 @@
-#ifndef __GYRO_APP_H
-#define __GYRO_APP_H
+/** ***************************************************************************
+ * @File Name: GYRO_APP.h
+ * @brief
+ * @Author : Sighthesia
+ * @Version : 1.0.0
+ * @Creat Date : 2025-07-25
+ * ----------------------------------------------------------------------------
+ * @Modification
+ * @Author : Sighthesia
+ * @Changes :
+ * @Modifi Date :
+ */
+#ifndef GYRO_APP_H
+#define GYRO_APP_H
 
-#include "Gyro_HAL.h"
+#include "GYRO_HAL.h"
 #include "main.h"
 
 /* --------------------------------- 此处修改陀螺仪应用层配置 -------------------------------- */
@@ -17,7 +29,7 @@ typedef enum
 // 陀螺仪应用层配置结构体
 typedef struct
 {
-    uint8_t uart_channel;
+    uint8_t uart_handle;
     uint32_t baud_rate;
     uint8_t enable_imu;
     uint8_t enable_ahrs;

@@ -94,6 +94,10 @@
 				},
 				{
 					"backtrace" : 3,
+					"path" : "/home/Sighthesia/0_Files/1_Producing/Hardware/MCU/STM32/STM32H750VBT6_NUEDC/BSP/GYRO"
+				},
+				{
+					"backtrace" : 3,
 					"path" : "/home/Sighthesia/0_Files/1_Producing/Hardware/MCU/STM32/STM32H750VBT6_NUEDC/BSP/Gyro"
 				},
 				{
@@ -285,7 +289,10 @@
 				106,
 				107,
 				108,
-				109
+				109,
+				110,
+				111,
+				112
 			]
 		},
 		{
@@ -327,6 +334,10 @@
 				{
 					"backtrace" : 3,
 					"path" : "/home/Sighthesia/0_Files/1_Producing/Hardware/MCU/STM32/STM32H750VBT6_NUEDC/BSP/Encoder_EXTI"
+				},
+				{
+					"backtrace" : 3,
+					"path" : "/home/Sighthesia/0_Files/1_Producing/Hardware/MCU/STM32/STM32H750VBT6_NUEDC/BSP/GYRO"
 				},
 				{
 					"backtrace" : 3,
@@ -404,7 +415,7 @@
 			"language" : "ASM",
 			"sourceIndexes" : 
 			[
-				110
+				113
 			]
 		}
 	],
@@ -542,14 +553,17 @@
 				106,
 				107,
 				108,
-				109
+				109,
+				110,
+				111,
+				112
 			]
 		},
 		{
 			"name" : "",
 			"sourceIndexes" : 
 			[
-				110
+				113
 			]
 		}
 	],
@@ -600,6 +614,30 @@
 		{
 			"backtrace" : 4,
 			"compileGroupIndex" : 0,
+			"path" : "BSP/GYRO/GYRO_APP.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 4,
+			"compileGroupIndex" : 0,
+			"path" : "BSP/GYRO/GYRO_HAL_STM32HAL.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 4,
+			"compileGroupIndex" : 0,
+			"path" : "BSP/Gyro/GYRO_HAL_STM32HAL.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 4,
+			"compileGroupIndex" : 0,
+			"path" : "BSP/Gyro/GYRO_Usage_Example.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 4,
+			"compileGroupIndex" : 0,
 			"path" : "BSP/Gyro/Gyro_APP.c",
 			"sourceGroupIndex" : 0
 		},
@@ -607,12 +645,6 @@
 			"backtrace" : 4,
 			"compileGroupIndex" : 0,
 			"path" : "BSP/Gyro/Gyro_HAL_STM32.c",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 4,
-			"compileGroupIndex" : 0,
-			"path" : "BSP/Gyro/UART.c",
 			"sourceGroupIndex" : 0
 		},
 		{
