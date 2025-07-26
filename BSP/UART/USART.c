@@ -13,7 +13,6 @@
 #include "main.h"
 #include "usart.h"
 #include "bsp_usart.h"
-#include "Gyro_HAL.h"
 
 /**
  * @brief  UART接收完成中断回调

@@ -43,6 +43,8 @@
 #include "Encoder_EXTI.h"
 #include "lcd.h"
 #include "gui.h"
+#include "GYRO_APP.h"
+#include "GYRO_HAL.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -71,6 +73,9 @@ double x_p = -0000.64, x_i = -0.0076, x_d = -00002.50, y_p = -000.96, y_i = -0.0
 
 int16_t servo_y_angle = 0;
 int16_t servo_x_angle = 0;
+
+float g_gryo = 0.0f; // 陀螺仪数据
+float g_acc = 0.0f;  // 加速度计数据
 
 /* USER CODE END PV */
 
@@ -174,7 +179,8 @@ int main(void)
 
   // 初始化串口接收
   USART1_init(115200); // 初始化USART1接收
-  USART3_Init(115200); // 初始化USART3接收
+  // USART3_Init(115200); // 初始化USART3接收
+  GYRO_APP_Init(NULL);
 
   Control_System_Init(); // 初始化控制系统
 
@@ -190,6 +196,7 @@ int main(void)
   char msg[100] = {};
   sprintf(msg, "启动时间: %dms.", get_ticks());
   astra_push_pop_up(msg, 1500);
+  LCD_Clear(WHITE);
 
   /* USER CODE END 2 */
 
@@ -212,6 +219,7 @@ int main(void)
         astra_selector_go_prev_item();
       }
     }
+    GYRO_APP_Process();
 
     // 处理按键事件（通过easy_button库）
     ebtn_APP_Key_Process();
@@ -221,7 +229,19 @@ int main(void)
 
     // --------------------------------- 此处添加LCD显示处理 --------------------------------
     // 清空LCD屏幕
-    LCD_Clear(RED);
+    GYRO_APP_Get_Angular_Velocity_Degrees(&g_gryo, NULL, NULL);
+    if (GYRO_APP_Is_Data_Updated())
+    {
+      // 显示陀螺仪数据
+      LCD_Show_Num(0, 0, (uint32_t)g_gryo, 2, 16);
+      g_acc = g_gryo; // 假设g_acc与g_gryo相同
+      LCD_Clear(BLUE);
+    }
+    else
+    {
+      LCD_Show_Num(0, 0, 0, 2, 16); // 如果没有更新，显示0
+      LCD_Clear(RED);
+    }
     // 自定义部分结束
 
     astra_ui_widget_core();

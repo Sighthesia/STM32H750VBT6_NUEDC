@@ -159,7 +159,7 @@ void LCD_Show_Char(u16 x, u16 y, u16 fc, u16 bc, u8 num, u8 size, u8 mode);
 void LCD_Show_Num(u16 x, u16 y, u32 num, u8 len, u8 size);
 
 /** ***************************************************************************
- * @brief  显示两位数字
+ * @brief  显示数字
  * @param  x: X坐标
  * @param  y: Y坐标
  * @param  num: 数字
@@ -168,7 +168,7 @@ void LCD_Show_Num(u16 x, u16 y, u32 num, u8 len, u8 size);
  * @param  mode: 显示模式
  * @retval None
  *****************************************************************************/
-void LCD_Show_2Num(u16 x, u16 y, u16 num, u8 len, u8 size, u8 mode);
+void LCD_Show_Num(u16 x, u16 y, u32 num, u8 len, u8 size);
 
 /** ***************************************************************************
  * @brief  显示字符串
