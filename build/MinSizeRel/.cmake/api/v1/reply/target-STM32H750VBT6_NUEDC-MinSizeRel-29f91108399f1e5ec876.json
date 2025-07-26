@@ -598,13 +598,13 @@
 		{
 			"backtrace" : 4,
 			"compileGroupIndex" : 0,
-			"path" : "BSP/GYRO/GYRO_APP.c",
+			"path" : "BSP/GYRO/GYRO_HAL_STM32HAL.c",
 			"sourceGroupIndex" : 0
 		},
 		{
 			"backtrace" : 4,
 			"compileGroupIndex" : 0,
-			"path" : "BSP/GYRO/GYRO_HAL_STM32HAL.c",
+			"path" : "BSP/GYRO/usartx.c",
 			"sourceGroupIndex" : 0
 		},
 		{

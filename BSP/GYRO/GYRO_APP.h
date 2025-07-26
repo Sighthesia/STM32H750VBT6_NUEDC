@@ -13,16 +13,13 @@
 #ifndef __USRATX_H
 #define __USRATX_H
 
-#include "GYRO_Config.h"
+#include "GYRO_HAL.h"
+#include "main.h"
 #include "stdio.h"
 #include "stdint.h"
-#include "main.h"
-#include "usart.h"
 #include "string.h"
 #include "math.h"
-#include "stm32h7xx_hal.h"
 
-/* ----------------------------- 此处定义帧格式相关宏 ---------------------------- */
 #define FRAME_HEADER 0X7B // Frame_header
 #define FRAME_TAIL 0X7D	  // Frame_tail
 #define SEND_DATA_SIZE 24
@@ -82,19 +79,6 @@ extern uint8_t ttl_receive;
 extern IMUData_Packet_t IMUData_Packet;
 extern AHRSData_Packet_t AHRSData_Packet;
 
-/* -------------------------------- 此处修改函数声明 ------------------------------- */
-/** ***************************************************************************
- * @brief UART接收中断回调函数
- * @param huart: UART句柄指针
- */
-void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart);
-
-/** ***************************************************************************
- * @brief 启动UART中断接收
- */
-void GYRO_UART_Start_Receive_IT(void);
-/* ---------------------------------- 自定义部分结束 --------------------------------- */
-
 long long timestamp(uint8_t Data_1, uint8_t Data_2, uint8_t Data_3, uint8_t Data_4);
 void AHRSData2PC(void);
 void IMUData2PC(void);
@@ -102,12 +86,5 @@ void IMUData2PC(void);
 float XYZ_Target_Speed_transition(uint8_t High, uint8_t Low);
 uint8_t TTL_Hex2Dec(void);
 float DATA_Trans(uint8_t Data_1, uint8_t Data_2, uint8_t Data_3, uint8_t Data_4);
-
-/** ***************************************************************************
- * @brief 串口发送函数
- */
-void Usart1_Send(uint8_t data);
-// void Usart2_Send(uint8_t data); // 需要在usart.h中添加huart2声明
-void Usart3_Send(uint8_t data);
 
 #endif /* __USRATX_H */

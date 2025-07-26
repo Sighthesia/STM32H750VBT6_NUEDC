@@ -15,14 +15,14 @@
 
 /* -------------------------------- 此处自定义功能开关 ------------------------------- */
 
-#define USE_SEND_UART 0 // 1:使用串口发送陀螺仪数据;0:不使用串口发送陀螺仪数据(调试用)
-#define USE_RS485 0     // 1:使用RS485通信;0:不使用RS485通信
+#define USE_DEBUG 0 // 1:使用串口发送陀螺仪数据;0:不使用串口发送陀螺仪数据(调试用)
+#define USE_RS485 0 // 1:使用RS485通信;0:不使用RS485通信
 
 /* ------------------------------- 此处定义串口相关配置 ------------------------------- */
-#if USE_SEND_UART
-#define GYRO_SEND_UART_INSTANCE USART3 // 选择发送陀螺仪数据的串口实例(调试用)
-#define GYRO_SEND_UART_HANDLE huart3   // 选择发送陀螺仪数据的串口实例(调试用)
-#endif                                 // USE_SEND_UART
+#if USE_DEBUG
+#define GYRO_DEBUG_UART_INSTANCE USART3 // 选择发送陀螺仪数据的串口实例(调试用)
+#define GYRO_DEBUG_UART_HANDLE huart3   // 选择发送陀螺仪数据的串口实例(调试用)
+#endif                                  // USE_DEBUG
 
 #define GYRO_RECEIVE_UART_INSTANCE USART3 // 选择接收陀螺仪数据的串口实例
 #define GYRO_RECEIVE_UART_HANDLE huart3   // 选择接收陀螺仪数据的串口实例
