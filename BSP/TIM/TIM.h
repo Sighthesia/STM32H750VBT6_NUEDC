@@ -1,5 +1,5 @@
 /** ***************************************************************************
- * @File Name: TIM_STM32HAL.h
+ * @File Name: TIM.h
  * @brief
  * @Author : Sighthesia
  * @Version : 1.0.0
@@ -16,8 +16,6 @@
 #include "main.h"
 
 /* -------------------------------- 包含所用的宏定义 -------------------------------- */
-#include "pid.h"
-#include "kalman.h"
 #include "tim.h"
 #include "ebtn_APP.h"
 

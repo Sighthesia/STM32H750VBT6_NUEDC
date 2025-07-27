@@ -1,5 +1,5 @@
 /** ***************************************************************************
- * @File Name: TIM_STM32HAL.c
+ * @File Name: TIM.c
  * @brief
  * @Author : Sighthesia
  * @Version : 1.0.0
@@ -10,7 +10,7 @@
  * @Changes :
  * @Modifi Date :
  */
-#include "TIM_STM32HAL.h"
+#include "TIM.h"
 #include "usart.h"
 #include <stdio.h>
 

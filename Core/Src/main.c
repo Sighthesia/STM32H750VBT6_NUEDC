@@ -27,11 +27,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include "control.h"
-#include "bsp_usart.h"
-#include "pid.h"
-#include "kalman.h"
-#include "TIM_STM32HAL.h"
+#include "TIM.h"
 #include <stdio.h>
 #include "Servo_PWM.h"
 #include "u8g2.h"
@@ -67,15 +63,10 @@
 /* USER CODE BEGIN PV */
 /* --------------------------------- 此处添加全局变量 -------------------------------- */
 // 原有变量
-uint8_t grop = 0;
-float version = 1.1;
 double x_p = -0000.64, x_i = -0.0076, x_d = -00002.50, y_p = -000.96, y_i = -0.0096, y_d = -2.50; // 红色激光笔
 
 int16_t servo_y_angle = 0;
 int16_t servo_x_angle = 0;
-
-float g_gryo = 0.0f; // 陀螺仪数据
-float g_acc = 0.0f;  // 加速度计数据
 
 /* USER CODE END PV */
 
@@ -88,45 +79,6 @@ static void MPU_Config(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-#pragma import(__use_no_semihosting)
-
-// 标准库需要的支持函数
-struct __FILE
-{
-  int handle;
-};
-
-FILE __stdout;
-
-// 定义_sys_exit()以避免使用半主机模式
-void _sys_exit(int x)
-{
-  x = x;
-}
-
-// /**
-//  * @brief 重定向fputc到UART1
-//  * @param ch 要发送的字符
-//  * @param f 文件指针
-//  * @retval 发送的字符
-//  */
-// int fputc(int ch, FILE *f)
-// {
-//   HAL_UART_Transmit(&huart1, (uint8_t *)&ch, 1, HAL_MAX_DELAY);
-//   return ch;
-// }
-
-// /**
-//  * @brief 重定向fgetc从UART1
-//  * @param f 文件指针
-//  * @retval 接收的字符
-//  */
-// int fgetc(FILE *f)
-// {
-//   uint8_t ch = 0;
-//   HAL_UART_Receive(&huart1, &ch, 1, HAL_MAX_DELAY);
-//   return ch;
-// }
 /* USER CODE END 0 */
 
 /**
@@ -169,23 +121,8 @@ int main(void)
   MX_I2C1_Init();
   MX_SPI1_Init();
   /* USER CODE BEGIN 2 */
-  // 初始化舵机PWM定时器
-  Kalman_Init(&kfp_x);
-  Kalman_Init(&kfp_y);
-  pid_param_init(&x_pid);
-  pid_param_init(&y_pid);
-  set_pid_param(&y_pid, y_p, y_i, y_d);
-  set_pid_param(&x_pid, x_p, x_i, x_d);
-
-  // 初始化串口接收
-  USART1_init(115200); // 初始化USART1接收
-  USART3_Init(115200); // 初始化USART3接收
-
-  Control_System_Init(); // 初始化控制系统
 
   ebtn_APP_Key_INIT();
-
-  PID_TIM_Init();
 
   LCD_Init(); // 初始化LCD显示屏
 
