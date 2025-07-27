@@ -80,25 +80,15 @@ static void ebtn_APP_Event_Handler(struct ebtn_btn *btn, ebtn_evt_t evt)
             if (btn->click_cnt == 1)
             {
                 // --------------------------------- 此处修改单击事件 --------------------------------
-                // 原有OLED菜单操作
                 astra_selector_jump_to_selected_item();
-
-                // 添加LCD菜单同步操作（声明为外部变量）
-                // extern astra_ui_lcd_t lcd_ui;
-                // astra_selector_jump_to_selected_item_lcd(&lcd_ui);
-                // 自定义部分结束
+                printf("单击事件触发\n");
             }
             /* ----------------------------------- 双击时 ---------------------------------- */
             else if (btn->click_cnt == 2)
             {
                 // --------------------------------- 此处修改双击事件 --------------------------------
-                // 原有OLED菜单操作
                 astra_selector_exit_current_item();
-
-                // 添加LCD菜单同步操作（声明为外部变量）
-                // extern astra_ui_lcd_t lcd_ui;
-                // astra_selector_exit_current_item_lcd(&lcd_ui);
-                // 自定义部分结束
+                printf("双击事件触发\n");
             }
             /* ----------------------------------- 三击时 ---------------------------------- */
             else if (btn->click_cnt == 3)
@@ -115,9 +105,11 @@ static void ebtn_APP_Event_Handler(struct ebtn_btn *btn, ebtn_evt_t evt)
                 {
                     in_astra = true;
                 }
-                else
+                else if (in_astra == true)
                 {
+                    in_astra = false;
                 }
+                printf("长按事件触发\n");
             }
         }
         break;
@@ -152,41 +144,4 @@ void ebtn_APP_Key_INIT(void)
 void ebtn_APP_Key_Process(void)
 {
     ebtn_process(ebtn_Custom_HAL.Get_Tick()); // 获取时间处理按键事件
-}
-
-/* -------------------------------- 辅助部分 ------------------------------- */
-
-/** ***************************************************************************
- * @brief  检查按键是否激活
- * @param  key_id: 按键ID
- * @return uint8_t: 1-激活，0-未激活
- */
-uint8_t ebtn_APP_Is_Key_Active(uint16_t key_id)
-{
-    ebtn_btn_t *btn = ebtn_get_btn_by_key_id(key_id);
-    return ebtn_is_btn_active(btn);
-}
-
-/** ***************************************************************************
- * @brief  检查是否有按键处于处理中
- * @return uint8_t: 1-有按键处理中，0-无按键处理中
- */
-uint8_t ebtn_APP_Is_Any_Key_In_Process(void)
-{
-    return ebtn_is_in_process();
-}
-
-/** ***************************************************************************
- * @brief  获取指定按键的按键状态
- * @param  key_id: 按键ID
- * @return uint8_t: 1-按下，0-松开
- */
-uint8_t ebtn_APP_Get_Key_State(uint16_t key_id)
-{
-    ebtn_btn_t *btn = ebtn_get_btn_by_key_id(key_id);
-    if (btn == NULL)
-    {
-        return 0;
-    }
-    return ebtn_APP_Get_State(btn);
 }

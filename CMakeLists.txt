@@ -12,6 +12,9 @@ set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS ON)
 
+# 开启硬件浮点运算
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -mfpu=fpv4-sp-d16 -mfloat-abi=hard")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mfpu=fpv4-sp-d16 -mfloat-abi=hard")
 
 # Define the build type
 if(NOT CMAKE_BUILD_TYPE)
@@ -79,6 +82,7 @@ target_compile_options(${CMAKE_PROJECT_NAME} PRIVATE
 
 # Add linker flags for disabling semihosting
 target_link_options(${CMAKE_PROJECT_NAME} PRIVATE
+-u _printf_float
 )
 
 # Add linked libraries

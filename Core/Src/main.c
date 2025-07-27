@@ -79,6 +79,26 @@ static void MPU_Config(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+#ifdef __GNUC__
+#define PUTCHAR_PROTOTYPE int __io_putchar(int ch)
+#else
+#define PUTCHAR_PROTOTYPE int fputc(int ch, FILE *f)
+#endif
+
+PUTCHAR_PROTOTYPE
+{
+  HAL_UART_Transmit(&huart1, (uint8_t *)&ch, 1, HAL_MAX_DELAY);
+  return ch;
+}
+
+#ifdef __GNUC__
+int _write(int fd, char *ptr, int len)
+{
+  HAL_UART_Transmit(&huart1, (uint8_t *)ptr, len, HAL_MAX_DELAY);
+  return len;
+}
+#endif
+
 /* USER CODE END 0 */
 
 /**
@@ -124,15 +144,18 @@ int main(void)
 
   ebtn_APP_Key_INIT();
 
-  LCD_Init(); // 初始化LCD显示屏
-
   astra_ui_driver_init();
   astra_init_core();
+
+  astra_list_item_t *Control = astra_new_list_item("Control");
+
+  astra_push_item_to_list(astra_get_root_list(), Control);
 
   char msg[100] = {};
   sprintf(msg, "启动时间: %dms.", get_ticks());
   astra_push_pop_up(msg, 1500);
-  LCD_Clear(WHITE);
+
+  HAL_TIM_Base_Start_IT(&htim7);
 
   /* USER CODE END 2 */
 
@@ -155,8 +178,6 @@ int main(void)
         astra_selector_go_prev_item();
       }
     }
-
-    ebtn_APP_Key_Process();
 
     oled_clear_buffer();
 

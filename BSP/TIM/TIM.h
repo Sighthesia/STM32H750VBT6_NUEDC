@@ -20,7 +20,6 @@
 #include "ebtn_APP.h"
 
 /* ------------------------------- 定义所使用的定时器句柄 ------------------------------ */
-// htim6.Instance = TIM6;  // 句柄指向外设实例
 
 #ifdef USE_SOFTWARE_PWM_TIM
 #define SERVO_TIM_HANDLE htim6  /* 舵机使用的定时器句柄 */
@@ -28,8 +27,6 @@
 void Servo_Software_PWM_TIM_Init(void);
 #endif /* USE_SOFTWARE_PWM_TIM */
 
-#define PID_TIM_HANDLE htim7  /* PID使用的定时器句柄 */
-#define PID_TIM_INSTANCE TIM7 /* PID使用的定时器 */
 void PID_TIM_Init(void);
 
 #endif /* USE_PID_TIM */
