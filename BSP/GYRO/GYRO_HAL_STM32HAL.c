@@ -12,7 +12,7 @@
  */
 #include "GYRO_HAL.h"
 
-static uint8_t uart_rx_buffer[1]; // 单字节接收缓冲区
+uint8_t uart_rx_buffer[1]; // 单字节接收缓冲区
 
 /** ***************************************************************************
  * @brief 启动UART接收

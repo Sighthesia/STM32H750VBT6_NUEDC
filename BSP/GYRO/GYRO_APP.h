@@ -81,10 +81,7 @@ extern uint8_t ttl_receive;
 extern imu_data_packet_t imu_data_packet;
 extern ahrs_data_packet_t ahrs_data_packet;
 
-/** ***************************************************************************
- * @brief 陀螺仪UART中断回调处理函数(直接调用版本)
- */
-void GYRO_UART_IT_Callback_Process(void);
+void GYRO_UART_IT_Callback_Process(UART_HandleTypeDef *huart);
 
 uint8_t TTL_Hex_To_Dec(void);
 float Hex_To_Float(uint8_t data_1, uint8_t data_2, uint8_t data_3, uint8_t data_4);

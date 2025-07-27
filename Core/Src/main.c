@@ -179,8 +179,7 @@ int main(void)
 
   // 初始化串口接收
   USART1_init(115200); // 初始化USART1接收
-  // USART3_Init(115200); // 初始化USART3接收
-  GYRO_APP_Init(NULL);
+  USART3_Init(115200); // 初始化USART3接收
 
   Control_System_Init(); // 初始化控制系统
 
@@ -219,30 +218,10 @@ int main(void)
         astra_selector_go_prev_item();
       }
     }
-    GYRO_APP_Process();
 
-    // 处理按键事件（通过easy_button库）
     ebtn_APP_Key_Process();
-    // 自定义部分结束
 
     oled_clear_buffer();
-
-    // --------------------------------- 此处添加LCD显示处理 --------------------------------
-    // 清空LCD屏幕
-    GYRO_APP_Get_Angular_Velocity_Degrees(&g_gryo, NULL, NULL);
-    if (GYRO_APP_Is_Data_Updated())
-    {
-      // 显示陀螺仪数据
-      LCD_Show_Num(0, 0, (uint32_t)g_gryo, 2, 16);
-      g_acc = g_gryo; // 假设g_acc与g_gryo相同
-      LCD_Clear(BLUE);
-    }
-    else
-    {
-      LCD_Show_Num(0, 0, 0, 2, 16); // 如果没有更新，显示0
-      LCD_Clear(RED);
-    }
-    // 自定义部分结束
 
     astra_ui_widget_core();
     astra_ui_main_core();

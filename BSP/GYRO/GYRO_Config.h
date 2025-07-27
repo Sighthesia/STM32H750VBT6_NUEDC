@@ -13,6 +13,8 @@
 #ifndef __GYRO_CONFIG_H
 #define __GYRO_CONFIG_H
 
+#include "usart.h"
+
 /* -------------------------------- 此处自定义功能开关 ------------------------------- */
 
 #define USE_DEBUG 0 // 1:使用串口发送陀螺仪数据;0:不使用串口发送陀螺仪数据(调试用)
@@ -24,8 +26,8 @@
 #define GYRO_DEBUG_UART_HANDLE huart3   // 选择发送陀螺仪数据的串口实例(调试用)
 #endif                                  // USE_DEBUG
 
-#define GYRO_RECEIVE_UART_INSTANCE USART3 // 选择接收陀螺仪数据的串口实例
-#define GYRO_RECEIVE_UART_HANDLE huart3   // 选择接收陀螺仪数据的串口实例
+#define GYRO_RECEIVE_UART_INSTANCE USART1 // 选择接收陀螺仪数据的串口实例
+#define GYRO_RECEIVE_UART_HANDLE huart1   // 选择接收陀螺仪数据的串口实例
 
 /* ------------------------------ 此处定义RS485相关配置 ----------------------------- */
 

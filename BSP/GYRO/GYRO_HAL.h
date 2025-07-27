@@ -14,14 +14,16 @@
 #define __GYRO_HAL_H
 
 #include "GYRO_Config.h"
+#include "main.h"
 #include "stdint.h"
 
-typedef struct gyro_hal_t
+typedef struct
 {
     void (*UART_Receive)(void);       // 启动UART接收
     void (*UART_DEBUG)(uint8_t data); // 发送陀螺仪数据(调试用)
-} gyro_hal;
+} gyro_hal_t;
 
 extern gyro_hal_t gyro_hal;
+extern uint8_t uart_rx_buffer[1];
 
 #endif /* __GYRO_HAL_H */

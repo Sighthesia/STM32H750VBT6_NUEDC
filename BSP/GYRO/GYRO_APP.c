@@ -47,8 +47,8 @@ void GYRO_UART_IT_Callback_Process(UART_HandleTypeDef *huart)
 
 		ttl_receive_flag = 1;
 
-		current_receive_data = gyro_hal.uart_rx_buffer[0]; // 读取接收到的数据
-		frame_data[frame_count] = current_receive_data;	   // 串口数据填入数组
+		current_receive_data = uart_rx_buffer[0];		// 读取接收到的数据
+		frame_data[frame_count] = current_receive_data; // 串口数据填入数组
 
 		if (((last_receive_num == FRAME_END) && (current_receive_data == FRAME_HEAD)) || frame_count > 0)
 		{

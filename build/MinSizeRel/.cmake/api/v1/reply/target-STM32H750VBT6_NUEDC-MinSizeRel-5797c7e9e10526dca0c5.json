@@ -284,7 +284,8 @@
 				105,
 				106,
 				107,
-				108
+				108,
+				109
 			]
 		},
 		{
@@ -403,7 +404,7 @@
 			"language" : "ASM",
 			"sourceIndexes" : 
 			[
-				109
+				110
 			]
 		}
 	],
@@ -540,14 +541,15 @@
 				105,
 				106,
 				107,
-				108
+				108,
+				109
 			]
 		},
 		{
 			"name" : "",
 			"sourceIndexes" : 
 			[
-				109
+				110
 			]
 		}
 	],
@@ -593,6 +595,12 @@
 			"backtrace" : 4,
 			"compileGroupIndex" : 0,
 			"path" : "BSP/Encoder_EXTI/Encoder_EXTI.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 4,
+			"compileGroupIndex" : 0,
+			"path" : "BSP/GYRO/GYRO_APP.c",
 			"sourceGroupIndex" : 0
 		},
 		{
