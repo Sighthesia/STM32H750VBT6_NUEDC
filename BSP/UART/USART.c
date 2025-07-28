@@ -13,17 +13,35 @@
 #include "main.h"
 #include "usart.h"
 
-#include "GYRO_APP.h"
+#include "lwrb.h"
 
-/**
- * @brief  UART接收完成中断回调
- * @param  huart UART句柄指针
+lwrb_t uart3_rx_buffer;
+uint8_t uart3_rx_buffer_data[16];
+
+lwrb_init(&uart3_rx_buffer, uart3_rx_buffer_data, sizeof(uart3_rx_buffer_data));
+
+uint8_t uart3_rx_byte;
+
+void UART3_Start_Receive_IT(void)
+{
+    HAL_UART_Receive_IT(&huart3, &uart3_rx_byte, 1);
+}
+
+/** ***************************************************************************
+ * @brief UART3接收回调函数
+ * @param  huart: UART句柄
  */
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 {
-    // if (huart == &GYRO_RECEIVE_UART_HANDLE)
-    // {
-    //     printf("[UART RX] 接收到数据: %s\r\n", uart_rx_buffer);
-    //     GYRO_UART_Receive_Process();
-    // }
+    if (huart->Instance == USART3)
+    {
+        // 写入环形缓冲区
+        lwrb_write(&uart3_rx_buffer, &uart3_rx_byte, 1);
+
+        // 调试输出
+        printf("[UART RX] 收到: 0x%02X\r\n", uart3_rx_byte);
+
+        // 继续接收下一个字节
+        UART3_Start_Receive_IT();
+    }
 }
