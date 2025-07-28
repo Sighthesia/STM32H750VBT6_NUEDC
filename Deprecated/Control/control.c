@@ -238,35 +238,35 @@ uint8_t Control_Get_Point1_P(void)
         {
         case 0x10: // 第4个点X坐标
             rec_step_point[3][0] = (load_1 + load_2 + load_3);
-            // printf("rec_step_point[3][0]: %d\r\n", rec_step_point[3][0]);
+            printf("rec_step_point[3][0]: %d\r\n", rec_step_point[3][0]);
             break;
         case 0x11: // 第4个点Y坐标
             rec_step_point[3][1] = (load_1 + load_2 + load_3);
-            // printf("rec_step_point[3][1]: %d\r\n", rec_step_point[3][1]);
+            printf("rec_step_point[3][1]: %d\r\n", rec_step_point[3][1]);
             break;
         case 0x12: // 第1个点X坐标
             rec_step_point[0][0] = (load_1 + load_2 + load_3);
-            // printf("rec_step_point[0][0]: %d\r\n", rec_step_point[0][0]);
+            printf("rec_step_point[0][0]: %d\r\n", rec_step_point[0][0]);
             break;
         case 0x13: // 第1个点Y坐标
             rec_step_point[0][1] = (load_1 + load_2 + load_3);
-            // printf("rec_step_point[0][1]: %d\r\n", rec_step_point[0][1]);
+            printf("rec_step_point[0][1]: %d\r\n", rec_step_point[0][1]);
             break;
         case 0x14: // 第2个点X坐标
             rec_step_point[1][0] = (load_1 + load_2 + load_3);
-            // printf("rec_step_point[1][0]: %d\r\n", rec_step_point[1][0]);
+            printf("rec_step_point[1][0]: %d\r\n", rec_step_point[1][0]);
             break;
         case 0x15: // 第2个点Y坐标
             rec_step_point[1][1] = (load_1 + load_2 + load_3);
-            // printf("rec_step_point[1][1]: %d\r\n", rec_step_point[1][1]);
+            printf("rec_step_point[1][1]: %d\r\n", rec_step_point[1][1]);
             break;
         case 0x16: // 第3个点X坐标
             rec_step_point[2][0] = (load_1 + load_2 + load_3);
-            // printf("rec_step_point[2][0]: %d\r\n", rec_step_point[2][0]);
+            printf("rec_step_point[2][0]: %d\r\n", rec_step_point[2][0]);
             break;
         case 0x17: // 第3个点Y坐标
             rec_step_point[2][1] = (load_1 + load_2 + load_3);
-            // printf("rec_step_point[2][1]: %d\r\n", rec_step_point[2][1]);
+            printf("rec_step_point[2][1]: %d\r\n", rec_step_point[2][1]);
             mode_flag = 4; // 所有点接收完成，启动轨迹跟踪
             break;
         default:

@@ -36,7 +36,8 @@
         "u8g2_custom_hw_i2c_hal.h": "c",
         "usartx.h": "c",
         "atomic": "cpp",
-        "random": "c"
+        "random": "c",
+        "lazer_control.h": "c"
     },
     "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
     "files.readonlyInclude": {

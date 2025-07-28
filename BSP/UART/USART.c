@@ -14,12 +14,10 @@
 #include "usart.h"
 
 #include "lwrb.h"
+#include "stdio.h"
 
 lwrb_t uart3_rx_buffer;
 uint8_t uart3_rx_buffer_data[16];
-
-lwrb_init(&uart3_rx_buffer, uart3_rx_buffer_data, sizeof(uart3_rx_buffer_data));
-
 uint8_t uart3_rx_byte;
 
 void UART3_Start_Receive_IT(void)

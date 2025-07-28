@@ -27,8 +27,8 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "stdio.h"
 #include "TIM.h"
-#include <stdio.h>
 #include "Servo_PWM.h"
 #include "u8g2.h"
 #include "u8g2_Custom_HW_I2C_HAL.h"
@@ -39,8 +39,7 @@
 #include "Encoder_EXTI.h"
 #include "lcd.h"
 #include "gui.h"
-#include "GYRO_APP.h"
-#include "GYRO_HAL.h"
+#include "Lazer_Control.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -68,6 +67,9 @@ double x_p = -0000.64, x_i = -0.0076, x_d = -00002.50, y_p = -000.96, y_i = -0.0
 int16_t servo_y_angle = 0;
 int16_t servo_x_angle = 0;
 
+extern lwrb_t uart3_rx_buffer;
+extern uint8_t uart3_rx_buffer_data[16];
+extern uint8_t uart3_rx_byte;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -141,6 +143,7 @@ int main(void)
   MX_I2C1_Init();
   MX_SPI1_Init();
   /* USER CODE BEGIN 2 */
+  lwrb_init(&uart3_rx_buffer, uart3_rx_buffer_data, sizeof(uart3_rx_buffer_data));
 
   ebtn_APP_Key_INIT();
 
