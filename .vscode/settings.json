@@ -34,7 +34,8 @@
         "gyro_app.h": "c",
         "gyro_hal.h": "c",
         "u8g2_custom_hw_i2c_hal.h": "c",
-        "usartx.h": "c"
+        "usartx.h": "c",
+        "atomic": "cpp"
     },
     "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
     "files.readonlyInclude": {

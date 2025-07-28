@@ -5,21 +5,21 @@ events:
     kind: "message-v1"
     backtrace:
       - "/usr/share/cmake/Modules/CMakeDetermineSystem.cmake:200 (message)"
-      - "CMakeLists.txt:31 (enable_language)"
+      - "CMakeLists.txt:34 (enable_language)"
     message: |
       The target system is: Generic -  - arm
-      The host system is: Linux - 6.15.7-zen1-1-zen - x86_64
+      The host system is: Linux - 6.15.8-zen1-1-zen - x86_64
   -
     kind: "message-v1"
     backtrace:
       - "/usr/share/cmake/Modules/CMakeDetermineCompilerId.cmake:17 (message)"
       - "/usr/share/cmake/Modules/CMakeDetermineCompilerId.cmake:64 (__determine_compiler_id_test)"
       - "/usr/share/cmake/Modules/CMakeDetermineCCompiler.cmake:123 (CMAKE_DETERMINE_COMPILER_ID)"
-      - "CMakeLists.txt:31 (enable_language)"
+      - "CMakeLists.txt:34 (enable_language)"
     message: |
       Compiling the C compiler identification source file "CMakeCCompilerId.c" failed.
       Compiler: /usr/bin/arm-none-eabi-gcc 
-      Build flags: -mcpu=cortex-m7;-mfpu=fpv5-d16;-mfloat-abi=hard;-Wall;-Wextra;-Wpedantic;-fdata-sections;-ffunction-sections;-mcpu=cortex-m7;-mfpu=fpv5-d16;-mfloat-abi=hard;-Wall;-Wextra;-Wpedantic;-fdata-sections;-ffunction-sections;-mcpu=cortex-m7;-mfpu=fpv5-d16;-mfloat-abi=hard;-Wall;-Wextra;-Wpedantic;-fdata-sections;-ffunction-sections
+      Build flags: -mfpu=fpv4-sp-d16;-mfloat-abi=hard;-mcpu=cortex-m7;-mfpu=fpv5-d16;-mfloat-abi=hard;-Wall;-Wextra;-Wpedantic;-fdata-sections;-ffunction-sections;-mcpu=cortex-m7;-mfpu=fpv5-d16;-mfloat-abi=hard;-Wall;-Wextra;-Wpedantic;-fdata-sections;-ffunction-sections;-mcpu=cortex-m7;-mfpu=fpv5-d16;-mfloat-abi=hard;-Wall;-Wextra;-Wpedantic;-fdata-sections;-ffunction-sections
       Id flags:  
       
       The output was:
@@ -45,11 +45,11 @@ events:
       - "/usr/share/cmake/Modules/CMakeDetermineCompilerId.cmake:17 (message)"
       - "/usr/share/cmake/Modules/CMakeDetermineCompilerId.cmake:64 (__determine_compiler_id_test)"
       - "/usr/share/cmake/Modules/CMakeDetermineCCompiler.cmake:123 (CMAKE_DETERMINE_COMPILER_ID)"
-      - "CMakeLists.txt:31 (enable_language)"
+      - "CMakeLists.txt:34 (enable_language)"
     message: |
       Compiling the C compiler identification source file "CMakeCCompilerId.c" succeeded.
       Compiler: /usr/bin/arm-none-eabi-gcc 
-      Build flags: -mcpu=cortex-m7;-mfpu=fpv5-d16;-mfloat-abi=hard;-Wall;-Wextra;-Wpedantic;-fdata-sections;-ffunction-sections;-mcpu=cortex-m7;-mfpu=fpv5-d16;-mfloat-abi=hard;-Wall;-Wextra;-Wpedantic;-fdata-sections;-ffunction-sections;-mcpu=cortex-m7;-mfpu=fpv5-d16;-mfloat-abi=hard;-Wall;-Wextra;-Wpedantic;-fdata-sections;-ffunction-sections
+      Build flags: -mfpu=fpv4-sp-d16;-mfloat-abi=hard;-mcpu=cortex-m7;-mfpu=fpv5-d16;-mfloat-abi=hard;-Wall;-Wextra;-Wpedantic;-fdata-sections;-ffunction-sections;-mcpu=cortex-m7;-mfpu=fpv5-d16;-mfloat-abi=hard;-Wall;-Wextra;-Wpedantic;-fdata-sections;-ffunction-sections;-mcpu=cortex-m7;-mfpu=fpv5-d16;-mfloat-abi=hard;-Wall;-Wextra;-Wpedantic;-fdata-sections;-ffunction-sections
       Id flags: -c 
       
       The output was:
@@ -66,7 +66,7 @@ events:
     backtrace:
       - "/usr/share/cmake/Modules/CMakeDetermineCompilerId.cmake:1271 (message)"
       - "/usr/share/cmake/Modules/CMakeDetermineASMCompiler.cmake:139 (CMAKE_DETERMINE_COMPILER_ID_VENDOR)"
-      - "CMakeLists.txt:31 (enable_language)"
+      - "CMakeLists.txt:34 (enable_language)"
     message: |
       Checking whether the ASM compiler is GNU using "--version" matched "(GNU assembler)|(GCC)|(Free Software Foundation)":
       arm-none-eabi-gcc (Arch Repository) 14.2.0
@@ -80,11 +80,11 @@ events:
       - "/usr/share/cmake/Modules/CMakeDetermineCompilerId.cmake:17 (message)"
       - "/usr/share/cmake/Modules/CMakeDetermineCompilerId.cmake:64 (__determine_compiler_id_test)"
       - "/usr/share/cmake/Modules/CMakeDetermineCXXCompiler.cmake:126 (CMAKE_DETERMINE_COMPILER_ID)"
-      - "CMakeLists.txt:34 (project)"
+      - "CMakeLists.txt:37 (project)"
     message: |
       Compiling the CXX compiler identification source file "CMakeCXXCompilerId.cpp" failed.
       Compiler: /usr/bin/arm-none-eabi-g++ 
-      Build flags: -mcpu=cortex-m7;-mfpu=fpv5-d16;-mfloat-abi=hard;-Wall;-Wextra;-Wpedantic;-fdata-sections;-ffunction-sections;-mcpu=cortex-m7;-mfpu=fpv5-d16;-mfloat-abi=hard;-Wall;-Wextra;-Wpedantic;-fdata-sections;-ffunction-sections;-mcpu=cortex-m7;-mfpu=fpv5-d16;-mfloat-abi=hard;-Wall;-Wextra;-Wpedantic;-fdata-sections;-ffunction-sections;-fno-rtti;-fno-exceptions;-fno-threadsafe-statics
+      Build flags: -mfpu=fpv4-sp-d16;-mfloat-abi=hard;-mcpu=cortex-m7;-mfpu=fpv5-d16;-mfloat-abi=hard;-Wall;-Wextra;-Wpedantic;-fdata-sections;-ffunction-sections;-mcpu=cortex-m7;-mfpu=fpv5-d16;-mfloat-abi=hard;-Wall;-Wextra;-Wpedantic;-fdata-sections;-ffunction-sections;-mcpu=cortex-m7;-mfpu=fpv5-d16;-mfloat-abi=hard;-Wall;-Wextra;-Wpedantic;-fdata-sections;-ffunction-sections;-fno-rtti;-fno-exceptions;-fno-threadsafe-statics
       Id flags:  
       
       The output was:
@@ -110,11 +110,11 @@ events:
       - "/usr/share/cmake/Modules/CMakeDetermineCompilerId.cmake:17 (message)"
       - "/usr/share/cmake/Modules/CMakeDetermineCompilerId.cmake:64 (__determine_compiler_id_test)"
       - "/usr/share/cmake/Modules/CMakeDetermineCXXCompiler.cmake:126 (CMAKE_DETERMINE_COMPILER_ID)"
-      - "CMakeLists.txt:34 (project)"
+      - "CMakeLists.txt:37 (project)"
     message: |
       Compiling the CXX compiler identification source file "CMakeCXXCompilerId.cpp" succeeded.
       Compiler: /usr/bin/arm-none-eabi-g++ 
-      Build flags: -mcpu=cortex-m7;-mfpu=fpv5-d16;-mfloat-abi=hard;-Wall;-Wextra;-Wpedantic;-fdata-sections;-ffunction-sections;-mcpu=cortex-m7;-mfpu=fpv5-d16;-mfloat-abi=hard;-Wall;-Wextra;-Wpedantic;-fdata-sections;-ffunction-sections;-mcpu=cortex-m7;-mfpu=fpv5-d16;-mfloat-abi=hard;-Wall;-Wextra;-Wpedantic;-fdata-sections;-ffunction-sections;-fno-rtti;-fno-exceptions;-fno-threadsafe-statics
+      Build flags: -mfpu=fpv4-sp-d16;-mfloat-abi=hard;-mcpu=cortex-m7;-mfpu=fpv5-d16;-mfloat-abi=hard;-Wall;-Wextra;-Wpedantic;-fdata-sections;-ffunction-sections;-mcpu=cortex-m7;-mfpu=fpv5-d16;-mfloat-abi=hard;-Wall;-Wextra;-Wpedantic;-fdata-sections;-ffunction-sections;-mcpu=cortex-m7;-mfpu=fpv5-d16;-mfloat-abi=hard;-Wall;-Wextra;-Wpedantic;-fdata-sections;-ffunction-sections;-fno-rtti;-fno-exceptions;-fno-threadsafe-statics
       Id flags: -c 
       
       The output was:

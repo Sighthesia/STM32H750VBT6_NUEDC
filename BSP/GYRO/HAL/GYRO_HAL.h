@@ -16,6 +16,8 @@
 #include "GYRO_Config.h"
 #include "main.h"
 #include "stdint.h"
+#include "string.h"
+#include "stdio.h"
 
 typedef struct
 {
