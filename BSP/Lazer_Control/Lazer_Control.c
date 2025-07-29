@@ -15,9 +15,12 @@
 uint8_t frame_buffer[FRAME_MAX_LEN];
 
 uint16_t rectangle_position[4][2] = {0}; // 存储矩形四个点的坐标
+uint16_t lazer_position[2] = {0};        // 存储激光坐标 (X, Y)
+
 uint8_t rectangle_position_receive_complete = 0;
-uint16_t lazer_position[2] = {0}; // 存储激光坐标 (X, Y)
 uint8_t lazer_position_receive_complete = 0;
+
+extern servo_config_t servo_list[MAX_SERVO];
 
 uint8_t Rectangle_Protocol_Parse(lwrb_t *buff)
 {
@@ -125,7 +128,6 @@ uint8_t Rectangle_Protocol_Parse(lwrb_t *buff)
             }
         }
     }
-    return 0;
 }
 
 /** ***************************************************************************
@@ -207,5 +209,16 @@ uint8_t Lazer_Protocol_Parse(lwrb_t *buff)
             }
         }
     }
-    return 0;
+}
+
+void Lazer_Reset(void)
+{
+    lazer_control_hal.Move_Lazer_x(servo_list[SERVO_0X].mid_pwm);
+    lazer_control_hal.Move_Lazer_y(servo_list[SERVO_0Y].mid_pwm);
+}
+
+void Lazer_Set_Middle_Position(void)
+{
+    servo_list[SERVO_0X].mid_pwm = servo_list[SERVO_0X].pwm;
+    servo_list[SERVO_0Y].mid_pwm = servo_list[SERVO_0Y].pwm;
 }

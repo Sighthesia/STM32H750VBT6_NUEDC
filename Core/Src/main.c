@@ -29,7 +29,6 @@
 /* USER CODE BEGIN Includes */
 #include "stdio.h"
 #include "TIM.h"
-#include "Servo_PWM.h"
 #include "u8g2.h"
 #include "u8g2_Custom_HW_I2C_HAL.h"
 #include "astra_ui_draw_driver.h"
@@ -64,12 +63,11 @@
 // 原有变量
 double x_p = -0000.64, x_i = -0.0076, x_d = -00002.50, y_p = -000.96, y_i = -0.0096, y_d = -2.50; // 红色激光笔
 
-int16_t servo_y_angle = 0;
-int16_t servo_x_angle = 0;
-
 extern lwrb_t uart3_rx_buffer;
 extern uint8_t uart3_rx_buffer_data[16];
 extern uint8_t uart3_rx_byte;
+
+extern servo_config_t servo_list[MAX_SERVO];
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/

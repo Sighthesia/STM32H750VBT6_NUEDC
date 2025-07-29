@@ -14,7 +14,6 @@
 #ifndef SERVO_HAL_H
 #define SERVO_HAL_H
 
-#include "Servo_Config.h"
 #include "main.h"
 #include "tim.h"
 #include "stdint.h"

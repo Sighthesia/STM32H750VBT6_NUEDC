@@ -13,6 +13,8 @@
 #ifndef __LAZER_CONTROL_H
 #define __LAZER_CONTROL_H
 
+#include "Lazer_Control_HAL.h"
+
 #include "lwrb.h"
 #include "stdint.h"
 #include "stdio.h"

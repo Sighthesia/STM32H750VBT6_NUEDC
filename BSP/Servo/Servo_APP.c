@@ -14,17 +14,25 @@
 
 // 只读配置表
 static const servo_config_t servo_config_list[MAX_SERVO] = {
-    {TIM_CHANNEL_3, &htim3, SERVO_0X, 1, "Servo_0X", 1500, 2500, 500, 1500, SERVO_ANGLE_TYPE_270},
-    {TIM_CHANNEL_4, &htim3, SERVO_0Y, 1, "Servo_0Y", 1500, 2500, 500, 1500, SERVO_ANGLE_TYPE_180},
+    {&htim3, TIM_CHANNEL_3, SERVO_0X, "Servo_0X", SERVO_ANGLE_TYPE_270, 1, 1500, 1500, 500, 2500},
+    {&htim3, TIM_CHANNEL_4, SERVO_0Y, "Servo_0Y", SERVO_ANGLE_TYPE_180, 1, 1500, 1500, 500, 2500},
 };
 
 // 可更改的运行时舵机数组
 servo_config_t servo_list[MAX_SERVO];
 
 /** ***************************************************************************
+ * @brief 验证舵机ID有效性
+ */
+static uint8_t Validate_Servo_ID(uint8_t servo_id)
+{
+    return (servo_id < MAX_SERVO);
+}
+
+/** ***************************************************************************
  * @brief 角度转换为PWM值 (支持180/270度舵机)
  */
-static uint16_t Angle_To_PWM(uint8_t servo_id, float angle)
+uint16_t Angle_To_PWM(uint8_t servo_id, float angle)
 {
     if (!Validate_Servo_ID(servo_id))
         return 500;
@@ -38,11 +46,24 @@ static uint16_t Angle_To_PWM(uint8_t servo_id, float angle)
 }
 
 /** ***************************************************************************
- * @brief 验证舵机ID有效性
+ * @brief PWM值转换为角度 (支持180/270度舵机)
+ * @param servo_id 舵机ID
+ * @param pwm PWM值 (微秒)
+ * @return 角度 (float)
  */
-static uint8_t Validate_Servo_ID(uint8_t servo_id)
+float PWM_To_Angle(uint8_t servo_id, uint16_t pwm)
 {
-    return (servo_id < MAX_SERVO);
+    if (!Validate_Servo_ID(servo_id))
+        return 0.0f;
+    servo_angle_type_t angle_type = servo_list[servo_id].angle_type;
+    float max_angle = (angle_type == SERVO_ANGLE_TYPE_270) ? 270.0f : 180.0f;
+    uint16_t min_pwm = servo_list[servo_id].min_pwm;
+    uint16_t max_pwm = servo_list[servo_id].max_pwm;
+    if (pwm < min_pwm)
+        pwm = min_pwm;
+    else if (pwm > max_pwm)
+        pwm = max_pwm;
+    return ((float)(pwm - min_pwm)) * max_angle / (max_pwm - min_pwm);
 }
 
 /** ***************************************************************************
@@ -73,13 +94,13 @@ static void Config_Init(void)
 void Servo_Init(void)
 {
     Config_Init();
-    Servo_HAL_Start_All();
+    Servo_Start_All();
 }
 
 /** ***************************************************************************
  * @brief 按ID设置舵机角度 (支持180/270度舵机)
  */
-void Servo_HAL_Set_Angle_By_ID(uint8_t servo_id, float angle)
+void Servo_Set_Angle(uint8_t servo_id, float angle)
 {
     if (!Validate_Servo_ID(servo_id))
         return;
@@ -99,7 +120,7 @@ void Servo_HAL_Set_Angle_By_ID(uint8_t servo_id, float angle)
 /** ***************************************************************************
  * @brief 按ID设置舵机PWM值
  */
-void Servo_HAL_Set_PWM(uint8_t servo_id, uint16_t pwm)
+void Servo_Set_PWM(uint8_t servo_id, uint16_t pwm)
 {
     if (!Validate_Servo_ID(servo_id))
         return;
@@ -118,7 +139,7 @@ void Servo_HAL_Set_PWM(uint8_t servo_id, uint16_t pwm)
 /** ***************************************************************************
  * @brief 启动所有已启用的舵机
  */
-void Servo_HAL_Start_All(void)
+void Servo_Start_All(void)
 {
     for (uint8_t i = 0; i < MAX_SERVO; i++)
     {
@@ -133,7 +154,7 @@ void Servo_HAL_Start_All(void)
 /** ***************************************************************************
  * @brief 停止所有舵机
  */
-void Servo_HAL_Stop_All(void)
+void Servo_Stop_All(void)
 {
     for (uint8_t i = 0; i < MAX_SERVO; i++)
     {
@@ -143,4 +164,3 @@ void Servo_HAL_Stop_All(void)
         }
     }
 }
-/* --------------------------------- 自定义部分结束 -------------------------------- */
