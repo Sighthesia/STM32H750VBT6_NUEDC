@@ -20,7 +20,7 @@ static const servo_config_t servo_config_table[MAX_SERVO] = {
     {&htim3, TIM_CHANNEL_4, SERVO_ID_J1, SERVO_GROUP_0, 1, SERVO_ANGLE_TYPE_180, "Servo_0Y", 933, 2100, 400, 933},   // Y轴舵机 - 180°舵机
 };
 
-servo_typedef_t servo_array[MAX_SERVO]; // 舵机控制数组
+servo_typedef_t servo_list[MAX_SERVO]; // 舵机控制数组
 
 // 角度数组支持小数
 volatile float servo_angle[MAX_GROUP][MAX_SERVO];
@@ -47,17 +47,17 @@ static void Servo_Init_From_Config_Table(void)
 {
     for (uint8_t i = 0; i < MAX_SERVO; i++)
     {
-        servo_array[i].pwm = servo_config_table[i].default_pwm;
-        servo_array[i].max_pwm = servo_config_table[i].max_pwm;
-        servo_array[i].min_pwm = servo_config_table[i].min_pwm;
-        servo_array[i].mid_pwm = servo_config_table[i].mid_pwm;
-        servo_array[i].tim_channel = servo_config_table[i].tim_channel;
-        servo_array[i].tim_handle = servo_config_table[i].tim_handle;
-        servo_array[i].servo_id = servo_config_table[i].servo_id;
-        servo_array[i].group_id = servo_config_table[i].group_id;
-        servo_array[i].enabled = servo_config_table[i].enabled;
-        servo_array[i].angle_type = servo_config_table[i].angle_type;
-        servo_array[i].name = servo_config_table[i].name;
+        servo_list[i].pwm = servo_config_table[i].default_pwm;
+        servo_list[i].max_pwm = servo_config_table[i].max_pwm;
+        servo_list[i].min_pwm = servo_config_table[i].min_pwm;
+        servo_list[i].mid_pwm = servo_config_table[i].mid_pwm;
+        servo_list[i].tim_channel = servo_config_table[i].tim_channel;
+        servo_list[i].tim_handle = servo_config_table[i].tim_handle;
+        servo_list[i].servo_id = servo_config_table[i].servo_id;
+        servo_list[i].group_id = servo_config_table[i].group_id;
+        servo_list[i].enabled = servo_config_table[i].enabled;
+        servo_list[i].angle_type = servo_config_table[i].angle_type;
+        servo_list[i].name = servo_config_table[i].name;
     }
 }
 
@@ -82,11 +82,11 @@ void Servo_PWM_TIM_Init(void)
     // 2. 批量启动PWM输出 - 表驱动法
     for (uint8_t i = 0; i < MAX_SERVO; i++)
     {
-        if (servo_array[i].enabled)
+        if (servo_list[i].enabled)
         {
-            servo_hal.PWM_Start(servo_array[i].tim_handle, servo_array[i].tim_channel);
+            servo_hal.PWM_Start(servo_list[i].tim_handle, servo_list[i].tim_channel);
             // 设置初始位置
-            Servo_Set_PWM_By_ID(servo_array[i].servo_id, servo_array[i].mid_pwm);
+            Servo_Set_PWM_By_ID(servo_list[i].servo_id, servo_list[i].mid_pwm);
         }
     }
 
@@ -106,30 +106,30 @@ void Servo_Set_Angle_By_ID(uint8_t servo_id, float angle)
     }
 
     uint8_t index = servo_id;
-    if (!servo_array[index].enabled)
+    if (!servo_list[index].enabled)
     {
         return;
     }
 
-    uint16_t pwm_value = Servo_Angle_To_PWM_By_Type(angle, servo_array[index].angle_type);
+    uint16_t pwm_value = Servo_Angle_To_PWM_By_Type(angle, servo_list[index].angle_type);
 
     // 限制PWM值范围
-    if (pwm_value > servo_array[index].max_pwm)
+    if (pwm_value > servo_list[index].max_pwm)
     {
-        pwm_value = servo_array[index].max_pwm;
+        pwm_value = servo_list[index].max_pwm;
     }
-    else if (pwm_value < servo_array[index].min_pwm)
+    else if (pwm_value < servo_list[index].min_pwm)
     {
-        pwm_value = servo_array[index].min_pwm;
+        pwm_value = servo_list[index].min_pwm;
     }
 
     // 避免重复设置
-    if (servo_array[index].pwm == pwm_value)
+    if (servo_list[index].pwm == pwm_value)
     {
         return;
     }
 
-    servo_array[index].pwm = pwm_value;
+    servo_list[index].pwm = pwm_value;
 
     // 设置定时器比较值
     Servo_Set_CCR(index, pwm_value);
@@ -148,28 +148,28 @@ void Servo_Set_PWM_By_ID(uint8_t servo_id, uint16_t pwm)
     }
 
     uint8_t index = servo_id;
-    if (!servo_array[index].enabled)
+    if (!servo_list[index].enabled)
     {
         return;
     }
 
     // 限制PWM值范围
-    if (pwm > servo_array[index].max_pwm)
+    if (pwm > servo_list[index].max_pwm)
     {
-        pwm = servo_array[index].max_pwm;
+        pwm = servo_list[index].max_pwm;
     }
-    else if (pwm < servo_array[index].min_pwm)
+    else if (pwm < servo_list[index].min_pwm)
     {
-        pwm = servo_array[index].min_pwm;
+        pwm = servo_list[index].min_pwm;
     }
 
     // 避免重复设置
-    if (servo_array[index].pwm == pwm)
+    if (servo_list[index].pwm == pwm)
     {
         return;
     }
 
-    servo_array[index].pwm = pwm;
+    servo_list[index].pwm = pwm;
 
     // 设置定时器比较值
     Servo_Set_CCR(index, pwm);
@@ -226,17 +226,17 @@ void Servo_Enable_By_ID(uint8_t servo_id, uint8_t enable)
     }
 
     uint8_t index = servo_id;
-    servo_array[index].enabled = enable ? 1 : 0;
+    servo_list[index].enabled = enable ? 1 : 0;
 
     if (servo_initialized)
     {
         if (enable)
         {
-            servo_hal.PWM_Start(servo_array[index].tim_handle, servo_array[index].tim_channel);
+            servo_hal.PWM_Start(servo_list[index].tim_handle, servo_list[index].tim_channel);
         }
         else
         {
-            servo_hal.PWM_Stop(servo_array[index].tim_handle, servo_array[index].tim_channel);
+            servo_hal.PWM_Stop(servo_list[index].tim_handle, servo_list[index].tim_channel);
         }
     }
 }
@@ -256,14 +256,14 @@ void Servo_Set_Config_By_ID(uint8_t servo_id, uint16_t min_pwm, uint16_t max_pwm
     }
 
     uint8_t index = servo_id;
-    if (!servo_array[index].enabled)
+    if (!servo_list[index].enabled)
     {
         return;
     }
 
-    servo_array[index].min_pwm = min_pwm;
-    servo_array[index].max_pwm = max_pwm;
-    servo_array[index].mid_pwm = mid_pwm;
+    servo_list[index].min_pwm = min_pwm;
+    servo_list[index].max_pwm = max_pwm;
+    servo_list[index].mid_pwm = mid_pwm;
 }
 
 /* ========================== 数组驱动核心辅助函数 ========================== */
@@ -281,7 +281,7 @@ static void Servo_Set_CCR(uint8_t servo_index, uint16_t ccr_value)
     }
 
     // 根据通道设置CCR值 - 使用HAL接口
-    servo_hal.Set_PWM_CCR(servo_array[servo_index].tim_handle, servo_array[servo_index].tim_channel, ccr_value);
+    servo_hal.Set_PWM_CCR(servo_list[servo_index].tim_handle, servo_list[servo_index].tim_channel, ccr_value);
 }
 
 /** ***************************************************************************
@@ -396,9 +396,9 @@ void Servo_Stop_All(void)
 {
     for (uint8_t i = 0; i < MAX_SERVO; i++)
     {
-        if (servo_array[i].enabled)
+        if (servo_list[i].enabled)
         {
-            servo_hal.PWM_Stop(servo_array[i].tim_handle, servo_array[i].tim_channel);
+            servo_hal.PWM_Stop(servo_list[i].tim_handle, servo_list[i].tim_channel);
         }
     }
 }
@@ -411,9 +411,9 @@ void Servo_Start_All(void)
 {
     for (uint8_t i = 0; i < MAX_SERVO; i++)
     {
-        if (servo_array[i].enabled)
+        if (servo_list[i].enabled)
         {
-            servo_hal.PWM_Start(servo_array[i].tim_handle, servo_array[i].tim_channel);
+            servo_hal.PWM_Start(servo_list[i].tim_handle, servo_list[i].tim_channel);
         }
     }
 }
@@ -430,9 +430,9 @@ void Servo_Stop_By_ID(uint8_t servo_id)
     }
 
     uint8_t index = servo_id;
-    if (servo_array[index].enabled)
+    if (servo_list[index].enabled)
     {
-        servo_hal.PWM_Stop(servo_array[index].tim_handle, servo_array[index].tim_channel);
+        servo_hal.PWM_Stop(servo_list[index].tim_handle, servo_list[index].tim_channel);
     }
 }
 
@@ -448,9 +448,9 @@ void Servo_Start_By_ID(uint8_t servo_id)
     }
 
     uint8_t index = servo_id;
-    if (servo_array[index].enabled)
+    if (servo_list[index].enabled)
     {
-        servo_hal.PWM_Start(servo_array[index].tim_handle, servo_array[index].tim_channel);
+        servo_hal.PWM_Start(servo_list[index].tim_handle, servo_list[index].tim_channel);
     }
 }
 
@@ -470,12 +470,12 @@ void Servo_Smooth_Move_By_ID(uint8_t servo_id, float target_angle, uint16_t step
     }
 
     uint8_t index = servo_id;
-    if (!servo_array[index].enabled)
+    if (!servo_list[index].enabled)
     {
         return;
     }
 
-    float current_angle = Servo_PWM_To_Angle(servo_array[index].pwm);
+    float current_angle = Servo_PWM_To_Angle(servo_list[index].pwm);
     float step_size = 0.5f; // 每步0.5度，可以调整精度
 
     // 限制目标角度范围
@@ -528,7 +528,7 @@ void Servo_Calibrate_By_ID(uint8_t servo_id)
     }
 
     uint8_t index = servo_id;
-    if (!servo_array[index].enabled)
+    if (!servo_list[index].enabled)
     {
         return;
     }
@@ -554,9 +554,9 @@ void Servo_Calibrate_All(void)
 {
     for (uint8_t i = 0; i < MAX_SERVO; i++)
     {
-        if (servo_array[i].enabled)
+        if (servo_list[i].enabled)
         {
-            Servo_Calibrate_By_ID(servo_array[i].servo_id);
+            Servo_Calibrate_By_ID(servo_list[i].servo_id);
         }
     }
 }
@@ -578,11 +578,11 @@ void Servo_Print_Status(void)
     // 注意：需要printf支持，或者通过其他方式输出
     for (uint8_t i = 0; i < MAX_SERVO; i++)
     {
-        if (servo_array[i].enabled)
+        if (servo_list[i].enabled)
         {
             // printf("Servo[%d] %s: PWM=%d, Angle=%d, Channel=0x%08X\r\n",
-            //        servo_array[i].servo_id, servo_array[i].name, servo_array[i].pwm,
-            //        Servo_PWM_To_Angle(servo_array[i].pwm), servo_array[i].tim_channel);
+            //        servo_list[i].servo_id, servo_list[i].name, servo_list[i].pwm,
+            //        Servo_PWM_To_Angle(servo_list[i].pwm), servo_list[i].tim_channel);
         }
     }
 }
@@ -596,7 +596,7 @@ uint8_t Servo_Get_Active_Count(void)
     uint8_t count = 0;
     for (uint8_t i = 0; i < MAX_SERVO; i++)
     {
-        if (servo_array[i].enabled)
+        if (servo_list[i].enabled)
         {
             count++;
         }
@@ -617,11 +617,11 @@ void Servo_Set_Angle_By_Group(uint8_t group_id, uint8_t servo_index, float angle
     uint8_t found_count = 0;
     for (uint8_t i = 0; i < MAX_SERVO; i++)
     {
-        if (servo_array[i].group_id == group_id && servo_array[i].enabled)
+        if (servo_list[i].group_id == group_id && servo_list[i].enabled)
         {
             if (found_count == servo_index)
             {
-                Servo_Set_Angle_By_ID(servo_array[i].servo_id, angle);
+                Servo_Set_Angle_By_ID(servo_list[i].servo_id, angle);
                 return;
             }
             found_count++;
@@ -640,11 +640,11 @@ void Servo_Set_PWM_By_Group(uint8_t group_id, uint8_t servo_index, uint16_t pwm)
     uint8_t found_count = 0;
     for (uint8_t i = 0; i < MAX_SERVO; i++)
     {
-        if (servo_array[i].group_id == group_id && servo_array[i].enabled)
+        if (servo_list[i].group_id == group_id && servo_list[i].enabled)
         {
             if (found_count == servo_index)
             {
-                Servo_Set_PWM_By_ID(servo_array[i].servo_id, pwm);
+                Servo_Set_PWM_By_ID(servo_list[i].servo_id, pwm);
                 return;
             }
             found_count++;
@@ -668,9 +668,9 @@ void Servo_Set_Group_Angles(uint8_t group_id, float *angles, uint8_t count)
     uint8_t found_count = 0;
     for (uint8_t i = 0; i < MAX_SERVO && found_count < count; i++)
     {
-        if (servo_array[i].group_id == group_id && servo_array[i].enabled)
+        if (servo_list[i].group_id == group_id && servo_list[i].enabled)
         {
-            Servo_Set_Angle_By_ID(servo_array[i].servo_id, angles[found_count]);
+            Servo_Set_Angle_By_ID(servo_list[i].servo_id, angles[found_count]);
             found_count++;
         }
     }
@@ -692,9 +692,9 @@ void Servo_Set_Group_PWMs(uint8_t group_id, uint16_t *pwms, uint8_t count)
     uint8_t found_count = 0;
     for (uint8_t i = 0; i < MAX_SERVO && found_count < count; i++)
     {
-        if (servo_array[i].group_id == group_id && servo_array[i].enabled)
+        if (servo_list[i].group_id == group_id && servo_list[i].enabled)
         {
-            Servo_Set_PWM_By_ID(servo_array[i].servo_id, pwms[found_count]);
+            Servo_Set_PWM_By_ID(servo_list[i].servo_id, pwms[found_count]);
             found_count++;
         }
     }
@@ -709,9 +709,9 @@ void Servo_Enable_By_Group(uint8_t group_id, uint8_t enable)
 {
     for (uint8_t i = 0; i < MAX_SERVO; i++)
     {
-        if (servo_array[i].group_id == group_id)
+        if (servo_list[i].group_id == group_id)
         {
-            Servo_Enable_By_ID(servo_array[i].servo_id, enable);
+            Servo_Enable_By_ID(servo_list[i].servo_id, enable);
         }
     }
 }
@@ -724,9 +724,9 @@ void Servo_Stop_By_Group(uint8_t group_id)
 {
     for (uint8_t i = 0; i < MAX_SERVO; i++)
     {
-        if (servo_array[i].group_id == group_id && servo_array[i].enabled)
+        if (servo_list[i].group_id == group_id && servo_list[i].enabled)
         {
-            Servo_Stop_By_ID(servo_array[i].servo_id);
+            Servo_Stop_By_ID(servo_list[i].servo_id);
         }
     }
 }
@@ -739,9 +739,9 @@ void Servo_Start_By_Group(uint8_t group_id)
 {
     for (uint8_t i = 0; i < MAX_SERVO; i++)
     {
-        if (servo_array[i].group_id == group_id && servo_array[i].enabled)
+        if (servo_list[i].group_id == group_id && servo_list[i].enabled)
         {
-            Servo_Start_By_ID(servo_array[i].servo_id);
+            Servo_Start_By_ID(servo_list[i].servo_id);
         }
     }
 }
@@ -754,9 +754,9 @@ void Servo_Calibrate_By_Group(uint8_t group_id)
 {
     for (uint8_t i = 0; i < MAX_SERVO; i++)
     {
-        if (servo_array[i].group_id == group_id && servo_array[i].enabled)
+        if (servo_list[i].group_id == group_id && servo_list[i].enabled)
         {
-            Servo_Calibrate_By_ID(servo_array[i].servo_id);
+            Servo_Calibrate_By_ID(servo_list[i].servo_id);
         }
     }
 }
@@ -783,7 +783,7 @@ uint8_t Servo_Get_Group_Count(uint8_t group_id)
     uint8_t count = 0;
     for (uint8_t i = 0; i < MAX_SERVO; i++)
     {
-        if (servo_array[i].group_id == group_id && servo_array[i].enabled)
+        if (servo_list[i].group_id == group_id && servo_list[i].enabled)
         {
             count++;
         }
@@ -821,9 +821,9 @@ servo_typedef_t *Servo_Get_Group_Array(uint8_t group_id, uint8_t *count)
     // 复制指定组别的舵机到临时数组
     for (uint8_t i = 0; i < MAX_SERVO; i++)
     {
-        if (servo_array[i].group_id == group_id && servo_array[i].enabled)
+        if (servo_list[i].group_id == group_id && servo_list[i].enabled)
         {
-            group_array[group_count] = servo_array[i];
+            group_array[group_count] = servo_list[i];
             group_count++;
         }
     }
@@ -847,7 +847,7 @@ TIM_HandleTypeDef *Servo_Get_TIM_Handle_By_ID(uint8_t servo_id)
     }
 
     uint8_t index = servo_id;
-    return servo_array[index].tim_handle;
+    return servo_list[index].tim_handle;
 }
 
 /** ***************************************************************************
@@ -865,7 +865,7 @@ uint8_t Servo_Get_Servo_Count_By_TIM(TIM_HandleTypeDef *tim_handle)
     uint8_t count = 0;
     for (uint8_t i = 0; i < MAX_SERVO; i++)
     {
-        if (servo_array[i].tim_handle == tim_handle && servo_array[i].enabled)
+        if (servo_list[i].tim_handle == tim_handle && servo_list[i].enabled)
         {
             count++;
         }
@@ -889,18 +889,18 @@ void Servo_Set_TIM_Handle_By_ID(uint8_t servo_id, TIM_HandleTypeDef *tim_handle)
     uint8_t index = servo_id;
 
     // 如果舵机正在运行，先停止
-    if (servo_array[index].enabled && servo_initialized)
+    if (servo_list[index].enabled && servo_initialized)
     {
-        servo_hal.PWM_Stop(servo_array[index].tim_handle, servo_array[index].tim_channel);
+        servo_hal.PWM_Stop(servo_list[index].tim_handle, servo_list[index].tim_channel);
     }
 
     // 更新定时器句柄
-    servo_array[index].tim_handle = tim_handle;
+    servo_list[index].tim_handle = tim_handle;
 
     // 如果舵机之前是启用的，重新启动
-    if (servo_array[index].enabled && servo_initialized)
+    if (servo_list[index].enabled && servo_initialized)
     {
-        servo_hal.PWM_Start(servo_array[index].tim_handle, servo_array[index].tim_channel);
+        servo_hal.PWM_Start(servo_list[index].tim_handle, servo_list[index].tim_channel);
     }
 }
 
@@ -917,9 +917,9 @@ void Servo_Stop_By_TIM_Handle(TIM_HandleTypeDef *tim_handle)
 
     for (uint8_t i = 0; i < MAX_SERVO; i++)
     {
-        if (servo_array[i].tim_handle == tim_handle && servo_array[i].enabled)
+        if (servo_list[i].tim_handle == tim_handle && servo_list[i].enabled)
         {
-            servo_hal.PWM_Stop(servo_array[i].tim_handle, servo_array[i].tim_channel);
+            servo_hal.PWM_Stop(servo_list[i].tim_handle, servo_list[i].tim_channel);
         }
     }
 }
@@ -937,9 +937,9 @@ void Servo_Start_By_TIM_Handle(TIM_HandleTypeDef *tim_handle)
 
     for (uint8_t i = 0; i < MAX_SERVO; i++)
     {
-        if (servo_array[i].tim_handle == tim_handle && servo_array[i].enabled)
+        if (servo_list[i].tim_handle == tim_handle && servo_list[i].enabled)
         {
-            servo_hal.PWM_Start(servo_array[i].tim_handle, servo_array[i].tim_channel);
+            servo_hal.PWM_Start(servo_list[i].tim_handle, servo_list[i].tim_channel);
         }
     }
 }
@@ -959,12 +959,12 @@ float Servo_Get_Current_Angle_By_ID(uint8_t servo_id)
     }
 
     uint8_t index = servo_id;
-    if (!servo_array[index].enabled)
+    if (!servo_list[index].enabled)
     {
         return -1.0f;
     }
 
-    return Servo_PWM_To_Angle_By_Type(servo_array[index].pwm, servo_array[index].angle_type);
+    return Servo_PWM_To_Angle_By_Type(servo_list[index].pwm, servo_list[index].angle_type);
 }
 
 /** ***************************************************************************
@@ -1041,7 +1041,7 @@ void Servo_Set_Angle_Type_By_ID(uint8_t servo_id, servo_angle_type_t angle_type)
     }
 
     uint8_t index = servo_id;
-    servo_array[index].angle_type = angle_type;
+    servo_list[index].angle_type = angle_type;
 }
 
 /** ***************************************************************************
@@ -1057,7 +1057,7 @@ servo_angle_type_t Servo_Get_Angle_Type_By_ID(uint8_t servo_id)
     }
 
     uint8_t index = servo_id;
-    return servo_array[index].angle_type;
+    return servo_list[index].angle_type;
 }
 
 /** ***************************************************************************
@@ -1073,7 +1073,7 @@ float Servo_Get_Max_Angle_By_ID(uint8_t servo_id)
     }
 
     uint8_t index = servo_id;
-    servo_angle_type_t angle_type = servo_array[index].angle_type;
+    servo_angle_type_t angle_type = servo_list[index].angle_type;
 
     switch (angle_type)
     {

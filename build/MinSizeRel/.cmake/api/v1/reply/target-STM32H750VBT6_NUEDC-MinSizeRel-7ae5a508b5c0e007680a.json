@@ -63,7 +63,7 @@
 			"compileCommandFragments" : 
 			[
 				{
-					"fragment" : " -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mcpu=cortex-m7 -mfpu=fpv5-d16 -mfloat-abi=hard  -Wall -Wextra -Wpedantic -fdata-sections -ffunction-sections -mcpu=cortex-m7 -mfpu=fpv5-d16 -mfloat-abi=hard  -Wall -Wextra -Wpedantic -fdata-sections -ffunction-sections -mcpu=cortex-m7 -mfpu=fpv5-d16 -mfloat-abi=hard  -Wall -Wextra -Wpedantic -fdata-sections -ffunction-sections -Os -DNDEBUG -std=gnu11"
+					"fragment" : " -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mcpu=cortex-m7 -mfpu=fpv5-d16 -mfloat-abi=hard  -Wall -Wextra -Wpedantic -fdata-sections -ffunction-sections -mcpu=cortex-m7 -mfpu=fpv5-d16 -mfloat-abi=hard  -Wall -Wextra -Wpedantic -fdata-sections -ffunction-sections -Os -DNDEBUG -std=gnu11"
 				}
 			],
 			"defines" : 
@@ -98,6 +98,10 @@
 				{
 					"backtrace" : 4,
 					"path" : "/home/Sighthesia/0_Files/1_Producing/Hardware/MCU/STM32/STM32H750VBT6_NUEDC/BSP/Lazer_Control"
+				},
+				{
+					"backtrace" : 4,
+					"path" : "/home/Sighthesia/0_Files/1_Producing/Hardware/MCU/STM32/STM32H750VBT6_NUEDC/BSP/PID"
 				},
 				{
 					"backtrace" : 4,
@@ -279,14 +283,17 @@
 				101,
 				102,
 				103,
-				104
+				104,
+				105,
+				106,
+				107
 			]
 		},
 		{
 			"compileCommandFragments" : 
 			[
 				{
-					"fragment" : " -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mcpu=cortex-m7 -mfpu=fpv5-d16 -mfloat-abi=hard  -Wall -Wextra -Wpedantic -fdata-sections -ffunction-sections -mcpu=cortex-m7 -mfpu=fpv5-d16 -mfloat-abi=hard  -Wall -Wextra -Wpedantic -fdata-sections -ffunction-sections -mcpu=cortex-m7 -mfpu=fpv5-d16 -mfloat-abi=hard  -Wall -Wextra -Wpedantic -fdata-sections -ffunction-sections -x assembler-with-cpp -MMD -MP -Os -DNDEBUG"
+					"fragment" : " -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mcpu=cortex-m7 -mfpu=fpv5-d16 -mfloat-abi=hard  -Wall -Wextra -Wpedantic -fdata-sections -ffunction-sections -mcpu=cortex-m7 -mfpu=fpv5-d16 -mfloat-abi=hard  -Wall -Wextra -Wpedantic -fdata-sections -ffunction-sections -x assembler-with-cpp -MMD -MP -Os -DNDEBUG"
 				}
 			],
 			"defines" : 
@@ -321,6 +328,10 @@
 				{
 					"backtrace" : 4,
 					"path" : "/home/Sighthesia/0_Files/1_Producing/Hardware/MCU/STM32/STM32H750VBT6_NUEDC/BSP/Lazer_Control"
+				},
+				{
+					"backtrace" : 4,
+					"path" : "/home/Sighthesia/0_Files/1_Producing/Hardware/MCU/STM32/STM32H750VBT6_NUEDC/BSP/PID"
 				},
 				{
 					"backtrace" : 4,
@@ -390,7 +401,7 @@
 			"language" : "ASM",
 			"sourceIndexes" : 
 			[
-				105
+				108
 			]
 		}
 	],
@@ -400,7 +411,7 @@
 		"commandFragments" : 
 		[
 			{
-				"fragment" : "-mfpu=fpv4-sp-d16 -mfloat-abi=hard -mcpu=cortex-m7 -mfpu=fpv5-d16 -mfloat-abi=hard  -Wall -Wextra -Wpedantic -fdata-sections -ffunction-sections -mcpu=cortex-m7 -mfpu=fpv5-d16 -mfloat-abi=hard  -Wall -Wextra -Wpedantic -fdata-sections -ffunction-sections -mcpu=cortex-m7 -mfpu=fpv5-d16 -mfloat-abi=hard  -Wall -Wextra -Wpedantic -fdata-sections -ffunction-sections -Os -DNDEBUG",
+				"fragment" : "-mfpu=fpv4-sp-d16 -mfloat-abi=hard -mcpu=cortex-m7 -mfpu=fpv5-d16 -mfloat-abi=hard  -Wall -Wextra -Wpedantic -fdata-sections -ffunction-sections -mcpu=cortex-m7 -mfpu=fpv5-d16 -mfloat-abi=hard  -Wall -Wextra -Wpedantic -fdata-sections -ffunction-sections -Os -DNDEBUG",
 				"role" : "flags"
 			},
 			{
@@ -533,14 +544,17 @@
 				101,
 				102,
 				103,
-				104
+				104,
+				105,
+				106,
+				107
 			]
 		},
 		{
 			"name" : "",
 			"sourceIndexes" : 
 			[
-				105
+				108
 			]
 		}
 	],
@@ -597,6 +611,18 @@
 		{
 			"backtrace" : 5,
 			"compileGroupIndex" : 0,
+			"path" : "BSP/PID/PID.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 5,
+			"compileGroupIndex" : 0,
+			"path" : "BSP/Servo_Yahboom/Servo_APP.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 5,
+			"compileGroupIndex" : 0,
 			"path" : "BSP/Servo_Yahboom/Servo_HAL.c",
 			"sourceGroupIndex" : 0
 		},
@@ -604,6 +630,12 @@
 			"backtrace" : 5,
 			"compileGroupIndex" : 0,
 			"path" : "BSP/Servo_Yahboom/Servo_PWM.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 5,
+			"compileGroupIndex" : 0,
+			"path" : "BSP/Servo_Yahboom/servo_simple.c",
 			"sourceGroupIndex" : 0
 		},
 		{

@@ -37,7 +37,8 @@
         "usartx.h": "c",
         "atomic": "cpp",
         "random": "c",
-        "lazer_control.h": "c"
+        "lazer_control.h": "c",
+        "servo_simple.h": "c"
     },
     "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
     "files.readonlyInclude": {

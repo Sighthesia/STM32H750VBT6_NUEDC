@@ -14,9 +14,10 @@
 #ifndef SERVO_HAL_H
 #define SERVO_HAL_H
 
-#include "main.h"
 #include "Servo_Config.h"
-#include <stdint.h>
+#include "main.h"
+#include "tim.h"
+#include "stdint.h"
 
 /* --------------------------------- 此处修改HAL状态定义 --------------------------------- */
 typedef enum

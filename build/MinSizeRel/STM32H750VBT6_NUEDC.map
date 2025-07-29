@@ -703,7 +703,7 @@ Discarded input sections
                 0x00000000        0x1 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Servo_Yahboom/Servo_PWM.c.obj
  .bss.servo_angle
                 0x00000000        0x8 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Servo_Yahboom/Servo_PWM.c.obj
- .bss.servo_array
+ .bss.servo_list
                 0x00000000       0x30 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Servo_Yahboom/Servo_PWM.c.obj
  .comment       0x00000000       0x1f CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Servo_Yahboom/Servo_PWM.c.obj
  .ARM.attributes

@@ -53,7 +53,7 @@ typedef struct
 } servo_config_t;
 
 /* --------------------------------- 外部变量声明 --------------------------------- */
-extern servo_typedef_t servo_array[MAX_SERVO];           // 舵机控制数组
+extern servo_typedef_t servo_list[MAX_SERVO];            // 舵机控制数组
 extern volatile float servo_angle[MAX_GROUP][MAX_SERVO]; // 角度数组支持小数
 
 /* ---------------------------------- 函数声明 ---------------------------------- */
