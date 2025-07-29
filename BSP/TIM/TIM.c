@@ -14,6 +14,7 @@
 #include "usart.h"
 #include <stdio.h>
 #include "Servo_APP.h"
+#include "control.h"
 
 uint8_t button_count = 0;
 
@@ -22,10 +23,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
     if (htim->Instance == TIM7)
     {
         ebtn_APP_Key_Process();
-
-        Servo_Update_All_PWM();
-        printf("Servo PWM Updated\n");
-        printf("X Servo: %d\n", servo_list[SERVO_0X].pwm);
+        Draw();
     }
 }
 

@@ -63,7 +63,7 @@
 			"compileCommandFragments" : 
 			[
 				{
-					"fragment" : " -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mcpu=cortex-m7 -mfpu=fpv5-d16 -mfloat-abi=hard  -Wall -Wextra -Wpedantic -fdata-sections -ffunction-sections -mcpu=cortex-m7 -mfpu=fpv5-d16 -mfloat-abi=hard  -Wall -Wextra -Wpedantic -fdata-sections -ffunction-sections -Os -DNDEBUG -std=gnu11"
+					"fragment" : " -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mcpu=cortex-m7 -mfpu=fpv5-d16 -mfloat-abi=hard  -Wall -Wextra -Wpedantic -fdata-sections -ffunction-sections -mcpu=cortex-m7 -mfpu=fpv5-d16 -mfloat-abi=hard  -Wall -Wextra -Wpedantic -fdata-sections -ffunction-sections -mcpu=cortex-m7 -mfpu=fpv5-d16 -mfloat-abi=hard  -Wall -Wextra -Wpedantic -fdata-sections -ffunction-sections -Os -DNDEBUG -std=gnu11"
 				}
 			],
 			"defines" : 
@@ -86,6 +86,10 @@
 				{
 					"backtrace" : 4,
 					"path" : "/home/Sighthesia/0_Files/1_Producing/Hardware/MCU/STM32/STM32H750VBT6_NUEDC/BSP/Astra_UI_Lite"
+				},
+				{
+					"backtrace" : 4,
+					"path" : "/home/Sighthesia/0_Files/1_Producing/Hardware/MCU/STM32/STM32H750VBT6_NUEDC/BSP/CONTROL"
 				},
 				{
 					"backtrace" : 4,
@@ -289,14 +293,15 @@
 				103,
 				104,
 				105,
-				106
+				106,
+				107
 			]
 		},
 		{
 			"compileCommandFragments" : 
 			[
 				{
-					"fragment" : " -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mcpu=cortex-m7 -mfpu=fpv5-d16 -mfloat-abi=hard  -Wall -Wextra -Wpedantic -fdata-sections -ffunction-sections -mcpu=cortex-m7 -mfpu=fpv5-d16 -mfloat-abi=hard  -Wall -Wextra -Wpedantic -fdata-sections -ffunction-sections -x assembler-with-cpp -MMD -MP -Os -DNDEBUG"
+					"fragment" : " -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mcpu=cortex-m7 -mfpu=fpv5-d16 -mfloat-abi=hard  -Wall -Wextra -Wpedantic -fdata-sections -ffunction-sections -mcpu=cortex-m7 -mfpu=fpv5-d16 -mfloat-abi=hard  -Wall -Wextra -Wpedantic -fdata-sections -ffunction-sections -mcpu=cortex-m7 -mfpu=fpv5-d16 -mfloat-abi=hard  -Wall -Wextra -Wpedantic -fdata-sections -ffunction-sections -x assembler-with-cpp -MMD -MP -Os -DNDEBUG"
 				}
 			],
 			"defines" : 
@@ -319,6 +324,10 @@
 				{
 					"backtrace" : 4,
 					"path" : "/home/Sighthesia/0_Files/1_Producing/Hardware/MCU/STM32/STM32H750VBT6_NUEDC/BSP/Astra_UI_Lite"
+				},
+				{
+					"backtrace" : 4,
+					"path" : "/home/Sighthesia/0_Files/1_Producing/Hardware/MCU/STM32/STM32H750VBT6_NUEDC/BSP/CONTROL"
 				},
 				{
 					"backtrace" : 4,
@@ -408,7 +417,7 @@
 			"language" : "ASM",
 			"sourceIndexes" : 
 			[
-				107
+				108
 			]
 		}
 	],
@@ -418,7 +427,7 @@
 		"commandFragments" : 
 		[
 			{
-				"fragment" : "-mfpu=fpv4-sp-d16 -mfloat-abi=hard -mcpu=cortex-m7 -mfpu=fpv5-d16 -mfloat-abi=hard  -Wall -Wextra -Wpedantic -fdata-sections -ffunction-sections -mcpu=cortex-m7 -mfpu=fpv5-d16 -mfloat-abi=hard  -Wall -Wextra -Wpedantic -fdata-sections -ffunction-sections -Os -DNDEBUG",
+				"fragment" : "-mfpu=fpv4-sp-d16 -mfloat-abi=hard -mcpu=cortex-m7 -mfpu=fpv5-d16 -mfloat-abi=hard  -Wall -Wextra -Wpedantic -fdata-sections -ffunction-sections -mcpu=cortex-m7 -mfpu=fpv5-d16 -mfloat-abi=hard  -Wall -Wextra -Wpedantic -fdata-sections -ffunction-sections -mcpu=cortex-m7 -mfpu=fpv5-d16 -mfloat-abi=hard  -Wall -Wextra -Wpedantic -fdata-sections -ffunction-sections -Os -DNDEBUG",
 				"role" : "flags"
 			},
 			{
@@ -553,14 +562,15 @@
 				103,
 				104,
 				105,
-				106
+				106,
+				107
 			]
 		},
 		{
 			"name" : "",
 			"sourceIndexes" : 
 			[
-				107
+				108
 			]
 		}
 	],
@@ -588,6 +598,12 @@
 			"backtrace" : 5,
 			"compileGroupIndex" : 0,
 			"path" : "BSP/Astra_UI_Lite/astra_ui_item.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 5,
+			"compileGroupIndex" : 0,
+			"path" : "BSP/CONTROL/control.c",
 			"sourceGroupIndex" : 0
 		},
 		{
