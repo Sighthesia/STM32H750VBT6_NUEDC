@@ -32,4 +32,12 @@ extern uint8_t frame_buffer[FRAME_MAX_LEN];
 extern uint8_t frame_index;
 extern uint8_t frame_receiving;
 
+extern servo_config_t servo_list[MAX_SERVO];
+
+uint8_t Rectangle_Protocol_Parse(lwrb_t *buff);
+uint8_t Lazer_Protocol_Parse(lwrb_t *buff);
+
+void Lazer_Reset(void);
+void Lazer_Set_Middle_Position(void);
+
 #endif /* __LAZER_CONTROL_H */

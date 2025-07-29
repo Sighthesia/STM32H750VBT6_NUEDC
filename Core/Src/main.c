@@ -67,7 +67,9 @@ extern lwrb_t uart3_rx_buffer;
 extern uint8_t uart3_rx_buffer_data[16];
 extern uint8_t uart3_rx_byte;
 
-extern servo_config_t servo_list[MAX_SERVO];
+int16_t x_angle = 0;
+int16_t y_angle = 0;
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -152,11 +154,23 @@ int main(void)
 
   astra_push_item_to_list(astra_get_root_list(), Control);
 
+  astra_list_item_t *Lazer_Control = astra_new_list_item("Lazer Control");
+  astra_push_item_to_list(Control, astra_new_list_item("Lazer Control"));
+
+  astra_push_item_to_list(Lazer_Control, astra_new_user_item("Set Middle", Lazer_Set_Middle_Position, NULL, NULL));
+  astra_push_item_to_list(Lazer_Control, astra_new_user_item("Reset", Lazer_Reset, NULL, NULL));
+
+  astra_push_item_to_list(Lazer_Control, astra_new_slider_item("Lazer X", &servo_list[0].pwm, 50, 500, 2500));
+  astra_push_item_to_list(Lazer_Control, astra_new_slider_item("Lazer Y", &servo_list[1].pwm, 50, 500, 2500));
+  astra_push_item_to_list(Lazer_Control, astra_new_slider_item("X Angel", &x_angle, 1, 500, 2500));
+  astra_push_item_to_list(Lazer_Control, astra_new_slider_item("Y Angel", &y_angle, 1, 500, 2500));
+
   char msg[100] = {};
   sprintf(msg, "启动时间: %dms.", get_ticks());
   astra_push_pop_up(msg, 1500);
 
   HAL_TIM_Base_Start_IT(&htim7);
+  Servo_Init();
 
   /* USER CODE END 2 */
 
@@ -179,6 +193,9 @@ int main(void)
         astra_selector_go_prev_item();
       }
     }
+
+    x_angle = PWM_To_Angle(SERVO_0X, servo_list[0].pwm);
+    y_angle = PWM_To_Angle(SERVO_0Y, servo_list[1].pwm);
 
     oled_clear_buffer();
 

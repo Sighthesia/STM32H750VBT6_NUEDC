@@ -40,7 +40,8 @@
         "lazer_control.h": "c",
         "servo_simple.h": "c",
         "servo_app.h": "c",
-        "servo_config.h": "c"
+        "servo_config.h": "c",
+        "variant": "c"
     },
     "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
     "files.readonlyInclude": {

@@ -18,7 +18,8 @@ extern bool astra_exit_animation_finished;
 #define INFO_BAR_HEIGHT 20
 #define INFO_BAR_OFFSET 10
 
-typedef struct astra_info_bar_t {
+typedef struct astra_info_bar_t
+{
     char *content;
     uint16_t span;
     float y_info_bar, y_info_bar_trg, w_info_bar, w_info_bar_trg;
@@ -36,7 +37,8 @@ extern void astra_push_info_bar(char *_content, const uint16_t _span);
 #define POP_UP_HEIGHT 20
 #define POP_UP_OFFSET 8
 
-typedef struct astra_pop_up_t {
+typedef struct astra_pop_up_t
+{
     char *content;
     uint16_t span;
     float y_pop_up, y_pop_up_trg, w_pop_up, w_pop_up_trg;
@@ -62,14 +64,17 @@ extern void astra_push_pop_up(char *_content, const uint16_t _span);
 #define LIST_INFO_BAR_HEIGHT   7
 #define LIST_FONT_TOP_MARGIN   4
 
-typedef enum {
+
+typedef enum
+{
     list_item,
     switch_item,
     slider_item,
     user_item,
 } astra_list_item_type_t;
 
-typedef struct astra_list_item_t {
+typedef struct astra_list_item_t
+{
     astra_list_item_type_t type;
     char *content;
 
@@ -80,13 +85,15 @@ typedef struct astra_list_item_t {
     struct astra_list_item_t *parent;
 } astra_list_item_t;
 
-typedef struct astra_switch_item_t {
+typedef struct astra_switch_item_t
+{
     astra_list_item_t base_item;
 
     bool *value;
 } astra_switch_item_t;
 
-typedef struct astra_slider_item_t {
+typedef struct astra_slider_item_t
+{
     astra_list_item_t base_item;
 
     int16_t *value;
@@ -97,7 +104,8 @@ typedef struct astra_slider_item_t {
     int16_t value_min;
 } astra_slider_item_t;
 
-typedef struct astra_user_item_t {
+typedef struct astra_user_item_t
+{
     astra_list_item_t base_item;
 
     bool in_user_item;
@@ -129,7 +137,8 @@ extern bool astra_push_item_to_list(astra_list_item_t *_parent, astra_list_item_
 /*** 列表项 ***/
 
 /*** 选择器 ***/
-typedef struct astra_selector_t {
+typedef struct astra_selector_t
+{
     float y_selector, y_selector_trg, w_selector, w_selector_trg, h_selector, h_selector_trg;
     uint8_t selected_index;
     astra_list_item_t *selected_item;
@@ -145,7 +154,8 @@ extern void astra_selector_exit_current_item();
 /*** 选择器 ***/
 
 /*** 相机 ***/
-typedef struct astra_camera_t {
+typedef struct astra_camera_t
+{
     float x_camera, x_camera_trg, y_camera, y_camera_trg;
     astra_selector_t *selector;
 } astra_camera_t;

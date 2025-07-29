@@ -20,8 +20,6 @@ uint16_t lazer_position[2] = {0};        // 存储激光坐标 (X, Y)
 uint8_t rectangle_position_receive_complete = 0;
 uint8_t lazer_position_receive_complete = 0;
 
-extern servo_config_t servo_list[MAX_SERVO];
-
 uint8_t Rectangle_Protocol_Parse(lwrb_t *buff)
 {
     uint8_t data;

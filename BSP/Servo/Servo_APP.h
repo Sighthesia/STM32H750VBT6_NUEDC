@@ -84,4 +84,11 @@ void Servo_Stop_All(void);
  */
 float PWM_To_Angle(uint8_t servo_id, uint16_t pwm);
 
+/** ***************************************************************************
+ * @brief 根据servo_list中的pwm值批量更新定时器比较值
+ */
+void Servo_Update_All_PWM(void);
+
+extern servo_config_t servo_list[MAX_SERVO];
+
 #endif /*  __SERVO_APP_H */

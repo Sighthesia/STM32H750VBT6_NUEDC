@@ -73,7 +73,22 @@ static void Set_PWM_CCR(uint8_t servo_index, uint16_t ccr_value)
 {
     TIM_HandleTypeDef *htim = servo_list[servo_index].tim_handle;
     uint32_t channel = servo_list[servo_index].tim_channel;
+
     servo_hal.Set_PWM_CCR(htim, channel, ccr_value);
+}
+
+/** ***************************************************************************
+ * @brief 根据servo_list中的pwm值批量更新定时器比较值
+ */
+void Servo_Update_All_PWM(void)
+{
+    for (uint8_t i = 0; i < MAX_SERVO; i++)
+    {
+        if (servo_list[i].enabled)
+        {
+            Set_PWM_CCR(i, servo_list[i].pwm);
+        }
+    }
 }
 
 /** ***************************************************************************
