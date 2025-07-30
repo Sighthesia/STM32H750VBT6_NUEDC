@@ -14,6 +14,7 @@
 #include "usart.h"
 
 #include "lwrb.h"
+#include "ZDT_Stepper.h"
 #include "stdio.h"
 
 lwrb_t uart3_rx_buffer;
@@ -42,4 +43,9 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
         // 继续接收下一个字节
         UART3_Start_Receive_IT();
     }
+}
+
+void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size)
+{
+    ZDT_Stepper_USRT_RX_callback(huart, Size);
 }

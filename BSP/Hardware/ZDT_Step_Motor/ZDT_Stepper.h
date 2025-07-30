@@ -7,6 +7,10 @@
 #include "stdlib.h"
 #include "usart.h"
 #include "stdint.h"
+#include "usart.h"
+#include "stdbool.h"
+
+#define ZDT_STEPPER_MOTOR_CONFIG_NUM (sizeof(zdt_stepper_motor_config_table) / sizeof(zdt_stepper_motor_config_table[0]))
 
 typedef struct
 {
@@ -57,8 +61,9 @@ void ZDT_Stepper_UART_Send_Data(ZDTStepperMotor *motor, uint8_t *data, size_t le
 void ZDT_Stepper_USRT_RX_callback(UART_HandleTypeDef *huart, uint16_t Size);
 
 void ZDT_Stepper_Enable(ZDTStepperMotor *motor, uint8_t enable, uint8_t sync_flag);
-void ZDT_Stepper_Set_Speed(ZDTStepperMotor *motor, uint8_t dir, uint16_t speed_rate, float speed_f, uint8_t sync_flag);                                                                                // 设置步进电机速度
-void ZDT_Stepper_Set_position(ZDTStepperMotor *motor, uint8_t dir, float speed_f, float position_angle_f, uint8_t position_mode, uint8_t sync_flag);                                                   // 设置步进电机位置
+void ZDT_Stepper_Set_Speed(ZDTStepperMotor *motor, uint8_t dir, uint16_t speed_rate, float speed_f, uint8_t sync_flag);                              // 设置步进电机速度
+void ZDT_Stepper_Set_position(ZDTStepperMotor *motor, uint8_t dir, float speed_f, float position_angle_f, uint8_t position_mode, uint8_t sync_flag); // 设置步进电机位置
+void Emm_V5_Pos_Control(ZDTStepperMotor *motor, uint8_t dir, uint16_t vel, uint8_t acc, uint32_t clk, bool raF, bool snF);
 void ZDT_Stepper_Set_T_position(ZDTStepperMotor *motor, uint8_t dir, uint16_t accel_accel, uint16_t decel_accel, float max_speed_f, float position_angle_f, uint8_t position_mode, uint8_t sync_flag); // 设置步进电机梯形加减速位置
 void ZDT_Stepper_torque_control(ZDTStepperMotor *motor, uint8_t dir, uint16_t current_rate, uint16_t current, uint8_t sync_flag);                                                                      // 力矩控制模式
 void ZDT_Stepper_start_sync_motion(ZDTStepperMotor *motor);                                                                                                                                            // 开启多机同步运动
@@ -83,5 +88,7 @@ void ZDT_Stepper_Read_current_position(ZDTStepperMotor *motor);
 void ZDT_Stepper_Read_position_error(ZDTStepperMotor *motor);
 void ZDT_Stepper_Read_driver_temperature(ZDTStepperMotor *motor);
 void ZDT_Stepper_Read_motor_status_flags(ZDTStepperMotor *motor);
+
+extern ZDTStepperMotor *zdt_stepper_motors[];
 
 #endif // _ZDT_STEPPER_H_

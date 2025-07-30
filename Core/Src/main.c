@@ -95,9 +95,9 @@ int _write(int fd, char *ptr, int len)
 /* USER CODE END 0 */
 
 /**
-  * @brief  The application entry point.
-  * @retval int
-  */
+ * @brief  The application entry point.
+ * @retval int
+ */
 int main(void)
 {
 
@@ -139,6 +139,8 @@ int main(void)
   /* USER CODE BEGIN 2 */
   lwrb_init(&uart3_rx_buffer, uart3_rx_buffer_data, sizeof(uart3_rx_buffer_data));
 
+  ZDT_Stepper_Init();
+
   ebtn_APP_Key_INIT();
 
   astra_ui_driver_init();
@@ -147,15 +149,24 @@ int main(void)
   astra_list_item_t *Control = astra_new_list_item("Control");
   astra_push_item_to_list(astra_get_root_list(), Control);
 
-  astra_list_item_t *Lazer_Control = astra_new_list_item("Lazer Control");
-  astra_push_item_to_list(Control, astra_new_list_item("Lazer Control"));
+  astra_list_item_t *Stepper = astra_new_list_item("Stepper");
+  astra_push_item_to_list(Control, Stepper);
 
-  char msg[100] = {};
+  astra_push_item_to_list(Stepper, astra_new_user_item("Motor 1 Rst", ZDT_Stepper_trigger_zero_return(zdt_stepper_motors[0], 0), NULL, NULL));
+  astra_push_item_to_list(Stepper, astra_new_user_item("Motor 1 Rst", ZDT_Stepper_trigger_zero_return(zdt_stepper_motors[1], 0), NULL, NULL));
+
+  char msg[20] = {};
   sprintf(msg, "启动时间: %dms.", get_ticks());
   astra_push_pop_up(msg, 1500);
 
-  HAL_TIM_Base_Start_IT(&htim7);
+  HAL_TIM_Base_Start_IT(&htim7); // 10ms 定时器
 
+  // 使能电机
+  ZDT_Stepper_Enable(zdt_stepper_motors[0], 1, 0);
+  ZDT_Stepper_Enable(zdt_stepper_motors[1], 1, 0);
+
+  Emm_V5_Pos_Control(zdt_stepper_motors[0], 0, 1, 0, 1000, ZDT_STEPPER_REL_POS_MODE, ZDT_STEPPER_SYNC_DISABLE);
+  Emm_V5_Pos_Control(zdt_stepper_motors[1], 0, 1, 0, 1000, ZDT_STEPPER_REL_POS_MODE, ZDT_STEPPER_SYNC_DISABLE);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -163,6 +174,8 @@ int main(void)
 
   while (1)
   {
+
+    /* --------------------------------- 自定义部分结束 -------------------------------- */
     if (Encoder_Is_Increase())
     {
       if (in_astra == 1)
@@ -177,6 +190,7 @@ int main(void)
         astra_selector_go_prev_item();
       }
     }
+
     oled_clear_buffer();
 
     astra_ui_widget_core();
@@ -191,27 +205,29 @@ int main(void)
 }
 
 /**
-  * @brief System Clock Configuration
-  * @retval None
-  */
+ * @brief System Clock Configuration
+ * @retval None
+ */
 void SystemClock_Config(void)
 {
   RCC_OscInitTypeDef RCC_OscInitStruct = {0};
   RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
 
   /** Supply configuration update enable
-  */
+   */
   HAL_PWREx_ConfigSupply(PWR_LDO_SUPPLY);
 
   /** Configure the main internal regulator output voltage
-  */
+   */
   __HAL_PWR_VOLTAGESCALING_CONFIG(PWR_REGULATOR_VOLTAGE_SCALE0);
 
-  while(!__HAL_PWR_GET_FLAG(PWR_FLAG_VOSRDY)) {}
+  while (!__HAL_PWR_GET_FLAG(PWR_FLAG_VOSRDY))
+  {
+  }
 
   /** Initializes the RCC Oscillators according to the specified parameters
-  * in the RCC_OscInitTypeDef structure.
-  */
+   * in the RCC_OscInitTypeDef structure.
+   */
   RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI;
   RCC_OscInitStruct.HSIState = RCC_HSI_DIV1;
   RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
@@ -231,10 +247,8 @@ void SystemClock_Config(void)
   }
 
   /** Initializes the CPU, AHB and APB buses clocks
-  */
-  RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
-                              |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2
-                              |RCC_CLOCKTYPE_D3PCLK1|RCC_CLOCKTYPE_D1PCLK1;
+   */
+  RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK | RCC_CLOCKTYPE_SYSCLK | RCC_CLOCKTYPE_PCLK1 | RCC_CLOCKTYPE_PCLK2 | RCC_CLOCKTYPE_D3PCLK1 | RCC_CLOCKTYPE_D1PCLK1;
   RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
   RCC_ClkInitStruct.SYSCLKDivider = RCC_SYSCLK_DIV1;
   RCC_ClkInitStruct.AHBCLKDivider = RCC_HCLK_DIV1;
@@ -253,7 +267,7 @@ void SystemClock_Config(void)
 
 /* USER CODE END 4 */
 
- /* MPU Configuration */
+/* MPU Configuration */
 
 void MPU_Config(void)
 {
@@ -263,7 +277,7 @@ void MPU_Config(void)
   HAL_MPU_Disable();
 
   /** Initializes and configures the Region and the memory to be protected
-  */
+   */
   MPU_InitStruct.Enable = MPU_REGION_ENABLE;
   MPU_InitStruct.Number = MPU_REGION_NUMBER0;
   MPU_InitStruct.BaseAddress = 0x0;
@@ -279,13 +293,12 @@ void MPU_Config(void)
   HAL_MPU_ConfigRegion(&MPU_InitStruct);
   /* Enables the MPU */
   HAL_MPU_Enable(MPU_PRIVILEGED_DEFAULT);
-
 }
 
 /**
-  * @brief  This function is executed in case of error occurrence.
-  * @retval None
-  */
+ * @brief  This function is executed in case of error occurrence.
+ * @retval None
+ */
 void Error_Handler(void)
 {
   /* USER CODE BEGIN Error_Handler_Debug */
@@ -298,12 +311,12 @@ void Error_Handler(void)
 }
 #ifdef USE_FULL_ASSERT
 /**
-  * @brief  Reports the name of the source file and the source line number
-  *         where the assert_param error has occurred.
-  * @param  file: pointer to the source file name
-  * @param  line: assert_param error line source number
-  * @retval None
-  */
+ * @brief  Reports the name of the source file and the source line number
+ *         where the assert_param error has occurred.
+ * @param  file: pointer to the source file name
+ * @param  line: assert_param error line source number
+ * @retval None
+ */
 void assert_failed(uint8_t *file, uint32_t line)
 {
   /* USER CODE BEGIN 6 */

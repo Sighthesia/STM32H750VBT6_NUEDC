@@ -1,16 +1,20 @@
 #include "ZDT_Stepper.h"
 
+extern DMA_HandleTypeDef hdma_uart5_tx;
+extern DMA_HandleTypeDef hdma_usart2_tx;
+
 // 电机配置表（用户可在此处添加/修改电机配置）
 static zdt_stepper_motor_config_t zdt_stepper_motor_config_table[] = {
     // {串口句柄, DMA句柄, 电机ID}
-    {&huart2, &hdma_usart1_tx, 1},
-    {&huart5, &hdma_usart5_tx, 2}};
-
-#define ZDT_STEPPER_MOTOR_CONFIG_NUM (sizeof(zdt_stepper_motor_config_table) / sizeof(zdt_stepper_motor_config_table[0]))
+    {&huart2, &hdma_usart2_tx, 1},
+    {&huart5, &hdma_uart5_tx, 2}};
 
 // 串口管理数组
 static ZDTStepperUart uart_motors[ZDT_STEPPER_MAX_UART];
 static uint8_t uart_count = 0;
+
+// 全局电机对象指针数组
+ZDTStepperMotor *zdt_stepper_motors[ZDT_STEPPER_MOTOR_CONFIG_NUM] = {0};
 
 void print_hex_array(const uint8_t *data, uint16_t size)
 {
@@ -28,7 +32,6 @@ void print_hex_array(const uint8_t *data, uint16_t size)
  */
 void ZDT_Stepper_Init(void)
 {
-    // 清空串口管理
     uart_count = 0;
     memset(uart_motors, 0, sizeof(uart_motors));
 
@@ -38,7 +41,6 @@ void ZDT_Stepper_Init(void)
         DMA_HandleTypeDef *hdma_rx = zdt_stepper_motor_config_table[i].hdma_rx;
         uint8_t motor_id = zdt_stepper_motor_config_table[i].motor_id;
 
-        // 查找串口是否已存在
         int uart_idx = -1;
         for (int j = 0; j < uart_count; j++)
         {
@@ -48,7 +50,6 @@ void ZDT_Stepper_Init(void)
                 break;
             }
         }
-        // 新串口
         if (uart_idx == -1 && uart_count < ZDT_STEPPER_MAX_UART)
         {
             uart_motors[uart_count].huart = huart;
@@ -57,7 +58,6 @@ void ZDT_Stepper_Init(void)
             uart_idx = uart_count;
             uart_count++;
         }
-        // 注册电机
         if (uart_idx != -1 && uart_motors[uart_idx].motor_count < ZDT_STEPPER_PER_UART_MAX_MOTORS)
         {
             int m = uart_motors[uart_idx].motor_count;
@@ -66,6 +66,8 @@ void ZDT_Stepper_Init(void)
             uart_motors[uart_idx].motors[m].hdma_rx = hdma_rx;
             memset(uart_motors[uart_idx].motors[m].rx_buffer, 0, sizeof(uart_motors[uart_idx].motors[m].rx_buffer));
             uart_motors[uart_idx].motor_count++;
+            // 保存指针
+            zdt_stepper_motors[i] = &uart_motors[uart_idx].motors[m];
         }
     }
 }
@@ -494,6 +496,40 @@ void ZDT_Stepper_Set_T_position(ZDTStepperMotor *motor, uint8_t dir, uint16_t ac
     command[15] = 0x6B;                          // 校验字节
 
     ZDT_Stepper_UART_Send_Data(motor, command, 16);
+}
+
+/**
+ * @brief    位置模式
+ * @param    addr：电机地址
+ * @param    dir ：方向        ，0为CW，其余值为CCW
+ * @param    vel ：速度(RPM)   ，范围0 - 5000RPM
+ * @param    acc ：加速度      ，范围0 - 255，注意：0是直接启动
+ * @param    clk ：脉冲数      ，范围0- (2^32 - 1)个
+ * @param    raF ：相位/绝对标志，false为相对运动，true为绝对值运动
+ * @param    snF ：多机同步标志 ，false为不启用，true为启用
+ * @retval   地址 + 功能码 + 命令状态 + 校验字节
+ */
+void Emm_V5_Pos_Control(ZDTStepperMotor *motor, uint8_t dir, uint16_t vel, uint8_t acc, uint32_t clk, bool raF, bool snF)
+{
+    uint8_t cmd[16] = {0};
+
+    // 装载命令
+    cmd[0] = motor->id;            // 地址
+    cmd[1] = 0xFD;                 // 功能码
+    cmd[2] = dir;                  // 方向
+    cmd[3] = (uint8_t)(vel >> 8);  // 速度(RPM)高8位字节
+    cmd[4] = (uint8_t)(vel >> 0);  // 速度(RPM)低8位字节
+    cmd[5] = acc;                  // 加速度，注意：0是直接启动
+    cmd[6] = (uint8_t)(clk >> 24); // 脉冲数(bit24 - bit31)
+    cmd[7] = (uint8_t)(clk >> 16); // 脉冲数(bit16 - bit23)
+    cmd[8] = (uint8_t)(clk >> 8);  // 脉冲数(bit8  - bit15)
+    cmd[9] = (uint8_t)(clk >> 0);  // 脉冲数(bit0  - bit7 )
+    cmd[10] = raF;                 // 相位/绝对标志，false为相对运动，true为绝对值运动
+    cmd[11] = snF;                 // 多机同步运动标志，false为不启用，true为启用
+    cmd[12] = 0x6B;                // 校验字节
+
+    // 发送命令
+    ZDT_Stepper_UART_Send_Data(motor, cmd, 13);
 }
 
 /**
