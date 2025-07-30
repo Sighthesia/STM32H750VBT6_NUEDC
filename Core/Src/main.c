@@ -30,15 +30,9 @@
 #include "TIM.h"
 #include "u8g2.h"
 #include "u8g2_Custom_HW_I2C_HAL.h"
-#include "astra_ui_draw_driver.h"
-#include "astra_ui_core.h"
 #include "astra_ui_drawer.h"
 #include "ebtn_APP.h"
 #include "Encoder_EXTI.h"
-#include "lcd.h"
-#include "gui.h"
-#include "Lazer_Control.h"
-#include "control.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
