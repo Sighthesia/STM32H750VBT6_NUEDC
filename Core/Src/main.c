@@ -33,6 +33,7 @@
 #include "astra_ui_drawer.h"
 #include "ebtn_APP.h"
 #include "Encoder_EXTI.h"
+#include "lwrb.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
