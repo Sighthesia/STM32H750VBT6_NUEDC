@@ -35,7 +35,7 @@ ebtn_btn_param_t buttons_parameters = EBTN_PARAMS_INIT(
  * @note 此处填入所需的按键ID及其GPIO信息和触发电平
  */
 ebtn_Custom_Config_key_list_t key_list[] = {
-    {EC11_KEY, GPIOC, GPIO_PIN_4, 1}, // EC11按键，PA4，低电平有效
+    {EC11_KEY, GPIOC, GPIO_PIN_4, 1}, // EC11按键，PA4，高电平有效
 };
 
 /** ***************************************************************************
