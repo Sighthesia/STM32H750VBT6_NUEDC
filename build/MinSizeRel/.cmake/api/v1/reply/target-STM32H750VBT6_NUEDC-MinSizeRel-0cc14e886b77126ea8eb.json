@@ -18,7 +18,8 @@
 		],
 		"files" : 
 		[
-			"CMakeLists.txt"
+			"CMakeLists.txt",
+			"cmake/stm32cubemx/CMakeLists.txt"
 		],
 		"nodes" : 
 		[
@@ -28,31 +29,40 @@
 			{
 				"command" : 0,
 				"file" : 0,
-				"line" : 41,
+				"line" : 39,
 				"parent" : 0
 			},
 			{
 				"command" : 1,
 				"file" : 0,
-				"line" : 84,
+				"line" : 82,
 				"parent" : 0
 			},
 			{
+				"file" : 1
+			},
+			{
 				"command" : 2,
-				"file" : 0,
-				"line" : 89,
-				"parent" : 0
+				"file" : 1,
+				"line" : 95,
+				"parent" : 3
 			},
 			{
 				"command" : 3,
 				"file" : 0,
-				"line" : 69,
+				"line" : 67,
 				"parent" : 0
 			},
 			{
 				"command" : 4,
+				"file" : 1,
+				"line" : 89,
+				"parent" : 3
+			},
+			{
+				"command" : 4,
 				"file" : 0,
-				"line" : 63,
+				"line" : 61,
 				"parent" : 0
 			}
 		]
@@ -69,110 +79,110 @@
 			"defines" : 
 			[
 				{
-					"backtrace" : 3,
+					"backtrace" : 4,
 					"define" : "STM32H750xx"
 				},
 				{
-					"backtrace" : 3,
+					"backtrace" : 4,
 					"define" : "USE_HAL_DRIVER"
 				},
 				{
-					"backtrace" : 3,
+					"backtrace" : 4,
 					"define" : "USE_PWR_LDO_SUPPLY"
 				}
 			],
 			"includes" : 
 			[
 				{
-					"backtrace" : 4,
+					"backtrace" : 5,
 					"path" : "/home/Sighthesia/0_Files/1_Producing/Hardware/MCU/STM32/STM32H750VBT6_NUEDC/BSP/Astra_UI_Lite"
 				},
 				{
-					"backtrace" : 4,
+					"backtrace" : 5,
 					"path" : "/home/Sighthesia/0_Files/1_Producing/Hardware/MCU/STM32/STM32H750VBT6_NUEDC/BSP/CONTROL"
 				},
 				{
-					"backtrace" : 4,
+					"backtrace" : 5,
 					"path" : "/home/Sighthesia/0_Files/1_Producing/Hardware/MCU/STM32/STM32H750VBT6_NUEDC/BSP/Delay_us_STM32HAL"
 				},
 				{
-					"backtrace" : 4,
+					"backtrace" : 5,
 					"path" : "/home/Sighthesia/0_Files/1_Producing/Hardware/MCU/STM32/STM32H750VBT6_NUEDC/BSP/Encoder_EXTI"
 				},
 				{
-					"backtrace" : 4,
+					"backtrace" : 5,
 					"path" : "/home/Sighthesia/0_Files/1_Producing/Hardware/MCU/STM32/STM32H750VBT6_NUEDC/BSP/Lazer_Control/HAL"
 				},
 				{
-					"backtrace" : 4,
+					"backtrace" : 5,
 					"path" : "/home/Sighthesia/0_Files/1_Producing/Hardware/MCU/STM32/STM32H750VBT6_NUEDC/BSP/Lazer_Control"
 				},
 				{
-					"backtrace" : 4,
+					"backtrace" : 5,
 					"path" : "/home/Sighthesia/0_Files/1_Producing/Hardware/MCU/STM32/STM32H750VBT6_NUEDC/BSP/PID"
 				},
 				{
-					"backtrace" : 4,
+					"backtrace" : 5,
 					"path" : "/home/Sighthesia/0_Files/1_Producing/Hardware/MCU/STM32/STM32H750VBT6_NUEDC/BSP/Servo"
 				},
 				{
-					"backtrace" : 4,
+					"backtrace" : 5,
 					"path" : "/home/Sighthesia/0_Files/1_Producing/Hardware/MCU/STM32/STM32H750VBT6_NUEDC/BSP/TFT_ILI9488"
 				},
 				{
-					"backtrace" : 4,
+					"backtrace" : 5,
 					"path" : "/home/Sighthesia/0_Files/1_Producing/Hardware/MCU/STM32/STM32H750VBT6_NUEDC/BSP/TFT_ILI9488/LCD"
 				},
 				{
-					"backtrace" : 4,
+					"backtrace" : 5,
 					"path" : "/home/Sighthesia/0_Files/1_Producing/Hardware/MCU/STM32/STM32H750VBT6_NUEDC/BSP/TFT_ILI9488/SPI"
 				},
 				{
-					"backtrace" : 4,
+					"backtrace" : 5,
 					"path" : "/home/Sighthesia/0_Files/1_Producing/Hardware/MCU/STM32/STM32H750VBT6_NUEDC/BSP/TIM"
 				},
 				{
-					"backtrace" : 4,
+					"backtrace" : 5,
 					"path" : "/home/Sighthesia/0_Files/1_Producing/Hardware/MCU/STM32/STM32H750VBT6_NUEDC/BSP/easy_button"
 				},
 				{
-					"backtrace" : 4,
+					"backtrace" : 5,
 					"path" : "/home/Sighthesia/0_Files/1_Producing/Hardware/MCU/STM32/STM32H750VBT6_NUEDC/BSP/easy_button_APP"
 				},
 				{
-					"backtrace" : 4,
+					"backtrace" : 5,
 					"path" : "/home/Sighthesia/0_Files/1_Producing/Hardware/MCU/STM32/STM32H750VBT6_NUEDC/BSP/lwrb"
 				},
 				{
-					"backtrace" : 4,
+					"backtrace" : 5,
 					"path" : "/home/Sighthesia/0_Files/1_Producing/Hardware/MCU/STM32/STM32H750VBT6_NUEDC/BSP/smooth"
 				},
 				{
-					"backtrace" : 4,
+					"backtrace" : 5,
 					"path" : "/home/Sighthesia/0_Files/1_Producing/Hardware/MCU/STM32/STM32H750VBT6_NUEDC/BSP/u8g2_APP"
 				},
 				{
-					"backtrace" : 4,
+					"backtrace" : 5,
 					"path" : "/home/Sighthesia/0_Files/1_Producing/Hardware/MCU/STM32/STM32H750VBT6_NUEDC/BSP/u8g2_csrc_SSD1306"
 				},
 				{
-					"backtrace" : 3,
+					"backtrace" : 4,
 					"path" : "/home/Sighthesia/0_Files/1_Producing/Hardware/MCU/STM32/STM32H750VBT6_NUEDC/cmake/stm32cubemx/../../Core/Inc"
 				},
 				{
-					"backtrace" : 3,
+					"backtrace" : 4,
 					"path" : "/home/Sighthesia/0_Files/1_Producing/Hardware/MCU/STM32/STM32H750VBT6_NUEDC/cmake/stm32cubemx/../../Drivers/STM32H7xx_HAL_Driver/Inc"
 				},
 				{
-					"backtrace" : 3,
+					"backtrace" : 4,
 					"path" : "/home/Sighthesia/0_Files/1_Producing/Hardware/MCU/STM32/STM32H750VBT6_NUEDC/cmake/stm32cubemx/../../Drivers/STM32H7xx_HAL_Driver/Inc/Legacy"
 				},
 				{
-					"backtrace" : 3,
+					"backtrace" : 4,
 					"path" : "/home/Sighthesia/0_Files/1_Producing/Hardware/MCU/STM32/STM32H750VBT6_NUEDC/cmake/stm32cubemx/../../Drivers/CMSIS/Device/ST/STM32H7xx/Include"
 				},
 				{
-					"backtrace" : 3,
+					"backtrace" : 4,
 					"path" : "/home/Sighthesia/0_Files/1_Producing/Hardware/MCU/STM32/STM32H750VBT6_NUEDC/cmake/stm32cubemx/../../Drivers/CMSIS/Include"
 				}
 			],
@@ -197,7 +207,6 @@
 				7,
 				8,
 				9,
-				10,
 				11,
 				12,
 				13,
@@ -271,30 +280,7 @@
 				81,
 				82,
 				83,
-				84,
-				85,
-				86,
-				87,
-				88,
-				89,
-				90,
-				91,
-				92,
-				93,
-				94,
-				95,
-				96,
-				97,
-				98,
-				99,
-				100,
-				101,
-				102,
-				103,
-				104,
-				105,
-				106,
-				107
+				84
 			]
 		},
 		{
@@ -307,118 +293,125 @@
 			"defines" : 
 			[
 				{
-					"backtrace" : 3,
+					"backtrace" : 4,
 					"define" : "STM32H750xx"
 				},
 				{
-					"backtrace" : 3,
+					"backtrace" : 4,
 					"define" : "USE_HAL_DRIVER"
 				},
 				{
-					"backtrace" : 3,
+					"backtrace" : 4,
 					"define" : "USE_PWR_LDO_SUPPLY"
 				}
 			],
 			"includes" : 
 			[
 				{
-					"backtrace" : 4,
+					"backtrace" : 5,
 					"path" : "/home/Sighthesia/0_Files/1_Producing/Hardware/MCU/STM32/STM32H750VBT6_NUEDC/BSP/Astra_UI_Lite"
 				},
 				{
-					"backtrace" : 4,
+					"backtrace" : 5,
 					"path" : "/home/Sighthesia/0_Files/1_Producing/Hardware/MCU/STM32/STM32H750VBT6_NUEDC/BSP/CONTROL"
 				},
 				{
-					"backtrace" : 4,
+					"backtrace" : 5,
 					"path" : "/home/Sighthesia/0_Files/1_Producing/Hardware/MCU/STM32/STM32H750VBT6_NUEDC/BSP/Delay_us_STM32HAL"
 				},
 				{
-					"backtrace" : 4,
+					"backtrace" : 5,
 					"path" : "/home/Sighthesia/0_Files/1_Producing/Hardware/MCU/STM32/STM32H750VBT6_NUEDC/BSP/Encoder_EXTI"
 				},
 				{
-					"backtrace" : 4,
+					"backtrace" : 5,
 					"path" : "/home/Sighthesia/0_Files/1_Producing/Hardware/MCU/STM32/STM32H750VBT6_NUEDC/BSP/Lazer_Control/HAL"
 				},
 				{
-					"backtrace" : 4,
+					"backtrace" : 5,
 					"path" : "/home/Sighthesia/0_Files/1_Producing/Hardware/MCU/STM32/STM32H750VBT6_NUEDC/BSP/Lazer_Control"
 				},
 				{
-					"backtrace" : 4,
+					"backtrace" : 5,
 					"path" : "/home/Sighthesia/0_Files/1_Producing/Hardware/MCU/STM32/STM32H750VBT6_NUEDC/BSP/PID"
 				},
 				{
-					"backtrace" : 4,
+					"backtrace" : 5,
 					"path" : "/home/Sighthesia/0_Files/1_Producing/Hardware/MCU/STM32/STM32H750VBT6_NUEDC/BSP/Servo"
 				},
 				{
-					"backtrace" : 4,
+					"backtrace" : 5,
 					"path" : "/home/Sighthesia/0_Files/1_Producing/Hardware/MCU/STM32/STM32H750VBT6_NUEDC/BSP/TFT_ILI9488"
 				},
 				{
-					"backtrace" : 4,
+					"backtrace" : 5,
 					"path" : "/home/Sighthesia/0_Files/1_Producing/Hardware/MCU/STM32/STM32H750VBT6_NUEDC/BSP/TFT_ILI9488/LCD"
 				},
 				{
-					"backtrace" : 4,
+					"backtrace" : 5,
 					"path" : "/home/Sighthesia/0_Files/1_Producing/Hardware/MCU/STM32/STM32H750VBT6_NUEDC/BSP/TFT_ILI9488/SPI"
 				},
 				{
-					"backtrace" : 4,
+					"backtrace" : 5,
 					"path" : "/home/Sighthesia/0_Files/1_Producing/Hardware/MCU/STM32/STM32H750VBT6_NUEDC/BSP/TIM"
 				},
 				{
-					"backtrace" : 4,
+					"backtrace" : 5,
 					"path" : "/home/Sighthesia/0_Files/1_Producing/Hardware/MCU/STM32/STM32H750VBT6_NUEDC/BSP/easy_button"
 				},
 				{
-					"backtrace" : 4,
+					"backtrace" : 5,
 					"path" : "/home/Sighthesia/0_Files/1_Producing/Hardware/MCU/STM32/STM32H750VBT6_NUEDC/BSP/easy_button_APP"
 				},
 				{
-					"backtrace" : 4,
+					"backtrace" : 5,
 					"path" : "/home/Sighthesia/0_Files/1_Producing/Hardware/MCU/STM32/STM32H750VBT6_NUEDC/BSP/lwrb"
 				},
 				{
-					"backtrace" : 4,
+					"backtrace" : 5,
 					"path" : "/home/Sighthesia/0_Files/1_Producing/Hardware/MCU/STM32/STM32H750VBT6_NUEDC/BSP/smooth"
 				},
 				{
-					"backtrace" : 4,
+					"backtrace" : 5,
 					"path" : "/home/Sighthesia/0_Files/1_Producing/Hardware/MCU/STM32/STM32H750VBT6_NUEDC/BSP/u8g2_APP"
 				},
 				{
-					"backtrace" : 4,
+					"backtrace" : 5,
 					"path" : "/home/Sighthesia/0_Files/1_Producing/Hardware/MCU/STM32/STM32H750VBT6_NUEDC/BSP/u8g2_csrc_SSD1306"
 				},
 				{
-					"backtrace" : 3,
+					"backtrace" : 4,
 					"path" : "/home/Sighthesia/0_Files/1_Producing/Hardware/MCU/STM32/STM32H750VBT6_NUEDC/cmake/stm32cubemx/../../Core/Inc"
 				},
 				{
-					"backtrace" : 3,
+					"backtrace" : 4,
 					"path" : "/home/Sighthesia/0_Files/1_Producing/Hardware/MCU/STM32/STM32H750VBT6_NUEDC/cmake/stm32cubemx/../../Drivers/STM32H7xx_HAL_Driver/Inc"
 				},
 				{
-					"backtrace" : 3,
+					"backtrace" : 4,
 					"path" : "/home/Sighthesia/0_Files/1_Producing/Hardware/MCU/STM32/STM32H750VBT6_NUEDC/cmake/stm32cubemx/../../Drivers/STM32H7xx_HAL_Driver/Inc/Legacy"
 				},
 				{
-					"backtrace" : 3,
+					"backtrace" : 4,
 					"path" : "/home/Sighthesia/0_Files/1_Producing/Hardware/MCU/STM32/STM32H750VBT6_NUEDC/cmake/stm32cubemx/../../Drivers/CMSIS/Device/ST/STM32H7xx/Include"
 				},
 				{
-					"backtrace" : 3,
+					"backtrace" : 4,
 					"path" : "/home/Sighthesia/0_Files/1_Producing/Hardware/MCU/STM32/STM32H750VBT6_NUEDC/cmake/stm32cubemx/../../Drivers/CMSIS/Include"
 				}
 			],
 			"language" : "ASM",
 			"sourceIndexes" : 
 			[
-				108
+				10
 			]
+		}
+	],
+	"dependencies" : 
+	[
+		{
+			"backtrace" : 4,
+			"id" : "STM32_Drivers::@768a070a0fe75716b479"
 		}
 	],
 	"id" : "STM32H750VBT6_NUEDC::@6890427a1f51a3e7e1df",
@@ -466,7 +459,6 @@
 				7,
 				8,
 				9,
-				10,
 				11,
 				12,
 				13,
@@ -540,7 +532,20 @@
 				81,
 				82,
 				83,
-				84,
+				84
+			]
+		},
+		{
+			"name" : "",
+			"sourceIndexes" : 
+			[
+				10
+			]
+		},
+		{
+			"name" : "Object Libraries",
+			"sourceIndexes" : 
+			[
 				85,
 				86,
 				87,
@@ -565,670 +570,657 @@
 				106,
 				107
 			]
-		},
-		{
-			"name" : "",
-			"sourceIndexes" : 
-			[
-				108
-			]
 		}
 	],
 	"sources" : 
 	[
 		{
-			"backtrace" : 5,
-			"compileGroupIndex" : 0,
-			"path" : "BSP/Astra_UI_Lite/astra_ui_core.c",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 5,
-			"compileGroupIndex" : 0,
-			"path" : "BSP/Astra_UI_Lite/astra_ui_draw_driver.c",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 5,
-			"compileGroupIndex" : 0,
-			"path" : "BSP/Astra_UI_Lite/astra_ui_drawer.c",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 5,
-			"compileGroupIndex" : 0,
-			"path" : "BSP/Astra_UI_Lite/astra_ui_item.c",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 5,
-			"compileGroupIndex" : 0,
-			"path" : "BSP/CONTROL/control.c",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 5,
-			"compileGroupIndex" : 0,
-			"path" : "BSP/Delay_us_STM32HAL/Delay_us_STM32HAL.c",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 5,
-			"compileGroupIndex" : 0,
-			"path" : "BSP/Encoder_EXTI/Encoder_EXTI.c",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 5,
-			"compileGroupIndex" : 0,
-			"path" : "BSP/GYRO/GYRO_APP.c",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 5,
-			"compileGroupIndex" : 0,
-			"path" : "BSP/Lazer_Control/HAL/Lazer_Control_HAL.c",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 5,
-			"compileGroupIndex" : 0,
-			"path" : "BSP/Lazer_Control/Lazer_Control.c",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 5,
-			"compileGroupIndex" : 0,
-			"path" : "BSP/PID/PID.c",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 5,
-			"compileGroupIndex" : 0,
-			"path" : "BSP/Servo/Servo_APP.c",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 5,
-			"compileGroupIndex" : 0,
-			"path" : "BSP/Servo/Servo_HAL.c",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 5,
-			"compileGroupIndex" : 0,
-			"path" : "BSP/TFT_ILI9488/GUI_HAL.c",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 5,
-			"compileGroupIndex" : 0,
-			"path" : "BSP/TFT_ILI9488/LCD/LCD_HAL.c",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 5,
-			"compileGroupIndex" : 0,
-			"path" : "BSP/TFT_ILI9488/LCD/font.c",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 5,
-			"compileGroupIndex" : 0,
-			"path" : "BSP/TFT_ILI9488/LCD/lcd.c",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 5,
-			"compileGroupIndex" : 0,
-			"path" : "BSP/TFT_ILI9488/SPI/SPI_HAL.c",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 5,
-			"compileGroupIndex" : 0,
-			"path" : "BSP/TFT_ILI9488/SPI/SPI_HAL_STM32HAL.c",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 5,
-			"compileGroupIndex" : 0,
-			"path" : "BSP/TFT_ILI9488/SPI/lcd_spi.c",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 5,
-			"compileGroupIndex" : 0,
-			"path" : "BSP/TFT_ILI9488/gui.c",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 5,
-			"compileGroupIndex" : 0,
-			"path" : "BSP/TIM/TIM.c",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 5,
-			"compileGroupIndex" : 0,
-			"path" : "BSP/UART/USART.c",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 5,
-			"compileGroupIndex" : 0,
-			"path" : "BSP/easy_button/ebtn.c",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 5,
-			"compileGroupIndex" : 0,
-			"path" : "BSP/easy_button_APP/ebtn_APP.c",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 5,
-			"compileGroupIndex" : 0,
-			"path" : "BSP/easy_button_APP/ebtn_Custom_Config.c",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 5,
-			"compileGroupIndex" : 0,
-			"path" : "BSP/easy_button_APP/ebtn_Custom_HAL.c",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 5,
-			"compileGroupIndex" : 0,
-			"path" : "BSP/lwrb/lwrb.c",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 5,
-			"compileGroupIndex" : 0,
-			"path" : "BSP/smooth/polyinterp.c",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 5,
-			"compileGroupIndex" : 0,
-			"path" : "BSP/u8g2_APP/u8g2_Custom_Display.c",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 5,
-			"compileGroupIndex" : 0,
-			"path" : "BSP/u8g2_APP/u8g2_Custom_HW_I2C_HAL.c",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 5,
-			"compileGroupIndex" : 0,
-			"path" : "BSP/u8g2_APP/wenquanyi_Custom_16px.c",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 5,
-			"compileGroupIndex" : 0,
-			"path" : "BSP/u8g2_csrc_SSD1306/mui.c",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 5,
-			"compileGroupIndex" : 0,
-			"path" : "BSP/u8g2_csrc_SSD1306/mui_u8g2.c",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 5,
-			"compileGroupIndex" : 0,
-			"path" : "BSP/u8g2_csrc_SSD1306/u8g2_arc.c",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 5,
-			"compileGroupIndex" : 0,
-			"path" : "BSP/u8g2_csrc_SSD1306/u8g2_bitmap.c",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 5,
-			"compileGroupIndex" : 0,
-			"path" : "BSP/u8g2_csrc_SSD1306/u8g2_box.c",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 5,
-			"compileGroupIndex" : 0,
-			"path" : "BSP/u8g2_csrc_SSD1306/u8g2_buffer.c",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 5,
-			"compileGroupIndex" : 0,
-			"path" : "BSP/u8g2_csrc_SSD1306/u8g2_button.c",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 5,
-			"compileGroupIndex" : 0,
-			"path" : "BSP/u8g2_csrc_SSD1306/u8g2_circle.c",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 5,
-			"compileGroupIndex" : 0,
-			"path" : "BSP/u8g2_csrc_SSD1306/u8g2_cleardisplay.c",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 5,
-			"compileGroupIndex" : 0,
-			"path" : "BSP/u8g2_csrc_SSD1306/u8g2_d_memory.c",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 5,
-			"compileGroupIndex" : 0,
-			"path" : "BSP/u8g2_csrc_SSD1306/u8g2_d_setup.c",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 5,
-			"compileGroupIndex" : 0,
-			"path" : "BSP/u8g2_csrc_SSD1306/u8g2_font.c",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 5,
-			"compileGroupIndex" : 0,
-			"path" : "BSP/u8g2_csrc_SSD1306/u8g2_fonts.c",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 5,
-			"compileGroupIndex" : 0,
-			"path" : "BSP/u8g2_csrc_SSD1306/u8g2_hvline.c",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 5,
-			"compileGroupIndex" : 0,
-			"path" : "BSP/u8g2_csrc_SSD1306/u8g2_input_value.c",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 5,
-			"compileGroupIndex" : 0,
-			"path" : "BSP/u8g2_csrc_SSD1306/u8g2_intersection.c",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 5,
-			"compileGroupIndex" : 0,
-			"path" : "BSP/u8g2_csrc_SSD1306/u8g2_kerning.c",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 5,
-			"compileGroupIndex" : 0,
-			"path" : "BSP/u8g2_csrc_SSD1306/u8g2_line.c",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 5,
-			"compileGroupIndex" : 0,
-			"path" : "BSP/u8g2_csrc_SSD1306/u8g2_ll_hvline.c",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 5,
-			"compileGroupIndex" : 0,
-			"path" : "BSP/u8g2_csrc_SSD1306/u8g2_message.c",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 5,
-			"compileGroupIndex" : 0,
-			"path" : "BSP/u8g2_csrc_SSD1306/u8g2_polygon.c",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 5,
-			"compileGroupIndex" : 0,
-			"path" : "BSP/u8g2_csrc_SSD1306/u8g2_selection_list.c",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 5,
-			"compileGroupIndex" : 0,
-			"path" : "BSP/u8g2_csrc_SSD1306/u8g2_setup.c",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 5,
-			"compileGroupIndex" : 0,
-			"path" : "BSP/u8g2_csrc_SSD1306/u8log.c",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 5,
-			"compileGroupIndex" : 0,
-			"path" : "BSP/u8g2_csrc_SSD1306/u8log_u8g2.c",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 5,
-			"compileGroupIndex" : 0,
-			"path" : "BSP/u8g2_csrc_SSD1306/u8log_u8x8.c",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 5,
-			"compileGroupIndex" : 0,
-			"path" : "BSP/u8g2_csrc_SSD1306/u8x8_8x8.c",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 5,
-			"compileGroupIndex" : 0,
-			"path" : "BSP/u8g2_csrc_SSD1306/u8x8_byte.c",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 5,
-			"compileGroupIndex" : 0,
-			"path" : "BSP/u8g2_csrc_SSD1306/u8x8_cad.c",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 5,
-			"compileGroupIndex" : 0,
-			"path" : "BSP/u8g2_csrc_SSD1306/u8x8_capture.c",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 5,
-			"compileGroupIndex" : 0,
-			"path" : "BSP/u8g2_csrc_SSD1306/u8x8_d_ssd1306_128x64_noname.c",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 5,
-			"compileGroupIndex" : 0,
-			"path" : "BSP/u8g2_csrc_SSD1306/u8x8_debounce.c",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 5,
-			"compileGroupIndex" : 0,
-			"path" : "BSP/u8g2_csrc_SSD1306/u8x8_display.c",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 5,
-			"compileGroupIndex" : 0,
-			"path" : "BSP/u8g2_csrc_SSD1306/u8x8_fonts.c",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 5,
-			"compileGroupIndex" : 0,
-			"path" : "BSP/u8g2_csrc_SSD1306/u8x8_gpio.c",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 5,
-			"compileGroupIndex" : 0,
-			"path" : "BSP/u8g2_csrc_SSD1306/u8x8_input_value.c",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 5,
-			"compileGroupIndex" : 0,
-			"path" : "BSP/u8g2_csrc_SSD1306/u8x8_message.c",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 5,
-			"compileGroupIndex" : 0,
-			"path" : "BSP/u8g2_csrc_SSD1306/u8x8_selection_list.c",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 5,
-			"compileGroupIndex" : 0,
-			"path" : "BSP/u8g2_csrc_SSD1306/u8x8_setup.c",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 5,
-			"compileGroupIndex" : 0,
-			"path" : "BSP/u8g2_csrc_SSD1306/u8x8_string.c",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 5,
-			"compileGroupIndex" : 0,
-			"path" : "BSP/u8g2_csrc_SSD1306/u8x8_u16toa.c",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 5,
-			"compileGroupIndex" : 0,
-			"path" : "BSP/u8g2_csrc_SSD1306/u8x8_u8toa.c",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 3,
+			"backtrace" : 6,
 			"compileGroupIndex" : 0,
 			"path" : "Core/Src/main.c",
 			"sourceGroupIndex" : 0
 		},
 		{
-			"backtrace" : 3,
+			"backtrace" : 6,
 			"compileGroupIndex" : 0,
 			"path" : "Core/Src/gpio.c",
 			"sourceGroupIndex" : 0
 		},
 		{
-			"backtrace" : 3,
+			"backtrace" : 6,
 			"compileGroupIndex" : 0,
 			"path" : "Core/Src/i2c.c",
 			"sourceGroupIndex" : 0
 		},
 		{
-			"backtrace" : 3,
-			"compileGroupIndex" : 0,
-			"path" : "Core/Src/memorymap.c",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 3,
+			"backtrace" : 6,
 			"compileGroupIndex" : 0,
 			"path" : "Core/Src/spi.c",
 			"sourceGroupIndex" : 0
 		},
 		{
-			"backtrace" : 3,
+			"backtrace" : 6,
 			"compileGroupIndex" : 0,
 			"path" : "Core/Src/tim.c",
 			"sourceGroupIndex" : 0
 		},
 		{
-			"backtrace" : 3,
+			"backtrace" : 6,
 			"compileGroupIndex" : 0,
 			"path" : "Core/Src/usart.c",
 			"sourceGroupIndex" : 0
 		},
 		{
-			"backtrace" : 3,
+			"backtrace" : 6,
 			"compileGroupIndex" : 0,
 			"path" : "Core/Src/stm32h7xx_it.c",
 			"sourceGroupIndex" : 0
 		},
 		{
-			"backtrace" : 3,
+			"backtrace" : 6,
 			"compileGroupIndex" : 0,
 			"path" : "Core/Src/stm32h7xx_hal_msp.c",
 			"sourceGroupIndex" : 0
 		},
 		{
-			"backtrace" : 3,
-			"compileGroupIndex" : 0,
-			"path" : "Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_cortex.c",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 3,
-			"compileGroupIndex" : 0,
-			"path" : "Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_i2c.c",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 3,
-			"compileGroupIndex" : 0,
-			"path" : "Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_i2c_ex.c",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 3,
-			"compileGroupIndex" : 0,
-			"path" : "Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_rcc.c",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 3,
-			"compileGroupIndex" : 0,
-			"path" : "Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_rcc_ex.c",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 3,
-			"compileGroupIndex" : 0,
-			"path" : "Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_flash.c",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 3,
-			"compileGroupIndex" : 0,
-			"path" : "Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_flash_ex.c",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 3,
-			"compileGroupIndex" : 0,
-			"path" : "Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_gpio.c",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 3,
-			"compileGroupIndex" : 0,
-			"path" : "Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_hsem.c",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 3,
-			"compileGroupIndex" : 0,
-			"path" : "Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_dma.c",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 3,
-			"compileGroupIndex" : 0,
-			"path" : "Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_dma_ex.c",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 3,
-			"compileGroupIndex" : 0,
-			"path" : "Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_mdma.c",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 3,
-			"compileGroupIndex" : 0,
-			"path" : "Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_pwr.c",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 3,
-			"compileGroupIndex" : 0,
-			"path" : "Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_pwr_ex.c",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 3,
-			"compileGroupIndex" : 0,
-			"path" : "Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal.c",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 3,
-			"compileGroupIndex" : 0,
-			"path" : "Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_exti.c",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 3,
-			"compileGroupIndex" : 0,
-			"path" : "Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_spi.c",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 3,
-			"compileGroupIndex" : 0,
-			"path" : "Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_spi_ex.c",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 3,
-			"compileGroupIndex" : 0,
-			"path" : "Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_tim.c",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 3,
-			"compileGroupIndex" : 0,
-			"path" : "Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_tim_ex.c",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 3,
-			"compileGroupIndex" : 0,
-			"path" : "Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_uart.c",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 3,
-			"compileGroupIndex" : 0,
-			"path" : "Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_uart_ex.c",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 3,
-			"compileGroupIndex" : 0,
-			"path" : "Core/Src/system_stm32h7xx.c",
-			"sourceGroupIndex" : 0
-		},
-		{
-			"backtrace" : 3,
+			"backtrace" : 6,
 			"compileGroupIndex" : 0,
 			"path" : "Core/Src/sysmem.c",
 			"sourceGroupIndex" : 0
 		},
 		{
-			"backtrace" : 3,
+			"backtrace" : 6,
 			"compileGroupIndex" : 0,
 			"path" : "Core/Src/syscalls.c",
 			"sourceGroupIndex" : 0
 		},
 		{
-			"backtrace" : 3,
+			"backtrace" : 6,
 			"compileGroupIndex" : 1,
 			"path" : "startup_stm32h750xx.s",
 			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 7,
+			"compileGroupIndex" : 0,
+			"path" : "BSP/Astra_UI_Lite/astra_ui_core.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 7,
+			"compileGroupIndex" : 0,
+			"path" : "BSP/Astra_UI_Lite/astra_ui_draw_driver.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 7,
+			"compileGroupIndex" : 0,
+			"path" : "BSP/Astra_UI_Lite/astra_ui_drawer.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 7,
+			"compileGroupIndex" : 0,
+			"path" : "BSP/Astra_UI_Lite/astra_ui_item.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 7,
+			"compileGroupIndex" : 0,
+			"path" : "BSP/CONTROL/control.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 7,
+			"compileGroupIndex" : 0,
+			"path" : "BSP/Delay_us_STM32HAL/Delay_us_STM32HAL.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 7,
+			"compileGroupIndex" : 0,
+			"path" : "BSP/Encoder_EXTI/Encoder_EXTI.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 7,
+			"compileGroupIndex" : 0,
+			"path" : "BSP/GYRO/GYRO_APP.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 7,
+			"compileGroupIndex" : 0,
+			"path" : "BSP/Lazer_Control/HAL/Lazer_Control_HAL.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 7,
+			"compileGroupIndex" : 0,
+			"path" : "BSP/Lazer_Control/Lazer_Control.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 7,
+			"compileGroupIndex" : 0,
+			"path" : "BSP/PID/PID.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 7,
+			"compileGroupIndex" : 0,
+			"path" : "BSP/Servo/Servo_APP.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 7,
+			"compileGroupIndex" : 0,
+			"path" : "BSP/Servo/Servo_HAL.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 7,
+			"compileGroupIndex" : 0,
+			"path" : "BSP/TFT_ILI9488/GUI_HAL.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 7,
+			"compileGroupIndex" : 0,
+			"path" : "BSP/TFT_ILI9488/LCD/LCD_HAL.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 7,
+			"compileGroupIndex" : 0,
+			"path" : "BSP/TFT_ILI9488/LCD/font.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 7,
+			"compileGroupIndex" : 0,
+			"path" : "BSP/TFT_ILI9488/LCD/lcd.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 7,
+			"compileGroupIndex" : 0,
+			"path" : "BSP/TFT_ILI9488/SPI/SPI_HAL.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 7,
+			"compileGroupIndex" : 0,
+			"path" : "BSP/TFT_ILI9488/SPI/SPI_HAL_STM32HAL.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 7,
+			"compileGroupIndex" : 0,
+			"path" : "BSP/TFT_ILI9488/SPI/lcd_spi.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 7,
+			"compileGroupIndex" : 0,
+			"path" : "BSP/TFT_ILI9488/gui.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 7,
+			"compileGroupIndex" : 0,
+			"path" : "BSP/TIM/TIM.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 7,
+			"compileGroupIndex" : 0,
+			"path" : "BSP/UART/USART.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 7,
+			"compileGroupIndex" : 0,
+			"path" : "BSP/easy_button/ebtn.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 7,
+			"compileGroupIndex" : 0,
+			"path" : "BSP/easy_button_APP/ebtn_APP.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 7,
+			"compileGroupIndex" : 0,
+			"path" : "BSP/easy_button_APP/ebtn_Custom_Config.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 7,
+			"compileGroupIndex" : 0,
+			"path" : "BSP/easy_button_APP/ebtn_Custom_HAL.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 7,
+			"compileGroupIndex" : 0,
+			"path" : "BSP/lwrb/lwrb.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 7,
+			"compileGroupIndex" : 0,
+			"path" : "BSP/smooth/polyinterp.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 7,
+			"compileGroupIndex" : 0,
+			"path" : "BSP/u8g2_APP/u8g2_Custom_Display.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 7,
+			"compileGroupIndex" : 0,
+			"path" : "BSP/u8g2_APP/u8g2_Custom_HW_I2C_HAL.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 7,
+			"compileGroupIndex" : 0,
+			"path" : "BSP/u8g2_APP/wenquanyi_Custom_16px.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 7,
+			"compileGroupIndex" : 0,
+			"path" : "BSP/u8g2_csrc_SSD1306/mui.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 7,
+			"compileGroupIndex" : 0,
+			"path" : "BSP/u8g2_csrc_SSD1306/mui_u8g2.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 7,
+			"compileGroupIndex" : 0,
+			"path" : "BSP/u8g2_csrc_SSD1306/u8g2_arc.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 7,
+			"compileGroupIndex" : 0,
+			"path" : "BSP/u8g2_csrc_SSD1306/u8g2_bitmap.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 7,
+			"compileGroupIndex" : 0,
+			"path" : "BSP/u8g2_csrc_SSD1306/u8g2_box.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 7,
+			"compileGroupIndex" : 0,
+			"path" : "BSP/u8g2_csrc_SSD1306/u8g2_buffer.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 7,
+			"compileGroupIndex" : 0,
+			"path" : "BSP/u8g2_csrc_SSD1306/u8g2_button.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 7,
+			"compileGroupIndex" : 0,
+			"path" : "BSP/u8g2_csrc_SSD1306/u8g2_circle.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 7,
+			"compileGroupIndex" : 0,
+			"path" : "BSP/u8g2_csrc_SSD1306/u8g2_cleardisplay.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 7,
+			"compileGroupIndex" : 0,
+			"path" : "BSP/u8g2_csrc_SSD1306/u8g2_d_memory.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 7,
+			"compileGroupIndex" : 0,
+			"path" : "BSP/u8g2_csrc_SSD1306/u8g2_d_setup.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 7,
+			"compileGroupIndex" : 0,
+			"path" : "BSP/u8g2_csrc_SSD1306/u8g2_font.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 7,
+			"compileGroupIndex" : 0,
+			"path" : "BSP/u8g2_csrc_SSD1306/u8g2_fonts.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 7,
+			"compileGroupIndex" : 0,
+			"path" : "BSP/u8g2_csrc_SSD1306/u8g2_hvline.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 7,
+			"compileGroupIndex" : 0,
+			"path" : "BSP/u8g2_csrc_SSD1306/u8g2_input_value.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 7,
+			"compileGroupIndex" : 0,
+			"path" : "BSP/u8g2_csrc_SSD1306/u8g2_intersection.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 7,
+			"compileGroupIndex" : 0,
+			"path" : "BSP/u8g2_csrc_SSD1306/u8g2_kerning.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 7,
+			"compileGroupIndex" : 0,
+			"path" : "BSP/u8g2_csrc_SSD1306/u8g2_line.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 7,
+			"compileGroupIndex" : 0,
+			"path" : "BSP/u8g2_csrc_SSD1306/u8g2_ll_hvline.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 7,
+			"compileGroupIndex" : 0,
+			"path" : "BSP/u8g2_csrc_SSD1306/u8g2_message.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 7,
+			"compileGroupIndex" : 0,
+			"path" : "BSP/u8g2_csrc_SSD1306/u8g2_polygon.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 7,
+			"compileGroupIndex" : 0,
+			"path" : "BSP/u8g2_csrc_SSD1306/u8g2_selection_list.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 7,
+			"compileGroupIndex" : 0,
+			"path" : "BSP/u8g2_csrc_SSD1306/u8g2_setup.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 7,
+			"compileGroupIndex" : 0,
+			"path" : "BSP/u8g2_csrc_SSD1306/u8log.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 7,
+			"compileGroupIndex" : 0,
+			"path" : "BSP/u8g2_csrc_SSD1306/u8log_u8g2.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 7,
+			"compileGroupIndex" : 0,
+			"path" : "BSP/u8g2_csrc_SSD1306/u8log_u8x8.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 7,
+			"compileGroupIndex" : 0,
+			"path" : "BSP/u8g2_csrc_SSD1306/u8x8_8x8.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 7,
+			"compileGroupIndex" : 0,
+			"path" : "BSP/u8g2_csrc_SSD1306/u8x8_byte.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 7,
+			"compileGroupIndex" : 0,
+			"path" : "BSP/u8g2_csrc_SSD1306/u8x8_cad.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 7,
+			"compileGroupIndex" : 0,
+			"path" : "BSP/u8g2_csrc_SSD1306/u8x8_capture.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 7,
+			"compileGroupIndex" : 0,
+			"path" : "BSP/u8g2_csrc_SSD1306/u8x8_d_ssd1306_128x64_noname.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 7,
+			"compileGroupIndex" : 0,
+			"path" : "BSP/u8g2_csrc_SSD1306/u8x8_debounce.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 7,
+			"compileGroupIndex" : 0,
+			"path" : "BSP/u8g2_csrc_SSD1306/u8x8_display.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 7,
+			"compileGroupIndex" : 0,
+			"path" : "BSP/u8g2_csrc_SSD1306/u8x8_fonts.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 7,
+			"compileGroupIndex" : 0,
+			"path" : "BSP/u8g2_csrc_SSD1306/u8x8_gpio.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 7,
+			"compileGroupIndex" : 0,
+			"path" : "BSP/u8g2_csrc_SSD1306/u8x8_input_value.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 7,
+			"compileGroupIndex" : 0,
+			"path" : "BSP/u8g2_csrc_SSD1306/u8x8_message.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 7,
+			"compileGroupIndex" : 0,
+			"path" : "BSP/u8g2_csrc_SSD1306/u8x8_selection_list.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 7,
+			"compileGroupIndex" : 0,
+			"path" : "BSP/u8g2_csrc_SSD1306/u8x8_setup.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 7,
+			"compileGroupIndex" : 0,
+			"path" : "BSP/u8g2_csrc_SSD1306/u8x8_string.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 7,
+			"compileGroupIndex" : 0,
+			"path" : "BSP/u8g2_csrc_SSD1306/u8x8_u16toa.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 7,
+			"compileGroupIndex" : 0,
+			"path" : "BSP/u8g2_csrc_SSD1306/u8x8_u8toa.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 4,
+			"isGenerated" : true,
+			"path" : "build/MinSizeRel/cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Core/Src/system_stm32h7xx.c.obj",
+			"sourceGroupIndex" : 2
+		},
+		{
+			"backtrace" : 4,
+			"isGenerated" : true,
+			"path" : "build/MinSizeRel/cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_cortex.c.obj",
+			"sourceGroupIndex" : 2
+		},
+		{
+			"backtrace" : 4,
+			"isGenerated" : true,
+			"path" : "build/MinSizeRel/cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_i2c.c.obj",
+			"sourceGroupIndex" : 2
+		},
+		{
+			"backtrace" : 4,
+			"isGenerated" : true,
+			"path" : "build/MinSizeRel/cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_i2c_ex.c.obj",
+			"sourceGroupIndex" : 2
+		},
+		{
+			"backtrace" : 4,
+			"isGenerated" : true,
+			"path" : "build/MinSizeRel/cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_rcc.c.obj",
+			"sourceGroupIndex" : 2
+		},
+		{
+			"backtrace" : 4,
+			"isGenerated" : true,
+			"path" : "build/MinSizeRel/cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_rcc_ex.c.obj",
+			"sourceGroupIndex" : 2
+		},
+		{
+			"backtrace" : 4,
+			"isGenerated" : true,
+			"path" : "build/MinSizeRel/cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_flash.c.obj",
+			"sourceGroupIndex" : 2
+		},
+		{
+			"backtrace" : 4,
+			"isGenerated" : true,
+			"path" : "build/MinSizeRel/cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_flash_ex.c.obj",
+			"sourceGroupIndex" : 2
+		},
+		{
+			"backtrace" : 4,
+			"isGenerated" : true,
+			"path" : "build/MinSizeRel/cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_gpio.c.obj",
+			"sourceGroupIndex" : 2
+		},
+		{
+			"backtrace" : 4,
+			"isGenerated" : true,
+			"path" : "build/MinSizeRel/cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_hsem.c.obj",
+			"sourceGroupIndex" : 2
+		},
+		{
+			"backtrace" : 4,
+			"isGenerated" : true,
+			"path" : "build/MinSizeRel/cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_dma.c.obj",
+			"sourceGroupIndex" : 2
+		},
+		{
+			"backtrace" : 4,
+			"isGenerated" : true,
+			"path" : "build/MinSizeRel/cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_dma_ex.c.obj",
+			"sourceGroupIndex" : 2
+		},
+		{
+			"backtrace" : 4,
+			"isGenerated" : true,
+			"path" : "build/MinSizeRel/cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_mdma.c.obj",
+			"sourceGroupIndex" : 2
+		},
+		{
+			"backtrace" : 4,
+			"isGenerated" : true,
+			"path" : "build/MinSizeRel/cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_pwr.c.obj",
+			"sourceGroupIndex" : 2
+		},
+		{
+			"backtrace" : 4,
+			"isGenerated" : true,
+			"path" : "build/MinSizeRel/cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_pwr_ex.c.obj",
+			"sourceGroupIndex" : 2
+		},
+		{
+			"backtrace" : 4,
+			"isGenerated" : true,
+			"path" : "build/MinSizeRel/cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal.c.obj",
+			"sourceGroupIndex" : 2
+		},
+		{
+			"backtrace" : 4,
+			"isGenerated" : true,
+			"path" : "build/MinSizeRel/cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_exti.c.obj",
+			"sourceGroupIndex" : 2
+		},
+		{
+			"backtrace" : 4,
+			"isGenerated" : true,
+			"path" : "build/MinSizeRel/cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_spi.c.obj",
+			"sourceGroupIndex" : 2
+		},
+		{
+			"backtrace" : 4,
+			"isGenerated" : true,
+			"path" : "build/MinSizeRel/cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_spi_ex.c.obj",
+			"sourceGroupIndex" : 2
+		},
+		{
+			"backtrace" : 4,
+			"isGenerated" : true,
+			"path" : "build/MinSizeRel/cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_tim.c.obj",
+			"sourceGroupIndex" : 2
+		},
+		{
+			"backtrace" : 4,
+			"isGenerated" : true,
+			"path" : "build/MinSizeRel/cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_tim_ex.c.obj",
+			"sourceGroupIndex" : 2
+		},
+		{
+			"backtrace" : 4,
+			"isGenerated" : true,
+			"path" : "build/MinSizeRel/cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_uart.c.obj",
+			"sourceGroupIndex" : 2
+		},
+		{
+			"backtrace" : 4,
+			"isGenerated" : true,
+			"path" : "build/MinSizeRel/cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_uart_ex.c.obj",
+			"sourceGroupIndex" : 2
 		}
 	],
 	"type" : "EXECUTABLE"

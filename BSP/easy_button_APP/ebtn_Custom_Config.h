@@ -24,7 +24,7 @@
 #define CLICK_AND_PRESS_MIN_TIME 10  // 按键超时处理，按键最短时间,小于该时间则不触发Click或Press，配置为0，代表不检查最小值。用于防误触
 #define CLICK_AND_PRESS_MAX_TIME 200 // 按键超时处理，按键最长时间，配置为0xFFFF，代表不检查最大值。用于区分长按和按键事件，大于该时间则不触发Click而触发Press
 #define MULTI_CLICK_MAX_TIME 200     // 多击处理，两个按键之间认为是连击的超时时间(ms)
-#define KEEPALIVE_TIME_PERIOD 600    // 长按处理，长按周期，每个周期增加keepalive_cnt计数(ms)
+#define KEEPALIVE_TIME_PERIOD 700    // 长按处理，长按周期，每个周期增加keepalive_cnt计数(ms)
 #define MAX_CLICK_COUNT 3            // 最大连续点击次数,配置为0，代表不进行连击检查
 
 /* -------------------------------- 此处修改按键ID定义 -------------------------------- */

@@ -49,12 +49,30 @@ rule CUSTOM_COMMAND
 
 
 #############################################
+# Rule for compiling C files.
+
+rule C_COMPILER__STM32_Drivers_unscanned_MinSizeRel
+  depfile = $DEP_FILE
+  deps = gcc
+  command = ${LAUNCHER}${CODE_CHECK}/usr/bin/arm-none-eabi-gcc $DEFINES $INCLUDES $FLAGS -MD -MT $out -MF $DEP_FILE -o $out -c $in
+  description = Building C object $out
+
+
+#############################################
 # Rule for re-running cmake.
 
 rule RERUN_CMAKE
   command = /usr/bin/cmake --regenerate-during-build -S/home/Sighthesia/0_Files/1_Producing/Hardware/MCU/STM32/STM32H750VBT6_NUEDC -B/home/Sighthesia/0_Files/1_Producing/Hardware/MCU/STM32/STM32H750VBT6_NUEDC/build/MinSizeRel
   description = Re-running CMake...
   generator = 1
+
+
+#############################################
+# Rule for cleaning additional files.
+
+rule CLEAN_ADDITIONAL
+  command = /usr/bin/cmake -DCONFIG=$CONFIG -P CMakeFiles/clean_additional.cmake
+  description = Cleaning additional files...
 
 
 #############################################

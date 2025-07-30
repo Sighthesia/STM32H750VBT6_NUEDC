@@ -60,17 +60,10 @@
 
 /* USER CODE BEGIN PV */
 /* --------------------------------- 此处添加全局变量 -------------------------------- */
-// 原有变量
-double x_p = -0000.64, x_i = -0.0076, x_d = -00002.50, y_p = -000.96, y_i = -0.0096, y_d = -2.50; // 红色激光笔
-
 extern lwrb_t uart3_rx_buffer;
 extern uint8_t uart3_rx_buffer_data[16];
 extern uint8_t uart3_rx_byte;
 
-int16_t x_angle = 0;
-int16_t y_angle = 0;
-
-int16_t ts_dis_int = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -105,9 +98,9 @@ int _write(int fd, char *ptr, int len)
 /* USER CODE END 0 */
 
 /**
-  * @brief  The application entry point.
-  * @retval int
-  */
+ * @brief  The application entry point.
+ * @retval int
+ */
 int main(void)
 {
 
@@ -157,21 +150,10 @@ int main(void)
   astra_list_item_t *Lazer_Control = astra_new_list_item("Lazer Control");
   astra_push_item_to_list(Control, astra_new_list_item("Lazer Control"));
 
-  astra_push_item_to_list(Lazer_Control, astra_new_user_item("Set Middle", Lazer_Set_Middle_Position, NULL, NULL));
-  astra_push_item_to_list(Lazer_Control, astra_new_user_item("Reset", Lazer_Reset, NULL, NULL));
-
-  astra_push_item_to_list(Lazer_Control, astra_new_slider_item("ts dis", &ts_dis_int, 1, 0, 300));
-
-  astra_push_item_to_list(Lazer_Control, astra_new_slider_item("Lazer X", &servo_list[0].pwm, 50, 500, 2500));
-  astra_push_item_to_list(Lazer_Control, astra_new_slider_item("Lazer Y", &servo_list[1].pwm, 50, 500, 2500));
-  astra_push_item_to_list(Lazer_Control, astra_new_slider_item("X Angel", &x_angle, 1, 500, 2500));
-  astra_push_item_to_list(Lazer_Control, astra_new_slider_item("Y Angel", &y_angle, 1, 500, 2500));
-
   char msg[100] = {};
   sprintf(msg, "启动时间: %dms.", get_ticks());
   astra_push_pop_up(msg, 1500);
 
-  Servo_Init();
   HAL_TIM_Base_Start_IT(&htim7);
 
   /* USER CODE END 2 */
@@ -195,10 +177,6 @@ int main(void)
         astra_selector_go_prev_item();
       }
     }
-    ts_dis = (float)ts_dis_int / 100.0f;
-    x_angle = PWM_To_Angle(SERVO_0X, servo_list[0].pwm);
-    y_angle = PWM_To_Angle(SERVO_0Y, servo_list[1].pwm);
-
     oled_clear_buffer();
 
     astra_ui_widget_core();
@@ -213,27 +191,29 @@ int main(void)
 }
 
 /**
-  * @brief System Clock Configuration
-  * @retval None
-  */
+ * @brief System Clock Configuration
+ * @retval None
+ */
 void SystemClock_Config(void)
 {
   RCC_OscInitTypeDef RCC_OscInitStruct = {0};
   RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
 
   /** Supply configuration update enable
-  */
+   */
   HAL_PWREx_ConfigSupply(PWR_LDO_SUPPLY);
 
   /** Configure the main internal regulator output voltage
-  */
+   */
   __HAL_PWR_VOLTAGESCALING_CONFIG(PWR_REGULATOR_VOLTAGE_SCALE0);
 
-  while(!__HAL_PWR_GET_FLAG(PWR_FLAG_VOSRDY)) {}
+  while (!__HAL_PWR_GET_FLAG(PWR_FLAG_VOSRDY))
+  {
+  }
 
   /** Initializes the RCC Oscillators according to the specified parameters
-  * in the RCC_OscInitTypeDef structure.
-  */
+   * in the RCC_OscInitTypeDef structure.
+   */
   RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI;
   RCC_OscInitStruct.HSIState = RCC_HSI_DIV1;
   RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
@@ -253,10 +233,8 @@ void SystemClock_Config(void)
   }
 
   /** Initializes the CPU, AHB and APB buses clocks
-  */
-  RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
-                              |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2
-                              |RCC_CLOCKTYPE_D3PCLK1|RCC_CLOCKTYPE_D1PCLK1;
+   */
+  RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK | RCC_CLOCKTYPE_SYSCLK | RCC_CLOCKTYPE_PCLK1 | RCC_CLOCKTYPE_PCLK2 | RCC_CLOCKTYPE_D3PCLK1 | RCC_CLOCKTYPE_D1PCLK1;
   RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
   RCC_ClkInitStruct.SYSCLKDivider = RCC_SYSCLK_DIV1;
   RCC_ClkInitStruct.AHBCLKDivider = RCC_HCLK_DIV1;
@@ -275,7 +253,7 @@ void SystemClock_Config(void)
 
 /* USER CODE END 4 */
 
- /* MPU Configuration */
+/* MPU Configuration */
 
 void MPU_Config(void)
 {
@@ -285,7 +263,7 @@ void MPU_Config(void)
   HAL_MPU_Disable();
 
   /** Initializes and configures the Region and the memory to be protected
-  */
+   */
   MPU_InitStruct.Enable = MPU_REGION_ENABLE;
   MPU_InitStruct.Number = MPU_REGION_NUMBER0;
   MPU_InitStruct.BaseAddress = 0x0;
@@ -301,13 +279,12 @@ void MPU_Config(void)
   HAL_MPU_ConfigRegion(&MPU_InitStruct);
   /* Enables the MPU */
   HAL_MPU_Enable(MPU_PRIVILEGED_DEFAULT);
-
 }
 
 /**
-  * @brief  This function is executed in case of error occurrence.
-  * @retval None
-  */
+ * @brief  This function is executed in case of error occurrence.
+ * @retval None
+ */
 void Error_Handler(void)
 {
   /* USER CODE BEGIN Error_Handler_Debug */
@@ -320,12 +297,12 @@ void Error_Handler(void)
 }
 #ifdef USE_FULL_ASSERT
 /**
-  * @brief  Reports the name of the source file and the source line number
-  *         where the assert_param error has occurred.
-  * @param  file: pointer to the source file name
-  * @param  line: assert_param error line source number
-  * @retval None
-  */
+ * @brief  Reports the name of the source file and the source line number
+ *         where the assert_param error has occurred.
+ * @param  file: pointer to the source file name
+ * @param  line: assert_param error line source number
+ * @retval None
+ */
 void assert_failed(uint8_t *file, uint32_t line)
 {
   /* USER CODE BEGIN 6 */

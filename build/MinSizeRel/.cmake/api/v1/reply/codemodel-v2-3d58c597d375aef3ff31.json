@@ -30,35 +30,29 @@
 						"string" : "3.22"
 					},
 					"parentIndex" : 0,
-					"projectIndex" : 1,
-					"source" : "cmake/stm32cubemx"
+					"projectIndex" : 0,
+					"source" : "cmake/stm32cubemx",
+					"targetIndexes" : 
+					[
+						1
+					]
 				}
 			],
 			"name" : "MinSizeRel",
 			"projects" : 
 			[
 				{
-					"childIndexes" : 
-					[
-						1
-					],
 					"directoryIndexes" : 
 					[
-						0
+						0,
+						1
 					],
 					"name" : "STM32H750VBT6_NUEDC",
 					"targetIndexes" : 
 					[
-						0
-					]
-				},
-				{
-					"directoryIndexes" : 
-					[
+						0,
 						1
-					],
-					"name" : "stm32cubemx",
-					"parentIndex" : 0
+					]
 				}
 			],
 			"targets" : 
@@ -66,8 +60,15 @@
 				{
 					"directoryIndex" : 0,
 					"id" : "STM32H750VBT6_NUEDC::@6890427a1f51a3e7e1df",
-					"jsonFile" : "target-STM32H750VBT6_NUEDC-MinSizeRel-e0af7d8e1d2e07d523df.json",
+					"jsonFile" : "target-STM32H750VBT6_NUEDC-MinSizeRel-0cc14e886b77126ea8eb.json",
 					"name" : "STM32H750VBT6_NUEDC",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 1,
+					"id" : "STM32_Drivers::@768a070a0fe75716b479",
+					"jsonFile" : "target-STM32_Drivers-MinSizeRel-362f652c0603659cbe46.json",
+					"name" : "STM32_Drivers",
 					"projectIndex" : 0
 				}
 			]

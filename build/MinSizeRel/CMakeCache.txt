@@ -217,8 +217,8 @@ CMAKE_STRIP:FILEPATH=/usr/bin/arm-none-eabi-strip
 //Path to a program.
 CMAKE_TAPI:FILEPATH=CMAKE_TAPI-NOTFOUND
 
-//No help, variable specified on the command line.
-CMAKE_TOOLCHAIN_FILE:UNINITIALIZED=/home/Sighthesia/0_Files/1_Producing/Hardware/MCU/STM32/STM32H750VBT6_NUEDC/cmake/gcc-arm-none-eabi.cmake
+//The CMake toolchain file
+CMAKE_TOOLCHAIN_FILE:FILEPATH=/home/Sighthesia/0_Files/1_Producing/Hardware/MCU/STM32/STM32H750VBT6_NUEDC/cmake/gcc-arm-none-eabi.cmake
 
 //If this value is on, makefiles will be generated without the
 // .SILENT directive, and all commands will be echoed to the console
@@ -234,15 +234,6 @@ STM32H750VBT6_NUEDC_IS_TOP_LEVEL:STATIC=ON
 
 //Value Computed by CMake
 STM32H750VBT6_NUEDC_SOURCE_DIR:STATIC=/home/Sighthesia/0_Files/1_Producing/Hardware/MCU/STM32/STM32H750VBT6_NUEDC
-
-//Value Computed by CMake
-stm32cubemx_BINARY_DIR:STATIC=/home/Sighthesia/0_Files/1_Producing/Hardware/MCU/STM32/STM32H750VBT6_NUEDC/build/MinSizeRel/cmake/stm32cubemx
-
-//Value Computed by CMake
-stm32cubemx_IS_TOP_LEVEL:STATIC=OFF
-
-//Value Computed by CMake
-stm32cubemx_SOURCE_DIR:STATIC=/home/Sighthesia/0_Files/1_Producing/Hardware/MCU/STM32/STM32H750VBT6_NUEDC/cmake/stm32cubemx
 
 
 ########################
