@@ -1,28 +1,12 @@
 #ifndef _ZDT_STEPPER_H_
 #define _ZDT_STEPPER_H_
+
+#include "ZDT_Stepper_HAL.h"
+#include "stdio.h"
+#include "string.h"
+#include "stdlib.h"
 #include "usart.h"
 #include "stdint.h"
-
-// 使能
-#define Enable 1
-#define Disable 0
-// 舵机同步
-#define SYNC_ENABLE 1  // 多机同步
-#define SYNC_DISABLE 0 // 不使能多机同步
-// 方向
-#define CW 1  // 负转速 顺时针，正对转轴看
-#define CCW 0 // 正转速 逆时针
-// 位置模式
-#define REL_POS_MODE 0 // 相对位置模式
-#define ABS_POS_MODE 1 // 绝对位置模式
-// 是否存储
-#define STORE 1    // 存储标志
-#define NO_STORE 0 // 不存储标
-
-// 最大支持的串口数量
-#define ZDT_STEPPER_MAX_UART 2
-// 每个串口最大支持的电机数量
-#define ZDT_STEPPER_PER_UART_MAX_MOTORS 1
 
 typedef struct
 {
@@ -66,7 +50,7 @@ typedef struct
     uint8_t motor_count;                                     // 电机数量
 } ZDTStepperUart;
 
-void ZDT_Stepper_Init(UART_HandleTypeDef *huart, DMA_HandleTypeDef *hdma_rx);
+void ZDT_Stepper_Init(void);
 void ZDT_Stepper_Register_Motor(UART_HandleTypeDef *huart, uint8_t motor_id);
 ZDTStepperMotor *ZDT_Stepper_Get_Motor(UART_HandleTypeDef *huart, uint8_t motor_id);
 void ZDT_Stepper_UART_Send_Data(ZDTStepperMotor *motor, uint8_t *data, size_t length);

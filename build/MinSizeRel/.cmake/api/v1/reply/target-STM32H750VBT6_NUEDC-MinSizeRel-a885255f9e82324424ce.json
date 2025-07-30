@@ -115,6 +115,10 @@
 				},
 				{
 					"backtrace" : 5,
+					"path" : "/home/Sighthesia/0_Files/1_Producing/Hardware/MCU/STM32/STM32H750VBT6_NUEDC/BSP/Hardware/ZDT_Step_Motor/HAL"
+				},
+				{
+					"backtrace" : 5,
 					"path" : "/home/Sighthesia/0_Files/1_Producing/Hardware/MCU/STM32/STM32H750VBT6_NUEDC/BSP/Hardware/ZDT_Step_Motor"
 				},
 				{
@@ -263,7 +267,8 @@
 				76,
 				77,
 				78,
-				79
+				79,
+				80
 			]
 		},
 		{
@@ -309,6 +314,10 @@
 				{
 					"backtrace" : 5,
 					"path" : "/home/Sighthesia/0_Files/1_Producing/Hardware/MCU/STM32/STM32H750VBT6_NUEDC/BSP/Hardware/TFT_ILI9488/SPI"
+				},
+				{
+					"backtrace" : 5,
+					"path" : "/home/Sighthesia/0_Files/1_Producing/Hardware/MCU/STM32/STM32H750VBT6_NUEDC/BSP/Hardware/ZDT_Step_Motor/HAL"
 				},
 				{
 					"backtrace" : 5,
@@ -498,7 +507,8 @@
 				76,
 				77,
 				78,
-				79
+				79,
+				80
 			]
 		},
 		{
@@ -512,7 +522,6 @@
 			"name" : "Object Libraries",
 			"sourceIndexes" : 
 			[
-				80,
 				81,
 				82,
 				83,
@@ -534,7 +543,8 @@
 				99,
 				100,
 				101,
-				102
+				102,
+				103
 			]
 		}
 	],
@@ -682,6 +692,12 @@
 			"backtrace" : 7,
 			"compileGroupIndex" : 0,
 			"path" : "BSP/Hardware/TFT_ILI9488/gui.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 7,
+			"compileGroupIndex" : 0,
+			"path" : "BSP/Hardware/ZDT_Step_Motor/HAL/ZDT_Stepper_HAL_STM32HAL.c",
 			"sourceGroupIndex" : 0
 		},
 		{

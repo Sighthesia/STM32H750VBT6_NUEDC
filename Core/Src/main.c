@@ -34,6 +34,7 @@
 #include "ebtn_APP.h"
 #include "Encoder_EXTI.h"
 #include "lwrb.h"
+#include "ZDT_Stepper.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
