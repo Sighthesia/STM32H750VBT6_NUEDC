@@ -14,15 +14,15 @@
 #include "Stepper_PID.h"
 
 /* --------------------------------- 此处修改: PID参数变量定义与初始化 -------------------------------- */
-float pid_kp = 2.0f;
+float pid_kp = 0.0f;
 float pid_ki = 0.0f;
 float pid_kd = 0.0f;
-float pid_tau = 0.02f;
-float pid_lim_min = -10.0f;
-float pid_lim_max = 10.0f;
-float pid_lim_min_int = -5.0f;
-float pid_lim_max_int = 5.0f;
-float sample_time_s = 0.01f;
+float pid_tau = 0.0f;
+float pid_lim_min = 0.0f;
+float pid_lim_max = 0.0f;
+float pid_lim_min_int = 0.0f;
+float pid_lim_max_int = 0.0f;
+float sample_time_s = 0.0f;
 /* --------------------------------- 自定义部分结束 -------------------------------- */
 
 float yaw_speed = 1.0f;
@@ -48,15 +48,15 @@ float pitch_pid_error = 0.0f;
 uint8_t pid_update_done_flag = 0; // PID更新标志位
 
 // 中间变量
-int16_t pid_kp_slider_val = 20;
-int16_t pid_ki_slider_val = 0;
-int16_t pid_kd_slider_val = 0;
-int16_t pid_tau_slider_val = 2;
-int16_t pid_lim_min_slider_val = -100;
-int16_t pid_lim_max_slider_val = 100;
-int16_t pid_lim_min_int_slider_val = -50;
-int16_t pid_lim_max_int_slider_val = 50;
-int16_t pid_sample_time_slider_val = 10;
+int16_t pid_kp_slider_val = 20;         // 2.0f -> 20*0.1
+int16_t pid_ki_slider_val = 0;          // 0.0f -> 0*0.1
+int16_t pid_kd_slider_val = 0;          // 0.0f -> 0*0.1
+int16_t pid_tau_slider_val = 2;         // 0.02f -> 2*0.01
+int16_t pid_lim_min_slider_val = -100;  // -10.0f -> -100*0.1
+int16_t pid_lim_max_slider_val = 100;   // 10.0f -> 100*0.1
+int16_t pid_lim_min_int_slider_val = -50; // -5.0f -> -50*0.1
+int16_t pid_lim_max_int_slider_val = 50;  // 5.0f -> 50*0.1
+int16_t pid_sample_time_slider_val = 1;   // 0.01f -> 1*0.01
 
 /** ***************************************************************************
  * @brief  初始化步进电机PID参数
