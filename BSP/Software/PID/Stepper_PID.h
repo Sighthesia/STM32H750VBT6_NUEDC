@@ -87,6 +87,8 @@ extern uint16_t pitch_pid_error;
 extern PIDController yaw_pid;   // 航向轴PID控制器
 extern PIDController pitch_pid; // 俯仰轴PID控制器
 
+extern uint8_t pid_update_done_flag; // PID更新标志位
+
 void Yaw_Stepper_Position_Update(float pid_output);
 
 void Pitch_Stepper_Position_Update(float pid_output);

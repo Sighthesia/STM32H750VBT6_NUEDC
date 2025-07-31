@@ -46,6 +46,8 @@ uint16_t pitch_pid_target = 0;
 uint16_t yaw_pid_error = 0;
 uint16_t pitch_pid_error = 0;
 
+uint8_t pid_update_done_flag = 0; // PID更新标志位
+
 void Stepper_PID_Parameters_Init(PIDController *pid)
 {
     // 初始化PID参数

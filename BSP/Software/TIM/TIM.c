@@ -30,6 +30,14 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
             pitch_pid_output = PIDController_Update(&pitch_pid, pitch_pid_target, rectangle_coordinate_arr[1]);
             uart_rx_done_flag = 0; // 清零标志，等待下次接收
         }
+
+        if (pid_update_done_flag)
+        {
+            // 更新步进电机位置
+            Yaw_Stepper_Position_Update(yaw_pid_output);
+            Pitch_Stepper_Position_Update(pitch_pid_output);
+            pid_update_done_flag = 0; // 清零标志，等待下次更新
+        }
     }
 }
 
