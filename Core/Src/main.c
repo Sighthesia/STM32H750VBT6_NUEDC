@@ -179,6 +179,7 @@ int main(void)
   astra_push_item_to_list(Flag, astra_new_switch_item("PID DEBUG", &pid_debug_flag));
 
   uart_rx_enable_flag = 1; // 允许接收数据
+  pid_debug_flag = 1;      // 允许PID调试
 
   /* ----------------------------------- PID ---------------------------------- */
 

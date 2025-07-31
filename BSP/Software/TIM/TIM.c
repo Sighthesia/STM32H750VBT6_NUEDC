@@ -51,8 +51,10 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
         if (stepper_update_flag)
         {
             // 更新步进电机位置
-            // Yaw_Stepper_Position_Update(yaw_pid_output);
-            // Pitch_Stepper_Position_Update(pitch_pid_output);
+            Yaw_Stepper_Position_Update(yaw_pid_output);
+            Pitch_Stepper_Position_Update(pitch_pid_output);
+            // ZDT_Stepper_Set_position(zdt_stepper_motors[STEPPER_YAW], 1, 1.0, yaw_pid_output, ZDT_STEPPER_REL_POS_MODE, ZDT_STEPPER_SYNC_DISABLE);
+            // ZDT_Stepper_Set_position(zdt_stepper_motors[STEPPER_PITCH], 1, 1.0, pitch_pid_output, ZDT_STEPPER_REL_POS_MODE, ZDT_STEPPER_SYNC_DISABLE);
 
             printf("PID Update: Yaw: %f, Pitch: %f\n", yaw_pid_output, pitch_pid_output);
 

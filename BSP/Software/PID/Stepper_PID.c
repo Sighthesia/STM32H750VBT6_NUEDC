@@ -93,16 +93,26 @@ void sync_pid_slider_to_float(void)
     sample_time_s = pid_sample_time_slider_val * 0.01f;
 }
 
+/** ***************************************************************************
+ * @brief   更新航向轴步进电机位置，负值顺时针，正值逆时针
+ * @param   pid_output: PID输出值
+ */
 void Yaw_Stepper_Position_Update(float pid_output)
 {
+    uint8_t dir = (pid_output >= 0) ? 0x01 : 0x00; // 0x01: CCW(逆时针), 0x00: CW(顺时针)
+    float angle = fabsf(pid_output);
     pid_yaw_angle = pid_output;
-
-    ZDT_Stepper_Set_position(zdt_stepper_motors[STEPPER_YAW], 00, yaw_speed, pid_yaw_angle, ZDT_STEPPER_REL_POS_MODE, ZDT_STEPPER_SYNC_DISABLE);
+    ZDT_Stepper_Set_position(zdt_stepper_motors[STEPPER_YAW], dir, yaw_speed, angle, ZDT_STEPPER_REL_POS_MODE, ZDT_STEPPER_SYNC_DISABLE);
 }
 
+/** ***************************************************************************
+ * @brief   更新俯仰轴步进电机位置，负值逆时针，正值顺时针
+ * @param   pid_output: PID输出值
+ */
 void Pitch_Stepper_Position_Update(float pid_output)
 {
+    uint8_t dir = (pid_output >= 0) ? 0x00 : 0x01; // 0x00: CW(顺时针), 0x01: CCW(逆时针)
+    float angle = fabsf(pid_output);
     pid_pitch_angle = pid_output;
-
-    ZDT_Stepper_Set_position(zdt_stepper_motors[STEPPER_PITCH], 00, pitch_speed, pid_pitch_angle, ZDT_STEPPER_REL_POS_MODE, ZDT_STEPPER_SYNC_DISABLE);
+    ZDT_Stepper_Set_position(zdt_stepper_motors[STEPPER_PITCH], dir, pitch_speed, angle, ZDT_STEPPER_REL_POS_MODE, ZDT_STEPPER_SYNC_DISABLE);
 }
