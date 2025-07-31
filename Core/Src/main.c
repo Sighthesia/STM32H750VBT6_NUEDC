@@ -158,6 +158,9 @@ int main(void)
   ZDT_Stepper_Enable(zdt_stepper_motors[1], 1, 0);
 
   /* ----------------------------------- 菜单 ----------------------------------- */
+  // 初始化OLED显示
+  astra_ui_driver_init();
+  astra_init_core();
 
   astra_list_item_t *Control = astra_new_list_item("Control");
   astra_push_item_to_list(astra_get_root_list(), Control);
@@ -165,11 +168,17 @@ int main(void)
   astra_list_item_t *Settings = astra_new_list_item("Settings");
   astra_push_item_to_list(astra_get_root_list(), Settings);
 
-  astra_list_item_t *Stepper = astra_new_list_item("Stepper");
-  astra_push_item_to_list(Settings, Stepper);
+  /* ---------------------------------- Flag ---------------------------------- */
 
-  astra_push_item_to_list(Stepper, astra_new_user_item("Stepper 1 RST", stepper1_reset_wrapper, NULL, NULL));
-  astra_push_item_to_list(Stepper, astra_new_user_item("Stepper 2 RST", stepper2_reset_wrapper, NULL, NULL));
+  astra_list_item_t *Flag = astra_new_list_item("Flag");
+  astra_push_item_to_list(Settings, Flag);
+
+  astra_push_item_to_list(Flag, astra_new_switch_item("UART RX En", &uart_rx_enable_flag));
+  astra_push_item_to_list(Flag, astra_new_switch_item("PID Update", &pid_update_flag));
+  astra_push_item_to_list(Flag, astra_new_switch_item("Stepper Update", &stepper_update_flag));
+  astra_push_item_to_list(Flag, astra_new_switch_item("PID DEBUG", &pid_debug_flag));
+
+  uart_rx_enable_flag = 1; // 允许接收数据
 
   /* ----------------------------------- PID ---------------------------------- */
 
@@ -204,25 +213,15 @@ int main(void)
   PIDController_Init(&yaw_pid);   // 初始化航向轴PID
   PIDController_Init(&pitch_pid); // 初始化俯仰轴PID
 
+  astra_list_item_t *Stepper = astra_new_list_item("Stepper");
+  astra_push_item_to_list(Settings, Stepper);
+
+  astra_push_item_to_list(Stepper, astra_new_user_item("Stepper 1 RST", stepper1_reset_wrapper, NULL, NULL));
+  astra_push_item_to_list(Stepper, astra_new_user_item("Stepper 2 RST", stepper2_reset_wrapper, NULL, NULL));
+
   HAL_TIM_Base_Start_IT(&htim7); // 10ms 定时器
 
-  /* ---------------------------------- Flag ---------------------------------- */
-
-  astra_list_item_t *Flag = astra_new_list_item("Flag");
-  astra_push_item_to_list(Settings, Flag);
-
-  astra_push_item_to_list(Flag, astra_new_switch_item("UART RX En", &uart_rx_enable_flag));
-  astra_push_item_to_list(Flag, astra_new_switch_item("PID Update", &pid_update_flag));
-  astra_push_item_to_list(Flag, astra_new_switch_item("Stepper Update", &stepper_update_flag));
-  astra_push_item_to_list(Flag, astra_new_switch_item("PID DEBUG", &pid_debug_flag));
-
-  uart_rx_enable_flag = 1; // 允许接收数据
-
   ebtn_APP_Key_INIT();
-
-  // 初始化OLED显示
-  astra_ui_driver_init();
-  astra_init_core();
 
   char msg[20] = {};
   sprintf(msg, "启动时间: %dms.", get_ticks());

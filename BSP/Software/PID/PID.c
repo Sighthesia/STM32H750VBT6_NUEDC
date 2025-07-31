@@ -1,4 +1,5 @@
 #include "PID.h"
+#include "stdio.h"
 
 void PIDController_Init(PIDController *pid) {
 
@@ -73,6 +74,8 @@ float PIDController_Update(PIDController *pid, float setpoint, float measurement
     pid->prevMeasurement = measurement;
 
 	/* Return controller output */
+		printf("Kp: %f, Ki: %f, Kd: %f, error: %f, proportional: %f, integrator: %f, differentiator: %f, out: %f, limMin: %f, limMax: %f\n",
+		pid->Kp, pid->Ki, pid->Kd, error, proportional, pid->integrator, pid->differentiator, pid->out, pid->limMin, pid->limMax);
     return pid->out;
 
 }
