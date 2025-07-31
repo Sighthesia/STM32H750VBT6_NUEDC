@@ -40,7 +40,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
             yaw_pid_output = PIDController_Update(&yaw_pid, yaw_pid_target, (float)rectangle_coordinate_arr[0]);
             pitch_pid_output = PIDController_Update(&pitch_pid, pitch_pid_target, (float)rectangle_coordinate_arr[1]);
 
-            printf("Target: Yaw=%f, Pitch=%f | Current: Yaw=%f, Pitch=%f\n",
+            printf("PID: Target: Yaw=%f, Pitch=%f | Current: Yaw=%f, Pitch=%f\n",
                    yaw_pid_target, pitch_pid_target,
                    (float)rectangle_coordinate_arr[0], (float)rectangle_coordinate_arr[1]);
 
@@ -50,13 +50,10 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 
         if (stepper_update_flag)
         {
+            printf("Stepper: Update: Yaw: %f, Pitch: %f\n", yaw_pid_output, pitch_pid_output);
             // 更新步进电机位置
             Yaw_Stepper_Position_Update(yaw_pid_output);
             Pitch_Stepper_Position_Update(pitch_pid_output);
-            // ZDT_Stepper_Set_position(zdt_stepper_motors[STEPPER_YAW], 1, 1.0, yaw_pid_output, ZDT_STEPPER_REL_POS_MODE, ZDT_STEPPER_SYNC_DISABLE);
-            // ZDT_Stepper_Set_position(zdt_stepper_motors[STEPPER_PITCH], 1, 1.0, pitch_pid_output, ZDT_STEPPER_REL_POS_MODE, ZDT_STEPPER_SYNC_DISABLE);
-
-            printf("PID Update: Yaw: %f, Pitch: %f\n", yaw_pid_output, pitch_pid_output);
 
             stepper_update_flag = 0; // 清零标志，等待下次更新
         }

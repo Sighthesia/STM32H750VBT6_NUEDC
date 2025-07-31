@@ -3,7 +3,7 @@
 extern DMA_HandleTypeDef hdma_uart5_tx;
 extern DMA_HandleTypeDef hdma_usart2_tx;
 
-// 电机配置表（用户可在此处添加/修改电机配置）
+/* ---------------------------------- 电机配置表 --------------------------------- */
 static zdt_stepper_motor_config_t zdt_stepper_motor_config_table[] = {
     // {串口句柄, DMA句柄, 电机ID}
     {&huart2, &hdma_usart2_tx, STEPPER_YAW},

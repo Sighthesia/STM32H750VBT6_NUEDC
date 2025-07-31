@@ -102,7 +102,7 @@ void Yaw_Stepper_Position_Update(float pid_output)
     uint8_t dir = (pid_output >= 0) ? 0x01 : 0x00; // 0x01: CCW(逆时针), 0x00: CW(顺时针)
     float angle = fabsf(pid_output);
     pid_yaw_angle = pid_output;
-    ZDT_Stepper_Set_position(zdt_stepper_motors[STEPPER_YAW], dir, yaw_speed, angle, ZDT_STEPPER_REL_POS_MODE, ZDT_STEPPER_SYNC_DISABLE);
+    ZDT_Stepper_Set_position(zdt_stepper_motors[0], dir, yaw_speed, angle, ZDT_STEPPER_REL_POS_MODE, ZDT_STEPPER_SYNC_DISABLE);
 }
 
 /** ***************************************************************************
@@ -114,5 +114,5 @@ void Pitch_Stepper_Position_Update(float pid_output)
     uint8_t dir = (pid_output >= 0) ? 0x00 : 0x01; // 0x00: CW(顺时针), 0x01: CCW(逆时针)
     float angle = fabsf(pid_output);
     pid_pitch_angle = pid_output;
-    ZDT_Stepper_Set_position(zdt_stepper_motors[STEPPER_PITCH], dir, pitch_speed, angle, ZDT_STEPPER_REL_POS_MODE, ZDT_STEPPER_SYNC_DISABLE);
+    ZDT_Stepper_Set_position(zdt_stepper_motors[1], dir, pitch_speed, angle, ZDT_STEPPER_REL_POS_MODE, ZDT_STEPPER_SYNC_DISABLE);
 }

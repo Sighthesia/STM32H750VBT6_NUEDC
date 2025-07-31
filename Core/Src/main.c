@@ -154,8 +154,8 @@ int main(void)
 
   // 使能电机
   ZDT_Stepper_Init();
-  ZDT_Stepper_Enable(zdt_stepper_motors[0], 1, 0);
-  ZDT_Stepper_Enable(zdt_stepper_motors[1], 1, 0);
+  ZDT_Stepper_Enable(zdt_stepper_motors[0], 1, ZDT_STEPPER_SYNC_DISABLE);
+  ZDT_Stepper_Enable(zdt_stepper_motors[1], 1, ZDT_STEPPER_SYNC_DISABLE);
 
   /* ----------------------------------- 菜单 ----------------------------------- */
   // 初始化OLED显示
@@ -180,6 +180,7 @@ int main(void)
 
   uart_rx_enable_flag = 1; // 允许接收数据
   pid_debug_flag = 1;      // 允许PID调试
+  stepper_update_flag = 0; // 禁止步进电机更新
 
   /* ----------------------------------- PID ---------------------------------- */
 
@@ -214,19 +215,22 @@ int main(void)
   PIDController_Init(&yaw_pid);   // 初始化航向轴PID
   PIDController_Init(&pitch_pid); // 初始化俯仰轴PID
 
+  // 步进电机
   astra_list_item_t *Stepper = astra_new_list_item("Stepper");
   astra_push_item_to_list(Settings, Stepper);
 
   astra_push_item_to_list(Stepper, astra_new_user_item("Stepper 1 RST", stepper1_reset_wrapper, NULL, NULL));
   astra_push_item_to_list(Stepper, astra_new_user_item("Stepper 2 RST", stepper2_reset_wrapper, NULL, NULL));
 
-  HAL_TIM_Base_Start_IT(&htim7); // 10ms 定时器
-
   ebtn_APP_Key_INIT();
+
+  HAL_TIM_Base_Start_IT(&htim7); // 10ms 定时器
 
   char msg[20] = {};
   sprintf(msg, "启动时间: %dms.", get_ticks());
   astra_push_pop_up(msg, 1500);
+
+  ZDT_Stepper_Set_position(zdt_stepper_motors[0], 1, 1.0, 45.0f, ZDT_STEPPER_REL_POS_MODE, ZDT_STEPPER_SYNC_DISABLE);
 
   /* USER CODE END 2 */
 
