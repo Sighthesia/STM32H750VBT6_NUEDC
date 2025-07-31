@@ -16,7 +16,7 @@
 int16_t rectangle_coordinate_arr[2] = {0, 0}; // [0]: x, [1]: y
 // 接收控制标志位
 volatile _Bool uart_rx_enable_flag = 0; // 1:允许接收，0:禁止接收
-volatile _Bool uart_rx_done_flag = 0;   // 1:接收完成，0:未完成
+volatile _Bool pid_update_flag = 0;     // 1:接收完成，0:未完成
 
 // 状态机变量
 uint8_t packet_buf[UART_PACKET_LEN]; // 存储当前正在接收的数据包
@@ -74,7 +74,7 @@ uint8_t UART_Parse_Packet(uint8_t data)
                     {
                         rectangle_coordinate_arr[1] = diff; // y
                     }
-                    uart_rx_done_flag = 1; // 解包成功，置接收完成标志
+                    pid_update_flag = 1; // 解包成功，置接收完成标志
                     printf("UART Packet Received: %d, %d\n", rectangle_coordinate_arr[0], rectangle_coordinate_arr[1]);
                     return 1;
                 }

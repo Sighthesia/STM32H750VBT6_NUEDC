@@ -51,7 +51,8 @@
         "zdt_stepper_hal.h": "c",
         "stdlib.h": "c",
         "dma.h": "c",
-        "stepper_pid.h": "c"
+        "stepper_pid.h": "c",
+        "stepper_control.h": "c"
     },
     "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
     "files.readonlyInclude": {

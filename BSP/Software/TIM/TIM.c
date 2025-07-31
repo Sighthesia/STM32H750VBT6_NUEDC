@@ -16,6 +16,13 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
     if (htim->Instance == TIM7)
     {
+        if (pid_debug_flag == 1)
+        {
+            // 同步PID滑块到浮点数
+            sync_pid_slider_to_float();
+            Stepper_PID_Parameters_Init(&yaw_pid);   // 同步航向轴PID参数
+            Stepper_PID_Parameters_Init(&pitch_pid); // 同步俯仰轴PID参数
+        }
         ebtn_APP_Key_Process(); // 处理按键事件
 
         if (uart_rx_enable_flag) // 允许解包
@@ -28,26 +35,25 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
         }
 
         // 只有接收完成标志为1时才更新PID
-        if (uart_rx_done_flag)
+        if (pid_update_flag)
         {
             yaw_pid_output = PIDController_Update(&yaw_pid, yaw_pid_target, (float)rectangle_coordinate_arr[0]);
             pitch_pid_output = PIDController_Update(&pitch_pid, pitch_pid_target, (float)rectangle_coordinate_arr[1]);
 
-            uart_rx_done_flag = 0;    // 清零标志，等待下次接收
-            pid_update_done_flag = 1; // 设置PID更新标志位
+            pid_update_flag = 0;     // 清零标志，等待下次接收
+            stepper_update_flag = 1; // 设置PID更新标志位
         }
 
-        if (pid_update_done_flag)
+        if (stepper_update_flag)
         {
             // 更新步进电机位置
-            Yaw_Stepper_Position_Update(yaw_pid_output);
-            Pitch_Stepper_Position_Update(pitch_pid_output);
+            // Yaw_Stepper_Position_Update(yaw_pid_output);
+            // Pitch_Stepper_Position_Update(pitch_pid_output);
 
-            pid_update_done_flag = 0; // 清零标志，等待下次更新
+            printf("PID Update: Yaw: %d, Pitch: %d\n", yaw_pid_output, pitch_pid_output);
+
+            stepper_update_flag = 0; // 清零标志，等待下次更新
         }
-
-        // 同步PID菜单数值到浮点数
-        sync_pid_slider_to_float();
     }
 }
 
