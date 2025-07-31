@@ -30,8 +30,8 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
         // 只有接收完成标志为1时才更新PID
         if (uart_rx_done_flag)
         {
-            yaw_pid_output = PIDController_Update(&yaw_pid, yaw_pid_target, rectangle_coordinate_arr[0]);
-            pitch_pid_output = PIDController_Update(&pitch_pid, pitch_pid_target, rectangle_coordinate_arr[1]);
+            yaw_pid_output = PIDController_Update(&yaw_pid, yaw_pid_target, (float)rectangle_coordinate_arr[0]);
+            pitch_pid_output = PIDController_Update(&pitch_pid, pitch_pid_target, (float)rectangle_coordinate_arr[1]);
             uart_rx_done_flag = 0; // 清零标志，等待下次接收
         }
 
