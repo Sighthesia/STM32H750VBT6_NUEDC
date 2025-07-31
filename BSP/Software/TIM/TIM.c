@@ -11,11 +11,6 @@
  * @Modifi Date :
  */
 #include "TIM.h"
-#include "usart.h"
-#include <stdio.h>
-
-#include "Stepper_PID.h"
-#include "USART.h"
 
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
@@ -38,6 +33,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
             Pitch_Stepper_Position_Update(pitch_pid_output);
             pid_update_done_flag = 0; // 清零标志，等待下次更新
         }
+        sync_pid_slider_to_float();
     }
 }
 

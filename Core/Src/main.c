@@ -71,7 +71,6 @@ static void MPU_Config(void);
 
 /* USER CODE END PFP */
 
-/* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 #ifdef __GNUC__
 #define PUTCHAR_PROTOTYPE int __io_putchar(int ch)
@@ -167,11 +166,37 @@ int main(void)
   astra_push_item_to_list(Stepper, astra_new_user_item("Stepper 1 RST", stepper1_reset_wrapper, NULL, NULL));
   astra_push_item_to_list(Stepper, astra_new_user_item("Stepper 2 RST", stepper2_reset_wrapper, NULL, NULL));
 
+  astra_list_item_t *PID = astra_new_list_item("PID");
+  astra_push_item_to_list(Control, PID);
+
+  /* --------------------------------- 此处修改: Astra UI PID参数调试菜单 -------------------------------- */
+  astra_push_item_to_list(PID, astra_new_slider_item(
+                                   "Kp", &pid_kp_slider_val, 1, 0, 100));
+  astra_push_item_to_list(PID, astra_new_slider_item(
+                                   "Ki", &pid_ki_slider_val, 1, 0, 100));
+  astra_push_item_to_list(PID, astra_new_slider_item(
+                                   "Kd", &pid_kd_slider_val, 1, 0, 100));
+  astra_push_item_to_list(PID, astra_new_slider_item(
+                                   "tau", &pid_tau_slider_val, 1, 0, 100));
+  astra_push_item_to_list(PID, astra_new_slider_item(
+                                   "limMin", &pid_lim_min_slider_val, 1, -100, 0));
+  astra_push_item_to_list(PID, astra_new_slider_item(
+                                   "limMax", &pid_lim_max_slider_val, 1, 0, 100));
+  astra_push_item_to_list(PID, astra_new_slider_item(
+                                   "limMinInt", &pid_lim_min_int_slider_val, 1, -50, 0));
+  astra_push_item_to_list(PID, astra_new_slider_item(
+                                   "limMaxInt", &pid_lim_max_int_slider_val, 1, 0, 50));
+  astra_push_item_to_list(PID, astra_new_slider_item(
+                                   "SampleTime", &pid_sample_time_slider_val, 1, 1, 100));
+  sync_pid_slider_to_float();
+  /* --------------------------------- 自定义部分结束 -------------------------------- */
+
   char msg[20] = {};
   sprintf(msg, "启动时间: %dms.", get_ticks());
   astra_push_pop_up(msg, 1500);
 
   // 初始化PID控制器
+  sync_pid_slider_to_float();
   PIDController_Init(&yaw_pid);   // 初始化航向轴PID
   PIDController_Init(&pitch_pid); // 初始化俯仰轴PID
 

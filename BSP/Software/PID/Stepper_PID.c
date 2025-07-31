@@ -48,6 +48,17 @@ uint16_t pitch_pid_error = 0;
 
 uint8_t pid_update_done_flag = 0; // PID更新标志位
 
+// 中间变量
+int16_t pid_kp_slider_val = 20;
+int16_t pid_ki_slider_val = 0;
+int16_t pid_kd_slider_val = 0;
+int16_t pid_tau_slider_val = 2;
+int16_t pid_lim_min_slider_val = -100;
+int16_t pid_lim_max_slider_val = 100;
+int16_t pid_lim_min_int_slider_val = -50;
+int16_t pid_lim_max_int_slider_val = 50;
+int16_t pid_sample_time_slider_val = 10;
+
 void Stepper_PID_Parameters_Init(PIDController *pid)
 {
     // 初始化PID参数
@@ -60,6 +71,19 @@ void Stepper_PID_Parameters_Init(PIDController *pid)
     pid->limMinInt = pid_lim_min_int;
     pid->limMaxInt = pid_lim_max_int;
     pid->T = sample_time_s;
+}
+
+void sync_pid_slider_to_float(void)
+{
+    pid_kp = pid_kp_slider_val * 0.1f;
+    pid_ki = pid_ki_slider_val * 0.1f;
+    pid_kd = pid_kd_slider_val * 0.1f;
+    pid_tau = pid_tau_slider_val * 0.01f;
+    pid_lim_min = pid_lim_min_slider_val * 0.1f;
+    pid_lim_max = pid_lim_max_slider_val * 0.1f;
+    pid_lim_min_int = pid_lim_min_int_slider_val * 0.1f;
+    pid_lim_max_int = pid_lim_max_int_slider_val * 0.1f;
+    sample_time_s = pid_sample_time_slider_val * 0.01f;
 }
 
 void Yaw_Stepper_Position_Update(float pid_output)

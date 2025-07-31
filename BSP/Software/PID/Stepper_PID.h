@@ -89,10 +89,22 @@ extern PIDController pitch_pid; // 俯仰轴PID控制器
 
 extern uint8_t pid_update_done_flag; // PID更新标志位
 
+extern int16_t pid_kp_slider_val;
+extern int16_t pid_ki_slider_val;
+extern int16_t pid_kd_slider_val;
+extern int16_t pid_tau_slider_val;
+extern int16_t pid_lim_min_slider_val;
+extern int16_t pid_lim_max_slider_val;
+extern int16_t pid_lim_min_int_slider_val;
+extern int16_t pid_lim_max_int_slider_val;
+extern int16_t pid_sample_time_slider_val;
+
 void Yaw_Stepper_Position_Update(float pid_output);
 
 void Pitch_Stepper_Position_Update(float pid_output);
 
 void Stepper_PID_Parameters_Init(PIDController *pid);
+
+void sync_pid_slider_to_float(void);
 
 #endif /* __STEPPER_PID_H */
