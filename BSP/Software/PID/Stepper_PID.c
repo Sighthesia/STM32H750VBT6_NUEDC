@@ -31,20 +31,19 @@ float pitch_speed = 1.0f;
 float pid_yaw_angle = 0.0f;
 float pid_pitch_angle = 0.0f;
 
-PIDController yaw_pid = {}; // 航向轴PID
+PIDController yaw_pid = {0};   // 航向轴PID
+PIDController pitch_pid = {0}; // 俯仰轴PID
 
-PIDController pitch_pid = {}; // 俯仰轴PID
-
-uint16_t yaw_pid_output = 0;   // 航向轴PID输出
-uint16_t pitch_pid_output = 0; // 俯仰轴PID输出
+float yaw_pid_output = 0.0f;   // 航向轴PID输出
+float pitch_pid_output = 0.0f; // 俯仰轴PID输出
 
 // PID目标值
-uint16_t yaw_pid_target = 0;
-uint16_t pitch_pid_target = 0;
+float yaw_pid_target = 0.0f;
+float pitch_pid_target = 0.0f;
 
 // PID误差值
-uint16_t yaw_pid_error = 0;
-uint16_t pitch_pid_error = 0;
+float yaw_pid_error = 0.0f;
+float pitch_pid_error = 0.0f;
 
 uint8_t pid_update_done_flag = 0; // PID更新标志位
 
@@ -59,6 +58,10 @@ int16_t pid_lim_min_int_slider_val = -50;
 int16_t pid_lim_max_int_slider_val = 50;
 int16_t pid_sample_time_slider_val = 10;
 
+/** ***************************************************************************
+ * @brief  初始化步进电机PID参数
+ * @param  pid: 指向PID控制器的指针
+ */
 void Stepper_PID_Parameters_Init(PIDController *pid)
 {
     // 初始化PID参数
@@ -73,6 +76,9 @@ void Stepper_PID_Parameters_Init(PIDController *pid)
     pid->T = sample_time_s;
 }
 
+/** ***************************************************************************
+ * @brief   同步PID滑块值到浮点数
+ */
 void sync_pid_slider_to_float(void)
 {
     pid_kp = pid_kp_slider_val * 0.1f;
