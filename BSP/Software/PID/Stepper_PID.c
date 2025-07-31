@@ -45,15 +45,15 @@ float pitch_pid_target = 0.0f;
 float yaw_pid_error = 0.0f;
 float pitch_pid_error = 0.0f;
 
-uint8_t pid_update_done_flag = 0; // PID更新标志位
+_Bool pid_update_done_flag = 0; // PID更新标志位
 
 // 中间变量
-int16_t pid_kp_slider_val = 20;         // 2.0f -> 20*0.1
-int16_t pid_ki_slider_val = 0;          // 0.0f -> 0*0.1
-int16_t pid_kd_slider_val = 0;          // 0.0f -> 0*0.1
-int16_t pid_tau_slider_val = 2;         // 0.02f -> 2*0.01
-int16_t pid_lim_min_slider_val = -100;  // -10.0f -> -100*0.1
-int16_t pid_lim_max_slider_val = 100;   // 10.0f -> 100*0.1
+int16_t pid_kp_slider_val = 20;           // 2.0f -> 20*0.1
+int16_t pid_ki_slider_val = 0;            // 0.0f -> 0*0.1
+int16_t pid_kd_slider_val = 0;            // 0.0f -> 0*0.1
+int16_t pid_tau_slider_val = 2;           // 0.02f -> 2*0.01
+int16_t pid_lim_min_slider_val = -100;    // -10.0f -> -100*0.1
+int16_t pid_lim_max_slider_val = 100;     // 10.0f -> 100*0.1
 int16_t pid_lim_min_int_slider_val = -50; // -5.0f -> -50*0.1
 int16_t pid_lim_max_int_slider_val = 50;  // 5.0f -> 50*0.1
 int16_t pid_sample_time_slider_val = 1;   // 0.01f -> 1*0.01

@@ -88,7 +88,7 @@ extern float pitch_pid_error;
 extern PIDController yaw_pid;   // 航向轴PID控制器
 extern PIDController pitch_pid; // 俯仰轴PID控制器
 
-extern uint8_t pid_update_done_flag; // PID更新标志位
+extern _Bool pid_update_done_flag; // PID更新标志位
 
 extern int16_t pid_kp_slider_val;
 extern int16_t pid_ki_slider_val;
