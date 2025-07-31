@@ -24,7 +24,7 @@ void Delay_us(uint32_t us)
     startval = SysTick->VAL;
     tickn = HAL_GetTick();
     // sysc = 72000;  //SystemCoreClock / (1000U / uwTickFreq);
-    delays = udelay * SYSTEM_CLOCK_MHZ_FREQUENCY; // sysc / 1000 * udelay;
+    delays = us * SYSTEM_CLOCK_MHZ_FREQUENCY; // sysc / 1000 * udelay;
     if (delays > startval)
     {
         while (HAL_GetTick() == tickn)

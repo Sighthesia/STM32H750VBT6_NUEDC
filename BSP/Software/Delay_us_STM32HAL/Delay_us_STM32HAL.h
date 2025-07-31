@@ -18,9 +18,9 @@
 #include "tim.h"
 
 /* -------------------------------- 此处选择延时方式 -------------------------------- */
-// #define USE_SYSTICK_TIME_SOURCE // 使用 SysTick 定时器作为延时源
-#define USE_TIM_TIME_SOURCE // 使用 TIM 定时器作为延时源
-                            // 定时器设置为1us中断一次
+#define USE_SYSTICK_TIME_SOURCE // 使用 SysTick 定时器作为延时源
+// #define USE_TIM_TIME_SOURCE // 使用 TIM 定时器作为延时源
+// 定时器设置为1us中断一次
 
 /* -------------------------- 此处更改SYSTICK方式所用单片机主频 -------------------------- */
 #ifdef USE_SYSTICK_TIME_SOURCE
