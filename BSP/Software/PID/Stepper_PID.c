@@ -10,7 +10,20 @@
  * @Changes :
  * @Modifi Date :
  */
+
 #include "Stepper_PID.h"
+
+/* --------------------------------- 此处修改: PID参数变量定义与初始化 -------------------------------- */
+float pid_kp = 2.0f;
+float pid_ki = 0.0f;
+float pid_kd = 0.0f;
+float pid_tau = 0.02f;
+float pid_lim_min = -10.0f;
+float pid_lim_max = 10.0f;
+float pid_lim_min_int = -5.0f;
+float pid_lim_max_int = 5.0f;
+float sample_time_s = 0.01f;
+/* --------------------------------- 自定义部分结束 -------------------------------- */
 
 float yaw_speed = 1.0f;
 float pitch_speed = 1.0f;
@@ -29,6 +42,20 @@ uint16_t pitch_pid_target = 0;
 // PID误差值
 uint16_t yaw_pid_error = 0;
 uint16_t pitch_pid_error = 0;
+
+void Stepper_PID_Parameters_Init(PIDController *pid)
+{
+    // 初始化PID参数
+    pid->Kp = pid_kp;
+    pid->Ki = pid_ki;
+    pid->Kd = pid_kd;
+    pid->tau = pid_tau;
+    pid->limMin = pid_lim_min;
+    pid->limMax = pid_lim_max;
+    pid->limMinInt = pid_lim_min_int;
+    pid->limMaxInt = pid_lim_max_int;
+    pid->T = sample_time_s;
+}
 
 void Yaw_Stepper_Position_Update(float pid_output)
 {
