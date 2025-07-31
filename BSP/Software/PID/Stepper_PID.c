@@ -35,6 +35,9 @@ PIDController yaw_pid = {}; // 航向轴PID
 
 PIDController pitch_pid = {}; // 俯仰轴PID
 
+uint16_t yaw_pid_output = 0;   // 航向轴PID输出
+uint16_t pitch_pid_output = 0; // 俯仰轴PID输出
+
 // PID目标值
 uint16_t yaw_pid_target = 0;
 uint16_t pitch_pid_target = 0;

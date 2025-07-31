@@ -73,6 +73,9 @@ extern float pid_lim_max_int;
  */
 extern float sample_time_s;
 /* --------------------------------- 自定义部分结束 -------------------------------- */
+extern uint16_t yaw_pid_output;   // 航向轴PID输出
+extern uint16_t pitch_pid_output; // 俯仰轴PID输出
+
 // PID目标值
 extern uint16_t yaw_pid_target;
 extern uint16_t pitch_pid_target;
