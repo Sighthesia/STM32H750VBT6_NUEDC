@@ -269,7 +269,8 @@
 				78,
 				79,
 				80,
-				81
+				81,
+				82
 			]
 		},
 		{
@@ -510,7 +511,8 @@
 				78,
 				79,
 				80,
-				81
+				81,
+				82
 			]
 		},
 		{
@@ -524,7 +526,6 @@
 			"name" : "Object Libraries",
 			"sourceIndexes" : 
 			[
-				82,
 				83,
 				84,
 				85,
@@ -546,7 +547,8 @@
 				101,
 				102,
 				103,
-				104
+				104,
+				105
 			]
 		}
 	],
@@ -1018,6 +1020,12 @@
 			"backtrace" : 7,
 			"compileGroupIndex" : 0,
 			"path" : "BSP/Software/PID/PID.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 7,
+			"compileGroupIndex" : 0,
+			"path" : "BSP/Software/PID/Stepper_PID.c",
 			"sourceGroupIndex" : 0
 		},
 		{

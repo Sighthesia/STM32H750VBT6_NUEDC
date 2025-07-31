@@ -384,34 +384,33 @@ void ZDT_Stepper_Enable(ZDTStepperMotor *motor, uint8_t enable, uint8_t sync_fla
     ZDT_Stepper_UART_Send_Data(motor, command, 6);
 }
 
-/**
+/** ***************************************************************************
  * @brief 设置步进电机速度
  *
  * @param motor 电机对象
  * @param dir 方向 CW 反转 顺时针 CCW 正转 逆时针
- * @param speed_rate 加速度 单位 RPM/s
- * @param speed 速度 单位 RPM
+ * @param speed_f 速度 单位 RPM
+ * @param accel_accel 加速度档位（0-255，0表示不使用曲线加减速）
  * @param sync_flag 多机同步标志位  SYNC_ENABLE 同步  SYNC_DISABLE 不同步
- */
-void ZDT_Stepper_Set_Speed(ZDTStepperMotor *motor, uint8_t dir, uint16_t speed_rate, float speed_f, uint8_t sync_flag)
+ ******************************************************************************/
+void ZDT_Stepper_Set_Speed(ZDTStepperMotor *motor, uint8_t dir, float speed_f, uint8_t accel_accel, uint8_t sync_flag)
 {
     if (!motor)
         return;
 
     uint16_t speed = (uint16_t)(speed_f * 10); // 转换为两个字节的数据
-    // 命令格式
-    uint8_t command[9];
-    command[0] = motor->id;                // 地址
-    command[1] = 0xF6;                     // 命令头
-    command[2] = dir;                      // 符号 (01: 负转速, 00: 正转速)
-    command[3] = (speed_rate >> 8) & 0xFF; // 速度斜率高位
-    command[4] = speed_rate & 0xFF;        // 速度斜率低位
-    command[5] = (speed >> 8) & 0xFF;      // 速度高位
-    command[6] = speed & 0xFF;             // 速度低位
-    command[7] = sync_flag;                // 多机同步标志位
-    command[8] = 0x6B;                     // 校验字节
+    // 命令格式：地址 + 0xF6 + 方向 + 速度高 + 速度低 + 加速度档位 + 多机同步标志 + 校验字节
+    uint8_t command[8];
+    command[0] = motor->id;           // 地址
+    command[1] = 0xF6;                // 命令头
+    command[2] = dir;                 // 方向 (01: CCW, 00: CW)
+    command[3] = (speed >> 8) & 0xFF; // 速度高位
+    command[4] = speed & 0xFF;        // 速度低位
+    command[5] = accel_accel;         // 加速度档位（1字节）
+    command[6] = sync_flag;           // 多机同步标志位
+    command[7] = 0x6B;                // 校验字节
 
-    ZDT_Stepper_UART_Send_Data(motor, command, 9);
+    ZDT_Stepper_UART_Send_Data(motor, command, 8);
 }
 
 /**
@@ -429,106 +428,68 @@ void ZDT_Stepper_Set_position(ZDTStepperMotor *motor, uint8_t dir, float speed_f
     if (!motor)
         return;
 
-    // 转换速度为两个字节
+    // 1.8°/step, 16细分, 一圈脉冲数 = 360/1.8*16 = 3200
+    // 角度转脉冲数: pulse = angle / 360 * 3200
+    float pulses_per_circle = 360.0f / 1.8f * 16.0f;                                           // 3200
+    uint32_t pulse_count = (uint32_t)((position_angle_f / 360.0f) * pulses_per_circle + 0.5f); // 四舍五入
+
     uint16_t speed = (uint16_t)(speed_f * 10); // 速度乘以 10
+    uint8_t accel_accel = 0;                   // 默认加速度档位为0（直线加减速）
 
-    // 转换位置角度为四个字节
-    uint32_t position_angle = (uint32_t)(position_angle_f * 10); // 直接使用 int32_t 进行转换
+    // 命令格式：地址 + 0xFD + 方向 + 速度高 + 速度低 + 加速度档位 + 脉冲数(4字节) + 相对/绝对 + 同步 + 校验
+    uint8_t command[13];
+    command[0] = motor->id;                  // 地址
+    command[1] = 0xFD;                       // 命令头
+    command[2] = dir;                        // 方向 (01: CCW, 00: CW)
+    command[3] = (speed >> 8) & 0xFF;        // 速度高位
+    command[4] = speed & 0xFF;               // 速度低位
+    command[5] = accel_accel;                // 加速度档位（1字节）
+    command[6] = (pulse_count >> 24) & 0xFF; // 脉冲数高位
+    command[7] = (pulse_count >> 16) & 0xFF; // 脉冲数次高位
+    command[8] = (pulse_count >> 8) & 0xFF;  // 脉冲数次低位
+    command[9] = pulse_count & 0xFF;         // 脉冲数低位
+    command[10] = position_mode;             // 相对/绝对位置标志
+    command[11] = sync_flag;                 // 多机同步标志位
+    command[12] = 0x6B;                      // 校验字节
 
-    // 命令格式
-    uint8_t command[12];
-    command[0] = motor->id;                     // 地址
-    command[1] = 0xFB;                          // 命令头
-    command[2] = dir;                           // 符号 (01: 负位置, 00: 正位置)
-    command[3] = (speed >> 8) & 0xFF;           // 速度高位
-    command[4] = speed & 0xFF;                  // 速度低位
-    command[5] = (position_angle >> 24) & 0xFF; // 位置角度高位
-    command[6] = (position_angle >> 16) & 0xFF; // 位置角度次高位
-    command[7] = (position_angle >> 8) & 0xFF;  // 位置角度次低位
-    command[8] = position_angle & 0xFF;         // 位置角度低位
-    command[9] = position_mode;                 // 相对/绝对位置标志
-    command[10] = sync_flag;                    // 多机同步标志位
-    command[11] = 0x6B;                         // 校验字节
-
-    ZDT_Stepper_UART_Send_Data(motor, command, 12);
+    ZDT_Stepper_UART_Send_Data(motor, command, 13);
 }
 
-/**
- * @brief 设置步进电机梯形加减速位置
+/** ***************************************************************************
+ * @brief 设置步进电机位置模式（脉冲数）
  *
  * @param motor 电机对象
  * @param dir 方向 CW 反转 顺时针 CCW 正转 逆时针
- * @param accel_accel 加速度 单位 RPM/s
- * @param decel_accel 减速度 单位 RPM/s
- * @param max_speed_f 最大速度 单位 RPM
- * @param position_angle_f 目标位置 单位 度
+ * @param speed_f 速度 单位 RPM
+ * @param accel_accel 加速度档位（0-255，0表示不使用曲线加减速）
+ * @param pulse_count 脉冲数（uint32_t，单位：脉冲）
  * @param position_mode 位置模式 REL_POS_MODE 相对位置模式 ABS_POS_MODE 绝对位置模式
  * @param sync_flag 多机同步标志位  SYNC_ENABLE 同步  SYNC_DISABLE 不同步
- */
-void ZDT_Stepper_Set_T_position(ZDTStepperMotor *motor, uint8_t dir, uint16_t accel_accel, uint16_t decel_accel, float max_speed_f, float position_angle_f, uint8_t position_mode, uint8_t sync_flag)
+ ******************************************************************************/
+void ZDT_Stepper_Set_T_position(ZDTStepperMotor *motor, uint8_t dir, float speed_f, uint8_t accel_accel, uint32_t pulse_count, uint8_t position_mode, uint8_t sync_flag)
 {
     if (!motor)
         return;
 
-    // 转换速度为两个字节
-    uint16_t max_speed = (uint16_t)(max_speed_f * 10); // 速度乘以 10
+    uint16_t speed = (uint16_t)(speed_f * 10); // 速度乘以 10
 
-    // 转换位置角度为四个字节
-    uint32_t position_angle = (uint32_t)(position_angle_f * 10); // 直接使用 int32_t 进行转换
-    // 命令格式
-    uint8_t command[16];
-    command[0] = motor->id;                      // 地址
-    command[1] = 0xFD;                           // 命令头
-    command[2] = dir;                            // 符号 (01: 负位置, 00: 正位置)
-    command[3] = (accel_accel >> 8) & 0xFF;      // 加速加速度高位
-    command[4] = accel_accel & 0xFF;             // 加速加速度低位
-    command[5] = (decel_accel >> 8) & 0xFF;      // 减速加速度高位
-    command[6] = decel_accel & 0xFF;             // 减速加速度低位
-    command[7] = (max_speed >> 8) & 0xFF;        // 最大速度高位
-    command[8] = max_speed & 0xFF;               // 最大速度低位
-    command[9] = (position_angle >> 24) & 0xFF;  // 位置角度高位
-    command[10] = (position_angle >> 16) & 0xFF; // 位置角度次高位
-    command[11] = (position_angle >> 8) & 0xFF;  // 位置角度次低位
-    command[12] = position_angle & 0xFF;         // 位置角度低位
-    command[13] = position_mode;                 // 相对/绝对位置标志
-    command[14] = sync_flag;                     // 多机同步标志位
-    command[15] = 0x6B;                          // 校验字节
+    // 命令格式：地址 + 0xFD + 方向 + 速度高 + 速度低 + 加速度档位 + 脉冲数(4字节) + 相对/绝对 + 同步 + 校验
+    uint8_t command[12];
+    command[0] = motor->id;                  // 地址
+    command[1] = 0xFD;                       // 命令头
+    command[2] = dir;                        // 方向 (01: CCW, 00: CW)
+    command[3] = (speed >> 8) & 0xFF;        // 速度高位
+    command[4] = speed & 0xFF;               // 速度低位
+    command[5] = accel_accel;                // 加速度档位（1字节）
+    command[6] = (pulse_count >> 24) & 0xFF; // 脉冲数高位
+    command[7] = (pulse_count >> 16) & 0xFF; // 脉冲数次高位
+    command[8] = (pulse_count >> 8) & 0xFF;  // 脉冲数次低位
+    command[9] = pulse_count & 0xFF;         // 脉冲数低位
+    command[10] = position_mode;             // 相对/绝对位置标志
+    command[11] = sync_flag;                 // 多机同步标志位
+    command[12] = 0x6B;                      // 校验字节
 
-    ZDT_Stepper_UART_Send_Data(motor, command, 16);
-}
-
-/**
- * @brief    位置模式
- * @param    addr：电机地址
- * @param    dir ：方向        ，0为CW，其余值为CCW
- * @param    vel ：速度(RPM)   ，范围0 - 5000RPM
- * @param    acc ：加速度      ，范围0 - 255，注意：0是直接启动
- * @param    clk ：脉冲数      ，范围0- (2^32 - 1)个
- * @param    raF ：相位/绝对标志，false为相对运动，true为绝对值运动
- * @param    snF ：多机同步标志 ，false为不启用，true为启用
- * @retval   地址 + 功能码 + 命令状态 + 校验字节
- */
-void Emm_V5_Pos_Control(ZDTStepperMotor *motor, uint8_t dir, uint16_t vel, uint8_t acc, uint32_t clk, bool raF, bool snF)
-{
-    uint8_t cmd[16] = {0};
-
-    // 装载命令
-    cmd[0] = motor->id;            // 地址
-    cmd[1] = 0xFD;                 // 功能码
-    cmd[2] = dir;                  // 方向
-    cmd[3] = (uint8_t)(vel >> 8);  // 速度(RPM)高8位字节
-    cmd[4] = (uint8_t)(vel >> 0);  // 速度(RPM)低8位字节
-    cmd[5] = acc;                  // 加速度，注意：0是直接启动
-    cmd[6] = (uint8_t)(clk >> 24); // 脉冲数(bit24 - bit31)
-    cmd[7] = (uint8_t)(clk >> 16); // 脉冲数(bit16 - bit23)
-    cmd[8] = (uint8_t)(clk >> 8);  // 脉冲数(bit8  - bit15)
-    cmd[9] = (uint8_t)(clk >> 0);  // 脉冲数(bit0  - bit7 )
-    cmd[10] = raF;                 // 相位/绝对标志，false为相对运动，true为绝对值运动
-    cmd[11] = snF;                 // 多机同步运动标志，false为不启用，true为启用
-    cmd[12] = 0x6B;                // 校验字节
-
-    // 发送命令
-    ZDT_Stepper_UART_Send_Data(motor, cmd, 13);
+    ZDT_Stepper_UART_Send_Data(motor, command, 13);
 }
 
 /**

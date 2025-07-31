@@ -12,62 +12,11 @@
  */
 #include "Stepper_PID.h"
 
-/* Controller parameters */
-/**
- * @brief 比例增益系数
- * @note 用于计算比例项输出，值越大系统响应越快，但过大会导致系统不稳定
- */
-#define PID_KP 2.0f
+float yaw_speed = 0.0f;
+float pitch_speed = 0.0f;
 
-/**
- * @brief 积分增益系数
- * @note 用于消除稳态误差，值越大消除误差越快，但过大会导致系统振荡
- */
-// #define PID_KI 0.5f
-#define PID_KI 0.0f
-
-/**
- * @brief 微分增益系数
- * @note 用于预测误差变化趋势，提高系统响应速度和稳定性
- */
-// #define PID_KD 0.25f
-#define PID_KD 0.0f
-
-/**
- * @brief 微分项低通滤波时间常数
- * @note 用于对微分项进行滤波，减少噪声影响
- */
-#define PID_TAU 0.02f
-
-/**
- * @brief PID输出最小值限制
- * @note 限制控制器输出的最小值，防止执行器过度响应
- */
-#define PID_LIM_MIN -10.0f
-
-/**
- * @brief PID输出最大值限制
- * @note 限制控制器输出的最大值，防止执行器过度响应
- */
-#define PID_LIM_MAX 10.0f
-
-/**
- * @brief 积分项最小值限制
- * @note 用于抗积分饱和，限制积分项的最小值
- */
-#define PID_LIM_MIN_INT -5.0f
-
-/**
- * @brief 积分项最大值限制
- * @note 用于抗积分饱和，限制积分项的最大值
- */
-#define PID_LIM_MAX_INT 5.0f
-
-/**
- * @brief 控制器采样周期(秒)
- * @note 控制算法的执行周期，影响积分和微分项的计算
- */
-#define SAMPLE_TIME_S 0.01f
+float pid_yaw_angle = 0.0f;
+float pid_pitch_angle = 0.0f;
 
 PIDController yaw_pid = {PID_KP, PID_KI, PID_KD,
                          PID_TAU,
@@ -88,3 +37,17 @@ uint16_t pitch_pid_target = 0;
 // PID误差值
 uint16_t yaw_pid_error = 0;
 uint16_t pitch_pid_error = 0;
+
+void Yaw_Stepper_Position_Update(float pid_output)
+{
+    pid_yaw_angle = pid_output;
+
+    ZDT_Stepper_Set_position(zdt_stepper_motors[STEPPER_YAW], 00, yaw_speed, pid_yaw_angle, ZDT_STEPPER_REL_POS_MODE, ZDT_STEPPER_SYNC_DISABLE);
+}
+
+void Pitch_Stepper_Position_Update(float pid_output)
+{
+    pid_pitch_angle = pid_output;
+
+    ZDT_Stepper_Set_position(zdt_stepper_motors[STEPPER_PITCH], 00, pitch_speed, pid_pitch_angle, ZDT_STEPPER_REL_POS_MODE, ZDT_STEPPER_SYNC_DISABLE);
+}
