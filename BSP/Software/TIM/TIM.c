@@ -23,8 +23,8 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
         ebtn_APP_Key_Process(); // 处理按键事件
 
         // 更新PID
-        // PIDController_Update(&yaw_pid);
-        // PIDController_Update(&pitch_pid);
+        yaw_pid_output = PIDController_Update(&yaw_pid, yaw_pid_target, yaw_measurement);
+        pitch_pid_output = PIDController_Update(&pitch_pid, pitch_pid_target, pitch_measurement);
     }
 }
 

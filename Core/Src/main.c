@@ -152,10 +152,6 @@ int main(void)
   /* USER CODE BEGIN 2 */
   lwrb_init(&uart3_rx_buffer, uart3_rx_buffer_data, sizeof(uart3_rx_buffer_data));
 
-  HAL_TIM_Base_Start_IT(&htim7); // 10ms 定时器
-
-  ZDT_Stepper_Init();
-
   ebtn_APP_Key_INIT();
 
   // 初始化OLED显示
@@ -179,10 +175,13 @@ int main(void)
   PIDController_Init(&yaw_pid);   // 初始化航向轴PID
   PIDController_Init(&pitch_pid); // 初始化俯仰轴PID
 
+  ZDT_Stepper_Init();
+
   // 使能电机
   ZDT_Stepper_Enable(zdt_stepper_motors[0], 1, 0);
   ZDT_Stepper_Enable(zdt_stepper_motors[1], 1, 0);
 
+  HAL_TIM_Base_Start_IT(&htim7); // 10ms 定时器
   /* USER CODE END 2 */
 
   /* Infinite loop */

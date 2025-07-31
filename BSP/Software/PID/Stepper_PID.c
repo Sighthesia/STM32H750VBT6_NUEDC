@@ -12,23 +12,15 @@
  */
 #include "Stepper_PID.h"
 
-float yaw_speed = 0.0f;
-float pitch_speed = 0.0f;
+float yaw_speed = 1.0f;
+float pitch_speed = 1.0f;
 
 float pid_yaw_angle = 0.0f;
 float pid_pitch_angle = 0.0f;
 
-PIDController yaw_pid = {PID_KP, PID_KI, PID_KD,
-                         PID_TAU,
-                         PID_LIM_MIN, PID_LIM_MAX,
-                         PID_LIM_MIN_INT, PID_LIM_MAX_INT,
-                         SAMPLE_TIME_S}; // 航向轴PID
+PIDController yaw_pid = {}; // 航向轴PID
 
-PIDController pitch_pid = {PID_KP, PID_KI, PID_KD,
-                           PID_TAU,
-                           PID_LIM_MIN, PID_LIM_MAX,
-                           PID_LIM_MIN_INT, PID_LIM_MAX_INT,
-                           SAMPLE_TIME_S}; // 俯仰轴PID
+PIDController pitch_pid = {}; // 俯仰轴PID
 
 // PID目标值
 uint16_t yaw_pid_target = 0;
