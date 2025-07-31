@@ -23,13 +23,15 @@
  * @brief 积分增益系数
  * @note 用于消除稳态误差，值越大消除误差越快，但过大会导致系统振荡
  */
-#define PID_KI 0.5f
+// #define PID_KI 0.5f
+#define PID_KI 0.0f
 
 /**
  * @brief 微分增益系数
  * @note 用于预测误差变化趋势，提高系统响应速度和稳定性
  */
-#define PID_KD 0.25f
+// #define PID_KD 0.25f
+#define PID_KD 0.0f
 
 /**
  * @brief 微分项低通滤波时间常数
@@ -78,3 +80,11 @@ PIDController pitch_pid = {PID_KP, PID_KI, PID_KD,
                            PID_LIM_MIN, PID_LIM_MAX,
                            PID_LIM_MIN_INT, PID_LIM_MAX_INT,
                            SAMPLE_TIME_S}; // 俯仰轴PID
+
+// PID目标值
+uint16_t yaw_pid_target = 0;
+uint16_t pitch_pid_target = 0;
+
+// PID误差值
+uint16_t yaw_pid_error = 0;
+uint16_t pitch_pid_error = 0;

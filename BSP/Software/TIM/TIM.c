@@ -14,13 +14,17 @@
 #include "usart.h"
 #include <stdio.h>
 
-uint8_t button_count = 0;
+#include "Stepper_PID.h"
 
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
     if (htim->Instance == TIM7)
     {
-        ebtn_APP_Key_Process();
+        ebtn_APP_Key_Process(); // 处理按键事件
+
+        // 更新PID
+        // PIDController_Update(&yaw_pid);
+        // PIDController_Update(&pitch_pid);
     }
 }
 
