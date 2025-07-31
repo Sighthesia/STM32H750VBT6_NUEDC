@@ -37,9 +37,9 @@ typedef struct
 } uart_rect_coord_t;
 
 // 全局坐标数据存储变量，初始化为(0, 0)
-int16_t rectangle_coordinate_arr[2]; // [0]: x, [1]: y
+extern int16_t rectangle_coordinate_arr[2]; // [0]: x, [1]: y
 // 接收控制标志位
-volatile uint8_t uart_rx_enable_flag; // 1:允许接收，0:禁止接收
-volatile uint8_t uart_rx_done_flag;   // 1:接收完成，0:未完成
+extern volatile uint8_t uart_rx_enable_flag; // 1:允许接收，0:禁止接收
+extern volatile uint8_t uart_rx_done_flag;   // 1:接收完成，0:未完成
 
 #endif /* __USART_H */

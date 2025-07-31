@@ -115,7 +115,7 @@
 			"compileCommandFragments" : 
 			[
 				{
-					"fragment" : " -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mcpu=cortex-m7 -mfpu=fpv5-d16 -mfloat-abi=hard  -Wall -Wextra -Wpedantic -fdata-sections -ffunction-sections -Os -DNDEBUG -std=gnu11"
+					"fragment" : " -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mcpu=cortex-m7 -mfpu=fpv5-d16 -mfloat-abi=hard  -Wall -Wextra -Wpedantic -fdata-sections -ffunction-sections -mcpu=cortex-m7 -mfpu=fpv5-d16 -mfloat-abi=hard  -Wall -Wextra -Wpedantic -fdata-sections -ffunction-sections -Os -DNDEBUG -std=gnu11"
 				}
 			],
 			"defines" : 
