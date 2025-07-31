@@ -6,8 +6,8 @@ extern DMA_HandleTypeDef hdma_usart2_tx;
 // 电机配置表（用户可在此处添加/修改电机配置）
 static zdt_stepper_motor_config_t zdt_stepper_motor_config_table[] = {
     // {串口句柄, DMA句柄, 电机ID}
-    {&huart2, &hdma_usart2_tx, 1},
-    {&huart5, &hdma_uart5_tx, 2}};
+    {&huart2, &hdma_usart2_tx, STEPPER_YAW},
+    {&huart5, &hdma_uart5_tx, STEPPER_PITCH}};
 
 // 串口管理数组
 static ZDTStepperUart uart_motors[ZDT_STEPPER_MAX_UART];
@@ -350,7 +350,6 @@ void ZDT_Stepper_USRT_RX_callback(UART_HandleTypeDef *huart, uint16_t Size)
     }
 }
 
-/* --------------------------------- 此处修改... -------------------------------- */
 /**
  *****************************************************************************
  * @brief   通过HAL抽象层发送数据到步进电机

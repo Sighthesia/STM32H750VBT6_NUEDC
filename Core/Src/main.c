@@ -36,6 +36,7 @@
 #include "Encoder_EXTI.h"
 #include "lwrb.h"
 #include "ZDT_Stepper.h"
+#include "Stepper_PID.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -92,6 +93,18 @@ int _write(int fd, char *ptr, int len)
 }
 #endif
 
+// Stepper 1 回零函数包装器
+void stepper1_reset_wrapper(void)
+{
+  ZDT_Stepper_trigger_zero_return(zdt_stepper_motors[STEPPER_YAW], 0, 0);
+}
+
+// Stepper 2 回零函数包装器
+void stepper2_reset_wrapper(void)
+{
+  ZDT_Stepper_trigger_zero_return(zdt_stepper_motors[STEPPER_PITCH], 0, 0);
+}
+
 /* USER CODE END 0 */
 
 /**
@@ -139,10 +152,13 @@ int main(void)
   /* USER CODE BEGIN 2 */
   lwrb_init(&uart3_rx_buffer, uart3_rx_buffer_data, sizeof(uart3_rx_buffer_data));
 
+  HAL_TIM_Base_Start_IT(&htim7); // 10ms 定时器
+
   ZDT_Stepper_Init();
 
   ebtn_APP_Key_INIT();
 
+  // 初始化OLED显示
   astra_ui_driver_init();
   astra_init_core();
 
@@ -152,14 +168,16 @@ int main(void)
   astra_list_item_t *Stepper = astra_new_list_item("Stepper");
   astra_push_item_to_list(Control, Stepper);
 
-  astra_push_item_to_list(Stepper, astra_new_user_item("Motor 1 Rst", ZDT_Stepper_trigger_zero_return(zdt_stepper_motors[0], 0), NULL, NULL));
-  astra_push_item_to_list(Stepper, astra_new_user_item("Motor 1 Rst", ZDT_Stepper_trigger_zero_return(zdt_stepper_motors[1], 0), NULL, NULL));
+  astra_push_item_to_list(Stepper, astra_new_user_item("Stepper 1 RST", stepper1_reset_wrapper, NULL, NULL));
+  astra_push_item_to_list(Stepper, astra_new_user_item("Stepper 2 RST", stepper2_reset_wrapper, NULL, NULL));
 
   char msg[20] = {};
   sprintf(msg, "启动时间: %dms.", get_ticks());
   astra_push_pop_up(msg, 1500);
 
-  HAL_TIM_Base_Start_IT(&htim7); // 10ms 定时器
+  // 初始化PID控制器
+  PIDController_Init(&yaw_pid);   // 初始化航向轴PID
+  PIDController_Init(&pitch_pid); // 初始化俯仰轴PID
 
   // 使能电机
   ZDT_Stepper_Enable(zdt_stepper_motors[0], 1, 0);

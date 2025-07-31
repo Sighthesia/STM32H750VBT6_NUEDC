@@ -32,6 +32,12 @@ typedef struct
     uint8_t motor_id;
 } zdt_stepper_motor_config_t;
 
+typedef enum
+{
+    STEPPER_YAW = 1,
+    STEPPER_PITCH
+} stepper_id_t;
+
 // 可选：如需LED指示等功能，可定义如下
 // #define ZDT_STEPPER_LED_GPIO_PORT GPIOA
 // #define ZDT_STEPPER_LED_PIN GPIO_PIN_5
