@@ -42,4 +42,16 @@ extern int16_t rectangle_coordinate_arr[2]; // [0]: x, [1]: y
 extern volatile uint8_t uart_rx_enable_flag; // 1:允许接收，0:禁止接收
 extern volatile uint8_t uart_rx_done_flag;   // 1:接收完成，0:未完成
 
+extern uint8_t packet_buf[UART_PACKET_LEN]; // 存储当前正在接收的数据包
+extern uint8_t packet_index;                // 当前数据包接收的字节索引
+extern uint8_t packet_receiving;            // 数据包接收状态标志：0-未接收，1-正在接收
+
+extern volatile lwrb_t uart3_rx_buffer;           // UART3接收环形缓冲区结构体
+extern volatile uint8_t uart3_rx_buffer_data[16]; // UART3接收缓冲区数据数组
+extern volatile uint8_t uart3_rx_byte;            // UART3单字节接收缓存
+
+uint8_t UART_Parse_Packet(uint8_t data);
+
+void UART3_Start_Receive_IT(void);
+
 #endif /* __USART_H */

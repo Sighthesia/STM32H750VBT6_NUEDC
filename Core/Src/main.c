@@ -37,6 +37,7 @@
 #include "lwrb.h"
 #include "ZDT_Stepper.h"
 #include "Stepper_PID.h"
+#include "USART.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -57,10 +58,6 @@
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
-/* --------------------------------- 此处添加全局变量 -------------------------------- */
-extern lwrb_t uart3_rx_buffer;
-extern uint8_t uart3_rx_buffer_data[16];
-extern uint8_t uart3_rx_byte;
 
 /* USER CODE END PV */
 
@@ -207,6 +204,8 @@ int main(void)
   ZDT_Stepper_Enable(zdt_stepper_motors[1], 1, 0);
 
   HAL_TIM_Base_Start_IT(&htim7); // 10ms 定时器
+  uart_rx_enable_flag = 1;       // 允许解包
+  UART3_Start_Receive_IT();
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -228,6 +227,18 @@ int main(void)
       if (in_astra == 1)
       {
         astra_selector_go_prev_item();
+      }
+    }
+
+    if (in_astra == 0)
+    {
+      if (uart_rx_done_flag == 1)
+      {
+        u8g2_DrawStr(&u8g2, 0, 10, "UART RX Done"); // 在OLED上显示接收完成信息
+      }
+      else
+      {
+        u8g2_DrawStr(&u8g2, 0, 10, "UART RX Not Done"); // 在OLED上显示接收未完成信息
       }
     }
 

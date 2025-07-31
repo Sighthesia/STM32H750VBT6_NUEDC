@@ -1183,10 +1183,10 @@
 			[
 				{
 					"name" : "HELPSTRING",
-					"value" : "The CMake toolchain file"
+					"value" : "No help, variable specified on the command line."
 				}
 			],
-			"type" : "FILEPATH",
+			"type" : "UNINITIALIZED",
 			"value" : "/home/Sighthesia/0_Files/1_Producing/Hardware/MCU/STM32/STM32H750VBT6_NUEDC/cmake/gcc-arm-none-eabi.cmake"
 		},
 		{

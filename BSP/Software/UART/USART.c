@@ -19,73 +19,95 @@ volatile uint8_t uart_rx_enable_flag = 0; // 1:允许接收，0:禁止接收
 volatile uint8_t uart_rx_done_flag = 0;   // 1:接收完成，0:未完成
 
 // 状态机变量
-static uint8_t packet_buf[UART_PACKET_LEN]; // 存储当前正在接收的数据包
-static uint8_t packet_index = 0;            // 当前数据包接收的字节索引
-static uint8_t packet_receiving = 0;        // 数据包接收状态标志：0-未接收，1-正在接收
+uint8_t packet_buf[UART_PACKET_LEN]; // 存储当前正在接收的数据包
+uint8_t packet_index = 0;            // 当前数据包接收的字节索引
+uint8_t packet_receiving = 0;        // 数据包接收状态标志：0-未接收，1-正在接收
 
 // 解包函数：解析单个字节并组装成完整数据包
 /** ***************************************************************************
  * @brief  解析单个字节并组装成完整数据包，解包成功返回1，否则返回0
  */
-static uint8_t UART_Parse_Packet(uint8_t data)
+uint8_t UART_Parse_Packet(uint8_t data)
 {
+    printf("[UART RX] Parse: data=0x%02X, state=%d, idx=%d\r\n", data, packet_receiving, packet_index);
     if (!packet_receiving)
     {
         if (data == UART_PACKET_HEADER)
         {
+            printf("[UART RX] Header detected: 0x%02X, start new packet\r\n", data);
             packet_receiving = 1;
             packet_index = 0;
             packet_buf[packet_index++] = data;
+        }
+        else
+        {
+            printf("[UART RX] Not header, ignore: 0x%02X\r\n", data);
         }
     }
     else
     {
         packet_buf[packet_index++] = data;
+        printf("[UART RX] Buffering: idx=%d, data=0x%02X\r\n", packet_index - 1, data);
         if (packet_index == UART_PACKET_LEN)
         {
             packet_receiving = 0;
+            printf("[UART RX] Packet buffer full, check tail: 0x%02X\r\n", packet_buf[UART_PACKET_LEN - 1]);
             if (packet_buf[UART_PACKET_LEN - 1] == UART_PACKET_TAIL)
             {
+                printf("[UART RX] Tail detected, check type: 0x%02X\r\n", packet_buf[1]);
                 if (packet_buf[1] == 0x00 || packet_buf[1] == 0xFF)
                 {
+                    printf("[UART RX] Data type valid: %s\r\n", packet_buf[1] == 0x00 ? "X" : "Y");
                     uint8_t sign = packet_buf[2];
                     uint8_t h = packet_buf[3];
                     uint8_t l = packet_buf[4];
                     uint8_t z = packet_buf[5];
-
+                    printf("[UART RX] sign=%d, h=%d, l=%d, z=%d\r\n", sign, h, l, z);
                     uint16_t val = 0;
                     if (h == 255 && l == 255)
                     {
                         val = 510 + z;
+                        printf("[UART RX] Value case: h==255 && l==255, val=%d\r\n", val);
                     }
                     else if (h == 255)
                     {
                         val = 255 + l;
+                        printf("[UART RX] Value case: h==255, val=%d\r\n", val);
                     }
                     else
                     {
                         val = h;
+                        printf("[UART RX] Value case: h, val=%d\r\n", val);
                     }
-
-                    // 恢复符号
                     int16_t diff = (sign ? 1 : -1) * (int16_t)val;
-
-                    // 存入数组
+                    printf("[UART RX] diff=%d\r\n", diff);
                     if (packet_buf[1] == 0x00)
                     {
                         rectangle_coordinate_arr[0] = diff; // x
+                        printf("[UART RX] Update X: %d\r\n", diff);
                     }
                     else if (packet_buf[1] == 0xFF)
                     {
                         rectangle_coordinate_arr[1] = diff; // y
+                        printf("[UART RX] Update Y: %d\r\n", diff);
                     }
                     uart_rx_done_flag = 1; // 解包成功，置接收完成标志
+                    printf("[UART RX] 解包成功: x=%d, y=%d\r\n", rectangle_coordinate_arr[0], rectangle_coordinate_arr[1]);
                     return 1;
                 }
+                else
+                {
+                    printf("[UART RX] Data type invalid: 0x%02X, drop packet\r\n", packet_buf[1]);
+                }
+            }
+            else
+            {
+                printf("[UART RX] Tail invalid: 0x%02X, drop packet\r\n", packet_buf[UART_PACKET_LEN - 1]);
             }
         }
         else if (packet_index > UART_PACKET_LEN)
         {
+            printf("[UART RX] Buffer overflow, reset state\r\n");
             packet_receiving = 0;
             packet_index = 0;
         }
@@ -94,9 +116,9 @@ static uint8_t UART_Parse_Packet(uint8_t data)
 }
 
 // 环形缓冲区相关变量
-lwrb_t uart3_rx_buffer;           // UART3接收环形缓冲区结构体
-uint8_t uart3_rx_buffer_data[16]; // UART3接收缓冲区数据数组
-uint8_t uart3_rx_byte;            // UART3单字节接收缓存
+volatile lwrb_t uart3_rx_buffer;           // UART3接收环形缓冲区结构体
+volatile uint8_t uart3_rx_buffer_data[16]; // UART3接收缓冲区数据数组
+volatile uint8_t uart3_rx_byte;            // UART3单字节接收缓存
 
 /** ***************************************************************************
  * @brief  启动UART3中断接收
@@ -116,18 +138,6 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
     {
         // 将接收到的字节写入环形缓冲区
         lwrb_write(&uart3_rx_buffer, &uart3_rx_byte, 1);
-
-        // 调试输出接收到的字节
-        printf("[UART RX] 收到: 0x%02X\r\n", uart3_rx_byte);
-
-        if (uart_rx_enable_flag) // 允许解包
-        {
-            uint8_t data;
-            while (lwrb_read(&uart3_rx_buffer, &data, 1) > 0)
-            {
-                UART_Parse_Packet(data); // 这里调用解包函数
-            }
-        }
 
         // 继续启动下一次中断接收
         UART3_Start_Receive_IT();

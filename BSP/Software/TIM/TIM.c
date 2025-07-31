@@ -18,6 +18,15 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
     {
         ebtn_APP_Key_Process(); // 处理按键事件
 
+        if (uart_rx_enable_flag) // 允许解包
+        {
+            uint8_t data;
+            while (lwrb_read(&uart3_rx_buffer, &data, 1) > 0)
+            {
+                UART_Parse_Packet(data); // 这里调用解包函数
+            }
+        }
+
         // 只有接收完成标志为1时才更新PID
         if (uart_rx_done_flag)
         {
