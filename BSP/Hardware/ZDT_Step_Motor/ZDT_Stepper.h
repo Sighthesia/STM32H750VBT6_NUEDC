@@ -61,15 +61,15 @@ void ZDT_Stepper_UART_Send_Data(ZDTStepperMotor *motor, uint8_t *data, size_t le
 void ZDT_Stepper_USRT_RX_callback(UART_HandleTypeDef *huart, uint16_t Size);
 
 void ZDT_Stepper_Enable(ZDTStepperMotor *motor, uint8_t enable, uint8_t sync_flag);
-void ZDT_Stepper_Set_Speed(ZDTStepperMotor *motor, uint8_t dir, uint16_t speed_rate, float speed_f, uint8_t sync_flag);                              // 设置步进电机速度
+void ZDT_Stepper_Set_Speed(ZDTStepperMotor *motor, uint8_t dir, float speed_f, uint8_t accel_accel, uint8_t sync_flag);
 void ZDT_Stepper_Set_position(ZDTStepperMotor *motor, uint8_t dir, float speed_f, float position_angle_f, uint8_t position_mode, uint8_t sync_flag); // 设置步进电机位置
 void Emm_V5_Pos_Control(ZDTStepperMotor *motor, uint8_t dir, uint16_t vel, uint8_t acc, uint32_t clk, bool raF, bool snF);
-void ZDT_Stepper_Set_T_position(ZDTStepperMotor *motor, uint8_t dir, uint16_t accel_accel, uint16_t decel_accel, float max_speed_f, float position_angle_f, uint8_t position_mode, uint8_t sync_flag); // 设置步进电机梯形加减速位置
-void ZDT_Stepper_torque_control(ZDTStepperMotor *motor, uint8_t dir, uint16_t current_rate, uint16_t current, uint8_t sync_flag);                                                                      // 力矩控制模式
-void ZDT_Stepper_start_sync_motion(ZDTStepperMotor *motor);                                                                                                                                            // 开启多机同步运动
-void ZDT_Stepper_stop(ZDTStepperMotor *motor, uint8_t sync_flag);                                                                                                                                      // 立即停止
-void ZDT_Stepper_clear_current_position(ZDTStepperMotor *motor);                                                                                                                                       // 角度清零
-void ZDT_Stepper_trigger_zero_return(ZDTStepperMotor *motor, uint8_t return_mode, uint8_t sync_flag);                                                                                                  // 触发回零
+void ZDT_Stepper_Set_T_position(ZDTStepperMotor *motor, uint8_t dir, float speed_f, uint8_t accel_accel, uint32_t pulse_count, uint8_t position_mode, uint8_t sync_flag);
+void ZDT_Stepper_torque_control(ZDTStepperMotor *motor, uint8_t dir, uint16_t current_rate, uint16_t current, uint8_t sync_flag); // 力矩控制模式
+void ZDT_Stepper_start_sync_motion(ZDTStepperMotor *motor);                                                                       // 开启多机同步运动
+void ZDT_Stepper_stop(ZDTStepperMotor *motor, uint8_t sync_flag);                                                                 // 立即停止
+void ZDT_Stepper_clear_current_position(ZDTStepperMotor *motor);                                                                  // 角度清零
+void ZDT_Stepper_trigger_zero_return(ZDTStepperMotor *motor, uint8_t return_mode, uint8_t sync_flag);                             // 触发回零
 
 void ZDT_Stepper_release_stall_protection(ZDTStepperMotor *motor);    // 解除堵转保护
 void ZDT_Stepper_trigger_encoder_calibration(ZDTStepperMotor *motor); // 触发编码器校准

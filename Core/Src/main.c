@@ -183,8 +183,6 @@ int main(void)
   ZDT_Stepper_Enable(zdt_stepper_motors[0], 1, 0);
   ZDT_Stepper_Enable(zdt_stepper_motors[1], 1, 0);
 
-  Emm_V5_Pos_Control(zdt_stepper_motors[0], 0, 1, 0, 1000, ZDT_STEPPER_REL_POS_MODE, ZDT_STEPPER_SYNC_DISABLE);
-  Emm_V5_Pos_Control(zdt_stepper_motors[1], 0, 1, 0, 1000, ZDT_STEPPER_REL_POS_MODE, ZDT_STEPPER_SYNC_DISABLE);
   /* USER CODE END 2 */
 
   /* Infinite loop */

@@ -167,9 +167,6 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
         // 调试输出接收到的字节
         printf("[UART RX] 收到: 0x%02X\r\n", uart3_rx_byte);
 
-        // 解析坐标数据包
-        uart_parse_packet(uart3_rx_byte);
-
         // 继续启动下一次中断接收
         UART3_Start_Receive_IT();
     }
