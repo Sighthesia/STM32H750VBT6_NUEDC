@@ -59,16 +59,16 @@ float last_pitch_output = 0.0f;      // 俯仰轴上次输出值
 /* --------------------------------- 自定义部分结束 -------------------------------- */
 
 // 中间变量
-int16_t pid_kp_slider_val = 10;           // 比例系数滑块值（2.0f -> 20*0.1）
-int16_t pid_ki_slider_val = 2;            // 积分系数滑块值（0.0f -> 0*0.1）
-int16_t pid_kd_slider_val = 40;           // 微分系数滑块值（0.0f -> 0*0.1）
+int16_t pid_kp_slider_val = 12;           // 比例系数滑块值（2.0f -> 20*0.1）
+int16_t pid_ki_slider_val = 0;            // 积分系数滑块值（0.0f -> 0*0.1）
+int16_t pid_kd_slider_val = 0;            // 微分系数滑块值（0.0f -> 0*0.1）
 int16_t pid_tau_slider_val = 5;           // 滤波时间常数滑块值（0.02f -> 2*0.01）
-int16_t pid_lim_min_slider_val = -3;      // 输出下限滑块值（-10.0f -> -100*0.1）
-int16_t pid_lim_max_slider_val = 3;       // 输出上限滑块值（10.0f -> 100*0.1）
+int16_t pid_lim_min_slider_val = -4;      // 输出下限滑块值（-10.0f -> -100*0.1）
+int16_t pid_lim_max_slider_val = 4;       // 输出上限滑块值（10.0f -> 100*0.1）
 int16_t pid_lim_min_int_slider_val = -50; // 积分下限滑块值（-5.0f -> -50*0.1）
 int16_t pid_lim_max_int_slider_val = 50;  // 积分上限滑块值（5.0f -> 50*0.1）
 int16_t pid_sample_time_slider_val = 1;   // 采样时间滑块值（0.01f -> 1*0.01）
-int16_t stepper_deadzone_slider_val = 30; // 死区阈值滑块值（1.0f -> 10*0.1）
+int16_t stepper_deadzone_slider_val = 25; // 死区阈值滑块值（1.0f -> 10*0.1）
 int16_t error_deadzone_slider_val = 50;   // 误差死区滑块值（5.0f -> 50*0.1）
 int16_t update_interval_slider_val = 50;  // 更新间隔滑块值（50ms -> 50*1）
 int16_t output_change_slider_val = 10;    // 输出变化阈值滑块值（0.1f -> 10*0.01）

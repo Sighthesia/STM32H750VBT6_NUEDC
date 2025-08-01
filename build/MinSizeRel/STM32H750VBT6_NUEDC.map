@@ -9062,7 +9062,7 @@ LOAD /usr/lib/gcc/arm-none-eabi/14.2.0/thumb/v7e-m+dp/hard/crtn.o
                 0x0800f0b4                        PROVIDE (__fini_array_end = .)
                 0x0800f0b4                        _sidata = LOADADDR (.data)
 
-.data           0x20000000      0x2c4 load address 0x0800f0b4
+.data           0x20000000      0x2c0 load address 0x0800f0b4
                 0x20000000                        . = ALIGN (0x4)
                 0x20000000                        _sdata = .
  *(.data)
@@ -9166,148 +9166,148 @@ LOAD /usr/lib/gcc/arm-none-eabi/14.2.0/thumb/v7e-m+dp/hard/crtn.o
  .data.pid_tau_slider_val
                 0x200002ae        0x2 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Software/Stepper_Control/Stepper_PID.c.obj
                 0x200002ae                pid_tau_slider_val
- .data.pid_kd_slider_val
-                0x200002b0        0x2 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Software/Stepper_Control/Stepper_PID.c.obj
-                0x200002b0                pid_kd_slider_val
- .data.pid_ki_slider_val
-                0x200002b2        0x2 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Software/Stepper_Control/Stepper_PID.c.obj
-                0x200002b2                pid_ki_slider_val
  .data.pid_kp_slider_val
-                0x200002b4        0x2 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Software/Stepper_Control/Stepper_PID.c.obj
-                0x200002b4                pid_kp_slider_val
- *fill*         0x200002b6        0x2 
+                0x200002b0        0x2 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Software/Stepper_Control/Stepper_PID.c.obj
+                0x200002b0                pid_kp_slider_val
+ *fill*         0x200002b2        0x2 
  .data.min_output_change_threshold
-                0x200002b8        0x4 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Software/Stepper_Control/Stepper_PID.c.obj
-                0x200002b8                min_output_change_threshold
+                0x200002b4        0x4 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Software/Stepper_Control/Stepper_PID.c.obj
+                0x200002b4                min_output_change_threshold
  .data.min_update_interval_ms
-                0x200002bc        0x4 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Software/Stepper_Control/Stepper_PID.c.obj
-                0x200002bc                min_update_interval_ms
+                0x200002b8        0x4 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Software/Stepper_Control/Stepper_PID.c.obj
+                0x200002b8                min_update_interval_ms
  .data.error_deadzone_threshold
-                0x200002c0        0x4 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Software/Stepper_Control/Stepper_PID.c.obj
-                0x200002c0                error_deadzone_threshold
-                0x200002c4                        . = ALIGN (0x4)
-                0x200002c4                        _edata = .
+                0x200002bc        0x4 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Software/Stepper_Control/Stepper_PID.c.obj
+                0x200002bc                error_deadzone_threshold
+                0x200002c0                        . = ALIGN (0x4)
+                0x200002c0                        _edata = .
 
-.igot.plt       0x200002c4        0x0 load address 0x0800f378
- .igot.plt      0x200002c4        0x0 /usr/lib/gcc/arm-none-eabi/14.2.0/thumb/v7e-m+dp/hard/crtbegin.o
-                0x200002c4                        . = ALIGN (0x4)
+.igot.plt       0x200002c0        0x0 load address 0x0800f374
+ .igot.plt      0x200002c0        0x0 /usr/lib/gcc/arm-none-eabi/14.2.0/thumb/v7e-m+dp/hard/crtbegin.o
+                0x200002c0                        . = ALIGN (0x4)
 
-.bss            0x200002c4      0xd68 load address 0x0800f378
-                0x200002c4                        _sbss = .
-                0x200002c4                        __bss_start__ = _sbss
+.bss            0x200002c0      0xd6c load address 0x0800f374
+                0x200002c0                        _sbss = .
+                0x200002c0                        __bss_start__ = _sbss
  *(.bss)
  *(.bss*)
  .bss.completed.1
-                0x200002c4        0x1 /usr/lib/gcc/arm-none-eabi/14.2.0/thumb/v7e-m+dp/hard/crtbegin.o
- *fill*         0x200002c5        0x3 
- .bss.object.0  0x200002c8       0x18 /usr/lib/gcc/arm-none-eabi/14.2.0/thumb/v7e-m+dp/hard/crtbegin.o
- .bss.__sf      0x200002e0      0x138 /usr/lib/gcc/arm-none-eabi/14.2.0/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-findfp.o)
-                0x200002e0                __sf
+                0x200002c0        0x1 /usr/lib/gcc/arm-none-eabi/14.2.0/thumb/v7e-m+dp/hard/crtbegin.o
+ *fill*         0x200002c1        0x3 
+ .bss.object.0  0x200002c4       0x18 /usr/lib/gcc/arm-none-eabi/14.2.0/thumb/v7e-m+dp/hard/crtbegin.o
+ .bss.__sf      0x200002dc      0x138 /usr/lib/gcc/arm-none-eabi/14.2.0/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-findfp.o)
+                0x200002dc                __sf
  .bss.__stdio_exit_handler
-                0x20000418        0x4 /usr/lib/gcc/arm-none-eabi/14.2.0/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-findfp.o)
-                0x20000418                __stdio_exit_handler
- .bss.errno     0x2000041c        0x4 /usr/lib/gcc/arm-none-eabi/14.2.0/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-reent.o)
-                0x2000041c                errno
+                0x20000414        0x4 /usr/lib/gcc/arm-none-eabi/14.2.0/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-findfp.o)
+                0x20000414                __stdio_exit_handler
+ .bss.errno     0x20000418        0x4 /usr/lib/gcc/arm-none-eabi/14.2.0/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-reent.o)
+                0x20000418                errno
  .bss.__lock___malloc_recursive_mutex
-                0x20000420        0x1 /usr/lib/gcc/arm-none-eabi/14.2.0/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-lock.o)
-                0x20000420                __lock___malloc_recursive_mutex
+                0x2000041c        0x1 /usr/lib/gcc/arm-none-eabi/14.2.0/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-lock.o)
+                0x2000041c                __lock___malloc_recursive_mutex
  .bss.__lock___sfp_recursive_mutex
-                0x20000421        0x1 /usr/lib/gcc/arm-none-eabi/14.2.0/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-lock.o)
-                0x20000421                __lock___sfp_recursive_mutex
- *fill*         0x20000422        0x2 
+                0x2000041d        0x1 /usr/lib/gcc/arm-none-eabi/14.2.0/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-lock.o)
+                0x2000041d                __lock___sfp_recursive_mutex
+ *fill*         0x2000041e        0x2 
  .bss.__malloc_sbrk_start
-                0x20000424        0x4 /usr/lib/gcc/arm-none-eabi/14.2.0/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-mallocr.o)
-                0x20000424                __malloc_sbrk_start
+                0x20000420        0x4 /usr/lib/gcc/arm-none-eabi/14.2.0/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-mallocr.o)
+                0x20000420                __malloc_sbrk_start
  .bss.__malloc_free_list
-                0x20000428        0x4 /usr/lib/gcc/arm-none-eabi/14.2.0/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-mallocr.o)
-                0x20000428                __malloc_free_list
- .bss.uwTick    0x2000042c        0x4 cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal.c.obj
-                0x2000042c                uwTick
+                0x20000424        0x4 /usr/lib/gcc/arm-none-eabi/14.2.0/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-mallocr.o)
+                0x20000424                __malloc_free_list
+ .bss.uwTick    0x20000428        0x4 cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal.c.obj
+                0x20000428                uwTick
  .bss.menu_pid_params_debug
-                0x20000430        0x1 CMakeFiles/STM32H750VBT6_NUEDC.dir/Core/Src/main.c.obj
-                0x20000430                menu_pid_params_debug
+                0x2000042c        0x1 CMakeFiles/STM32H750VBT6_NUEDC.dir/Core/Src/main.c.obj
+                0x2000042c                menu_pid_params_debug
  .bss.menu_pid_calculation_debug
-                0x20000431        0x1 CMakeFiles/STM32H750VBT6_NUEDC.dir/Core/Src/main.c.obj
-                0x20000431                menu_pid_calculation_debug
- *fill*         0x20000432        0x2 
- .bss.hi2c1     0x20000434       0x54 CMakeFiles/STM32H750VBT6_NUEDC.dir/Core/Src/i2c.c.obj
-                0x20000434                hi2c1
- .bss.hspi1     0x20000488       0x88 CMakeFiles/STM32H750VBT6_NUEDC.dir/Core/Src/spi.c.obj
-                0x20000488                hspi1
- .bss.htim7     0x20000510       0x4c CMakeFiles/STM32H750VBT6_NUEDC.dir/Core/Src/tim.c.obj
-                0x20000510                htim7
- .bss.htim3     0x2000055c       0x4c CMakeFiles/STM32H750VBT6_NUEDC.dir/Core/Src/tim.c.obj
-                0x2000055c                htim3
+                0x2000042d        0x1 CMakeFiles/STM32H750VBT6_NUEDC.dir/Core/Src/main.c.obj
+                0x2000042d                menu_pid_calculation_debug
+ *fill*         0x2000042e        0x2 
+ .bss.hi2c1     0x20000430       0x54 CMakeFiles/STM32H750VBT6_NUEDC.dir/Core/Src/i2c.c.obj
+                0x20000430                hi2c1
+ .bss.hspi1     0x20000484       0x88 CMakeFiles/STM32H750VBT6_NUEDC.dir/Core/Src/spi.c.obj
+                0x20000484                hspi1
+ .bss.htim7     0x2000050c       0x4c CMakeFiles/STM32H750VBT6_NUEDC.dir/Core/Src/tim.c.obj
+                0x2000050c                htim7
+ .bss.htim3     0x20000558       0x4c CMakeFiles/STM32H750VBT6_NUEDC.dir/Core/Src/tim.c.obj
+                0x20000558                htim3
  .bss.hdma_usart2_tx
-                0x200005a8       0x78 CMakeFiles/STM32H750VBT6_NUEDC.dir/Core/Src/usart.c.obj
-                0x200005a8                hdma_usart2_tx
+                0x200005a4       0x78 CMakeFiles/STM32H750VBT6_NUEDC.dir/Core/Src/usart.c.obj
+                0x200005a4                hdma_usart2_tx
  .bss.hdma_uart5_tx
-                0x20000620       0x78 CMakeFiles/STM32H750VBT6_NUEDC.dir/Core/Src/usart.c.obj
-                0x20000620                hdma_uart5_tx
- .bss.huart3    0x20000698       0x94 CMakeFiles/STM32H750VBT6_NUEDC.dir/Core/Src/usart.c.obj
-                0x20000698                huart3
- .bss.huart2    0x2000072c       0x94 CMakeFiles/STM32H750VBT6_NUEDC.dir/Core/Src/usart.c.obj
-                0x2000072c                huart2
- .bss.huart1    0x200007c0       0x94 CMakeFiles/STM32H750VBT6_NUEDC.dir/Core/Src/usart.c.obj
-                0x200007c0                huart1
- .bss.huart5    0x20000854       0x94 CMakeFiles/STM32H750VBT6_NUEDC.dir/Core/Src/usart.c.obj
-                0x20000854                huart5
+                0x2000061c       0x78 CMakeFiles/STM32H750VBT6_NUEDC.dir/Core/Src/usart.c.obj
+                0x2000061c                hdma_uart5_tx
+ .bss.huart3    0x20000694       0x94 CMakeFiles/STM32H750VBT6_NUEDC.dir/Core/Src/usart.c.obj
+                0x20000694                huart3
+ .bss.huart2    0x20000728       0x94 CMakeFiles/STM32H750VBT6_NUEDC.dir/Core/Src/usart.c.obj
+                0x20000728                huart2
+ .bss.huart1    0x200007bc       0x94 CMakeFiles/STM32H750VBT6_NUEDC.dir/Core/Src/usart.c.obj
+                0x200007bc                huart1
+ .bss.huart5    0x20000850       0x94 CMakeFiles/STM32H750VBT6_NUEDC.dir/Core/Src/usart.c.obj
+                0x20000850                huart5
  .bss.__sbrk_heap_end
-                0x200008e8        0x4 CMakeFiles/STM32H750VBT6_NUEDC.dir/Core/Src/sysmem.c.obj
- .bss.in_astra  0x200008ec        0x1 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Hardware/Astra_UI_Lite/astra_ui_core.c.obj
-                0x200008ec                in_astra
- *fill*         0x200008ed        0x3 
- .bss.u8g2      0x200008f0       0x94 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Hardware/Astra_UI_Lite/astra_ui_draw_driver.c.obj
-                0x200008f0                u8g2
+                0x200008e4        0x4 CMakeFiles/STM32H750VBT6_NUEDC.dir/Core/Src/sysmem.c.obj
+ .bss.in_astra  0x200008e8        0x1 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Hardware/Astra_UI_Lite/astra_ui_core.c.obj
+                0x200008e8                in_astra
+ *fill*         0x200008e9        0x3 
+ .bss.u8g2      0x200008ec       0x94 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Hardware/Astra_UI_Lite/astra_ui_draw_driver.c.obj
+                0x200008ec                u8g2
  .bss._last_tick.0
-                0x20000984        0x4 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Hardware/Astra_UI_Lite/astra_ui_drawer.c.obj
+                0x20000980        0x4 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Hardware/Astra_UI_Lite/astra_ui_drawer.c.obj
  .bss._is_visiable.1
-                0x20000988        0x1 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Hardware/Astra_UI_Lite/astra_ui_drawer.c.obj
- *fill*         0x20000989        0x3 
+                0x20000984        0x1 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Hardware/Astra_UI_Lite/astra_ui_drawer.c.obj
+ *fill*         0x20000985        0x3 
  .bss._length_each_part.2
-                0x2000098c        0x4 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Hardware/Astra_UI_Lite/astra_ui_drawer.c.obj
+                0x20000988        0x4 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Hardware/Astra_UI_Lite/astra_ui_drawer.c.obj
  .bss.astra_exit_animation_status
-                0x20000990        0x1 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Hardware/Astra_UI_Lite/astra_ui_drawer.c.obj
-                0x20000990                astra_exit_animation_status
- *fill*         0x20000991        0x3 
+                0x2000098c        0x1 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Hardware/Astra_UI_Lite/astra_ui_drawer.c.obj
+                0x2000098c                astra_exit_animation_status
+ *fill*         0x2000098d        0x3 
  .bss._astra_list_root_item.0
-                0x20000994        0x4 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Hardware/Astra_UI_Lite/astra_ui_item.c.obj
+                0x20000990        0x4 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Hardware/Astra_UI_Lite/astra_ui_item.c.obj
  .bss.astra_camera
-                0x20000998       0x14 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Hardware/Astra_UI_Lite/astra_ui_item.c.obj
-                0x20000998                astra_camera
+                0x20000994       0x14 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Hardware/Astra_UI_Lite/astra_ui_item.c.obj
+                0x20000994                astra_camera
  .bss.astra_selector
-                0x200009ac       0x20 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Hardware/Astra_UI_Lite/astra_ui_item.c.obj
-                0x200009ac                astra_selector
+                0x200009a8       0x20 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Hardware/Astra_UI_Lite/astra_ui_item.c.obj
+                0x200009a8                astra_selector
  .bss.last_state.1
-                0x200009cc        0x1 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Hardware/Encoder_EXTI/Encoder_EXTI.c.obj
+                0x200009c8        0x1 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Hardware/Encoder_EXTI/Encoder_EXTI.c.obj
  .bss.encoder_state
-                0x200009cd        0x1 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Hardware/Encoder_EXTI/Encoder_EXTI.c.obj
+                0x200009c9        0x1 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Hardware/Encoder_EXTI/Encoder_EXTI.c.obj
  .bss.encoder_count
-                0x200009ce        0x2 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Hardware/Encoder_EXTI/Encoder_EXTI.c.obj
-                0x200009ce                encoder_count
+                0x200009ca        0x2 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Hardware/Encoder_EXTI/Encoder_EXTI.c.obj
+                0x200009ca                encoder_count
  .bss.command.16
-                0x200009d0        0x5 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Hardware/ZDT_Step_Motor/ZDT_Stepper.c.obj
+                0x200009cc        0x5 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Hardware/ZDT_Step_Motor/ZDT_Stepper.c.obj
  .bss.command.23
-                0x200009d5        0x8 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Hardware/ZDT_Step_Motor/ZDT_Stepper.c.obj
+                0x200009d1        0x8 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Hardware/ZDT_Step_Motor/ZDT_Stepper.c.obj
  .bss.command.24
-                0x200009dd        0x6 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Hardware/ZDT_Step_Motor/ZDT_Stepper.c.obj
- *fill*         0x200009e3        0x1 
+                0x200009d9        0x6 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Hardware/ZDT_Step_Motor/ZDT_Stepper.c.obj
+ *fill*         0x200009df        0x1 
  .bss.zdt_stepper_motors
-                0x200009e4        0x8 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Hardware/ZDT_Step_Motor/ZDT_Stepper.c.obj
-                0x200009e4                zdt_stepper_motors
+                0x200009e0        0x8 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Hardware/ZDT_Step_Motor/ZDT_Stepper.c.obj
+                0x200009e0                zdt_stepper_motors
  .bss.uart_count
-                0x200009ec        0x1 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Hardware/ZDT_Step_Motor/ZDT_Stepper.c.obj
- *fill*         0x200009ed        0x3 
+                0x200009e8        0x1 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Hardware/ZDT_Step_Motor/ZDT_Stepper.c.obj
+ *fill*         0x200009e9        0x3 
  .bss.uart_motors
-                0x200009f0       0xf0 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Hardware/ZDT_Step_Motor/ZDT_Stepper.c.obj
+                0x200009ec       0xf0 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Hardware/ZDT_Step_Motor/ZDT_Stepper.c.obj
  .bss.ebtn_default
-                0x20000ae0       0x28 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Hardware/easy_button/ebtn.c.obj
- .bss.buffer.0  0x20000b08       0x20 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Hardware/u8g2_APP/u8g2_Custom_HW_I2C_HAL.c.obj
+                0x20000adc       0x28 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Hardware/easy_button/ebtn.c.obj
+ .bss.buffer.0  0x20000b04       0x20 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Hardware/u8g2_APP/u8g2_Custom_HW_I2C_HAL.c.obj
  .bss.buf_idx.1
-                0x20000b28        0x1 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Hardware/u8g2_APP/u8g2_Custom_HW_I2C_HAL.c.obj
- .bss.buf.0     0x20000b29      0x400 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Hardware/u8g2_csrc_SSD1306/u8g2_d_memory.c.obj
+                0x20000b24        0x1 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Hardware/u8g2_APP/u8g2_Custom_HW_I2C_HAL.c.obj
+ .bss.buf.0     0x20000b25      0x400 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Hardware/u8g2_csrc_SSD1306/u8g2_d_memory.c.obj
  .bss.in_transfer.5
-                0x20000f29        0x1 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Hardware/u8g2_csrc_SSD1306/u8x8_cad.c.obj
+                0x20000f25        0x1 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Hardware/u8g2_csrc_SSD1306/u8x8_cad.c.obj
+ .bss.pid_kd_slider_val
+                0x20000f26        0x2 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Software/Stepper_Control/Stepper_PID.c.obj
+                0x20000f26                pid_kd_slider_val
+ .bss.pid_ki_slider_val
+                0x20000f28        0x2 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Software/Stepper_Control/Stepper_PID.c.obj
+                0x20000f28                pid_ki_slider_val
  *fill*         0x20000f2a        0x2 
  .bss.last_pitch_output
                 0x20000f2c        0x4 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Software/Stepper_Control/Stepper_PID.c.obj
@@ -9411,7 +9411,7 @@ LOAD /usr/lib/gcc/arm-none-eabi/14.2.0/thumb/v7e-m+dp/hard/crtn.o
                 0x2000102c                        __bss_end__ = _ebss
 
 ._user_heap_stack
-                0x2000102c      0x604 load address 0x0800f378
+                0x2000102c      0x604 load address 0x0800f374
                 0x20001030                        . = ALIGN (0x8)
  *fill*         0x2000102c        0x4 
                 [!provide]                        PROVIDE (end = .)
