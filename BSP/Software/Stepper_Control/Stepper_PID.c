@@ -25,17 +25,17 @@ float pid_lim_max_int = 0.0f;
 float sample_time_s = 0.0f;
 /* --------------------------------- 自定义部分结束 -------------------------------- */
 
-float yaw_speed = 1.0f;
-float pitch_speed = 1.0f;
+float yaw_speed = 1.0f;   // 航向轴步进电机速度（单位：RPM）
+float pitch_speed = 1.0f; // 俯仰轴步进电机速度（单位：RPM）
 
-float pid_yaw_angle = 0.0f;
-float pid_pitch_angle = 0.0f;
+float pid_yaw_angle = 0.0f;   // 航向轴PID输出角度（单位：度）
+float pid_pitch_angle = 0.0f; // 俯仰轴PID输出角度（单位：度）
 
-PIDController yaw_pid = {0};   // 航向轴PID
-PIDController pitch_pid = {0}; // 俯仰轴PID
+PIDController yaw_pid = {0};   // 航向轴PID控制器结构体
+PIDController pitch_pid = {0}; // 俯仰轴PID控制器结构体
 
-float yaw_pid_output = 0.0f;   // 航向轴PID输出
-float pitch_pid_output = 0.0f; // 俯仰轴PID输出
+float yaw_pid_output = 0.0f;   // 航向轴PID输出值
+float pitch_pid_output = 0.0f; // 俯仰轴PID输出值
 
 // PID目标值
 float yaw_pid_target = 0.0f;
@@ -45,20 +45,21 @@ float pitch_pid_target = 0.0f;
 float yaw_pid_error = 0.0f;
 float pitch_pid_error = 0.0f;
 
-_Bool stepper_update_flag = 0; // PID更新标志位
-_Bool pid_debug_flag = 0;      // PID调试标志位
-_Bool stepper_enable_flag = 0; // 步进电机使能标志位
+_Bool stepper_update_flag = 0;        // 步进电机PID更新标志位
+_Bool pid_debug_enable_flag = 0;      // PID使能标志位
+_Bool stepper_update_enable_flag = 0; // 步进电机使能标志位
+_Bool stepper_pid_debug_flag = 0;     // 步进电机PID调试输出标志位
 
 // 中间变量
-int16_t pid_kp_slider_val = 20;           // 2.0f -> 20*0.1
-int16_t pid_ki_slider_val = 0;            // 0.0f -> 0*0.1
-int16_t pid_kd_slider_val = 0;            // 0.0f -> 0*0.1
-int16_t pid_tau_slider_val = 2;           // 0.02f -> 2*0.01
-int16_t pid_lim_min_slider_val = -100;    // -10.0f -> -100*0.1
-int16_t pid_lim_max_slider_val = 100;     // 10.0f -> 100*0.1
-int16_t pid_lim_min_int_slider_val = -50; // -5.0f -> -50*0.1
-int16_t pid_lim_max_int_slider_val = 50;  // 5.0f -> 50*0.1
-int16_t pid_sample_time_slider_val = 1;   // 0.01f -> 1*0.01
+int16_t pid_kp_slider_val = 20;           // 比例系数滑块值（2.0f -> 20*0.1）
+int16_t pid_ki_slider_val = 0;            // 积分系数滑块值（0.0f -> 0*0.1）
+int16_t pid_kd_slider_val = 0;            // 微分系数滑块值（0.0f -> 0*0.1）
+int16_t pid_tau_slider_val = 2;           // 滤波时间常数滑块值（0.02f -> 2*0.01）
+int16_t pid_lim_min_slider_val = -100;    // 输出下限滑块值（-10.0f -> -100*0.1）
+int16_t pid_lim_max_slider_val = 100;     // 输出上限滑块值（10.0f -> 100*0.1）
+int16_t pid_lim_min_int_slider_val = -50; // 积分下限滑块值（-5.0f -> -50*0.1）
+int16_t pid_lim_max_int_slider_val = 50;  // 积分上限滑块值（5.0f -> 50*0.1）
+int16_t pid_sample_time_slider_val = 1;   // 采样时间滑块值（0.01f -> 1*0.01）
 
 /** ***************************************************************************
  * @brief  初始化步进电机PID参数
@@ -103,11 +104,12 @@ void Yaw_Stepper_Position_Update(float pid_output)
     uint8_t dir = (pid_output >= 0) ? 0x01 : 0x00; // 0x01: CCW(逆时针), 0x00: CW(顺时针)
     float angle = fabsf(pid_output);
     pid_yaw_angle = pid_output;
-    /* --------------------------------- 此处修改: 条件编译调试输出 -------------------------------- */
-#ifdef STEPPER_PID_DEBUG
-    printf("[Yaw] Dir: %s, Speed: %.2f, Angle: %.2f, PID Output: %.2f\r\n",
-           dir ? "CCW" : "CW", yaw_speed, angle, pid_output);
-#endif /* STEPPER_PID_DEBUG */
+    /* --------------------------------- 此处修改: 条件调试输出 -------------------------------- */
+    if (stepper_pid_debug_flag)
+    {
+        printf("[Yaw] Dir: %s, Speed: %.2f, Angle: %.2f, PID Output: %.2f\r\n",
+               dir ? "CCW" : "CW", yaw_speed, angle, pid_output);
+    }
     /* --------------------------------- 自定义部分结束 -------------------------------- */
     ZDT_Stepper_Set_position(zdt_stepper_motors[0], dir, yaw_speed, angle, ZDT_STEPPER_REL_POS_MODE, ZDT_STEPPER_SYNC_DISABLE);
 }
@@ -118,14 +120,15 @@ void Yaw_Stepper_Position_Update(float pid_output)
  */
 void Pitch_Stepper_Position_Update(float pid_output)
 {
-    uint8_t dir = (pid_output >= 0) ? 0x00 : 0x01; // 0x00: CW(顺时针), 0x01: CCW(逆时针)
+    uint8_t dir = (pid_output >= 0) ? 0x01 : 0x00; // 0x00: CW(顺时针), 0x01: CCW(逆时针)
     float angle = fabsf(pid_output);
     pid_pitch_angle = pid_output;
-    /* --------------------------------- 此处修改: 条件编译调试输出 -------------------------------- */
-#ifdef STEPPER_PID_DEBUG
-    printf("[Pitch] Dir: %s, Speed: %.2f, Angle: %.2f, PID Output: %.2f\r\n",
-           dir ? "CCW" : "CW", pitch_speed, angle, pid_output);
-#endif /* STEPPER_PID_DEBUG */
+    /* --------------------------------- 此处修改: 条件调试输出 -------------------------------- */
+    if (stepper_pid_debug_flag)
+    {
+        printf("[Pitch] Dir: %s, Speed: %.2f, Angle: %.2f, PID Output: %.2f\r\n",
+               dir ? "CCW" : "CW", pitch_speed, angle, pid_output);
+    }
     /* --------------------------------- 自定义部分结束 -------------------------------- */
     ZDT_Stepper_Set_position(zdt_stepper_motors[1], dir, pitch_speed, angle, ZDT_STEPPER_REL_POS_MODE, ZDT_STEPPER_SYNC_DISABLE);
 }

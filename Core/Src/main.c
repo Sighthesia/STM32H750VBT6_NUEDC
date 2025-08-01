@@ -92,13 +92,13 @@ int _write(int fd, char *ptr, int len)
 #endif
 
 // Stepper 1 回零函数包装器
-void stepper1_reset_wrapper(void)
+void stepper1_reset(void)
 {
   ZDT_Stepper_trigger_zero_return(zdt_stepper_motors[0], 0, 0);
 }
 
 // Stepper 2 回零函数包装器
-void stepper2_reset_wrapper(void)
+void stepper2_reset(void)
 {
   ZDT_Stepper_trigger_zero_return(zdt_stepper_motors[1], 0, 0);
 }
@@ -107,6 +107,18 @@ void Stepper_All_Reset(void)
 {
   ZDT_Stepper_trigger_zero_return(zdt_stepper_motors[0], 0, 0);
   ZDT_Stepper_trigger_zero_return(zdt_stepper_motors[1], 0, 0);
+}
+
+void Stepper_All_Disable(void)
+{
+  ZDT_Stepper_Enable(zdt_stepper_motors[0], ZDT_STEPPER_DISABLE, ZDT_STEPPER_SYNC_DISABLE);
+  ZDT_Stepper_Enable(zdt_stepper_motors[1], ZDT_STEPPER_DISABLE, ZDT_STEPPER_SYNC_DISABLE);
+}
+
+void Stepper_All_Enable(void)
+{
+  ZDT_Stepper_Enable(zdt_stepper_motors[0], ZDT_STEPPER_ENABLE, ZDT_STEPPER_SYNC_DISABLE);
+  ZDT_Stepper_Enable(zdt_stepper_motors[1], ZDT_STEPPER_ENABLE, ZDT_STEPPER_SYNC_DISABLE);
 }
 /* USER CODE END 0 */
 
@@ -178,22 +190,22 @@ int main(void)
   astra_list_item_t *Flag = astra_new_list_item("Flag");
   astra_push_item_to_list(Settings, Flag);
 
+  astra_push_item_to_list(Flag, astra_new_switch_item("Stepper Update EN", &stepper_update_enable_flag));
   astra_push_item_to_list(Flag, astra_new_switch_item("UART RX EN", &uart_rx_enable_flag));
-  astra_push_item_to_list(Flag, astra_new_switch_item("PID Update", &pid_update_flag));
-  astra_push_item_to_list(Flag, astra_new_switch_item("PID DEBUG", &pid_debug_flag));
-  astra_push_item_to_list(Flag, astra_new_switch_item("Stepper Enable", &stepper_enable_flag));
-  astra_push_item_to_list(Flag, astra_new_switch_item("Stepper Update", &stepper_update_flag));
+  astra_push_item_to_list(Flag, astra_new_switch_item("PID CAL OUT DEBUG", &pid_cal_out_debug_flag));
+  astra_push_item_to_list(Flag, astra_new_switch_item("Stepper PID DEBUG", &stepper_pid_debug_flag));
 
   uart_rx_enable_flag = 1; // 允许接收数据
-  pid_debug_flag = 1;      // 允许PID调试
 
   // 步进电机
   astra_list_item_t *Stepper = astra_new_list_item("Stepper");
   astra_push_item_to_list(Settings, Stepper);
 
-  astra_push_item_to_list(Stepper, astra_new_user_item("Stepper_Yaw RST", stepper1_reset_wrapper, NULL, NULL));
-  astra_push_item_to_list(Stepper, astra_new_user_item("Stepper_Pitch RST", stepper2_reset_wrapper, NULL, NULL));
   astra_push_item_to_list(Stepper, astra_new_user_item("Stepper_All RST", Stepper_All_Reset, NULL, NULL));
+  astra_push_item_to_list(Stepper, astra_new_user_item("Stepper_All DIS", Stepper_All_Disable, NULL, NULL));
+  astra_push_item_to_list(Stepper, astra_new_user_item("Stepper_All EN", Stepper_All_Enable, NULL, NULL));
+  astra_push_item_to_list(Stepper, astra_new_user_item("Stepper_Yaw RST", stepper1_reset, NULL, NULL));
+  astra_push_item_to_list(Stepper, astra_new_user_item("Stepper_Pitch RST", stepper2_reset, NULL, NULL));
 
   /* ----------------------------------- PID ---------------------------------- */
 

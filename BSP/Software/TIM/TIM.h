@@ -25,7 +25,8 @@
 #include "USART.h"
 #include "Stepper_PID.h"
 /* ------------------------------- 定义所使用的定时器句柄 ------------------------------ */
-// #define TIM_DEBUG
+
+extern _Bool pid_cal_out_debug_flag;
 
 #ifdef USE_SOFTWARE_PWM_TIM
 #define SERVO_TIM_HANDLE htim6  /* 舵机使用的定时器句柄 */
