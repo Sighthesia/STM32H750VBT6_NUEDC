@@ -94,15 +94,20 @@ int _write(int fd, char *ptr, int len)
 // Stepper 1 回零函数包装器
 void stepper1_reset_wrapper(void)
 {
-  ZDT_Stepper_trigger_zero_return(zdt_stepper_motors[STEPPER_YAW], 0, 0);
+  ZDT_Stepper_trigger_zero_return(zdt_stepper_motors[0], 0, 0);
 }
 
 // Stepper 2 回零函数包装器
 void stepper2_reset_wrapper(void)
 {
-  ZDT_Stepper_trigger_zero_return(zdt_stepper_motors[STEPPER_PITCH], 0, 0);
+  ZDT_Stepper_trigger_zero_return(zdt_stepper_motors[1], 0, 0);
 }
 
+void Stepper_All_Reset(void)
+{
+  ZDT_Stepper_trigger_zero_return(zdt_stepper_motors[0], 0, 0);
+  ZDT_Stepper_trigger_zero_return(zdt_stepper_motors[1], 0, 0);
+}
 /* USER CODE END 0 */
 
 /**
@@ -182,6 +187,14 @@ int main(void)
   uart_rx_enable_flag = 1; // 允许接收数据
   pid_debug_flag = 1;      // 允许PID调试
 
+  // 步进电机
+  astra_list_item_t *Stepper = astra_new_list_item("Stepper");
+  astra_push_item_to_list(Settings, Stepper);
+
+  astra_push_item_to_list(Stepper, astra_new_user_item("Stepper_Yaw RST", stepper1_reset_wrapper, NULL, NULL));
+  astra_push_item_to_list(Stepper, astra_new_user_item("Stepper_Pitch RST", stepper2_reset_wrapper, NULL, NULL));
+  astra_push_item_to_list(Stepper, astra_new_user_item("Stepper_All RST", Stepper_All_Reset, NULL, NULL));
+
   /* ----------------------------------- PID ---------------------------------- */
 
   astra_list_item_t *PID = astra_new_list_item("PID");
@@ -214,13 +227,6 @@ int main(void)
   // 初始化PID控制器
   PIDController_Init(&yaw_pid);   // 初始化航向轴PID
   PIDController_Init(&pitch_pid); // 初始化俯仰轴PID
-
-  // 步进电机
-  astra_list_item_t *Stepper = astra_new_list_item("Stepper");
-  astra_push_item_to_list(Settings, Stepper);
-
-  astra_push_item_to_list(Stepper, astra_new_user_item("Stepper 1 RST", stepper1_reset_wrapper, NULL, NULL));
-  astra_push_item_to_list(Stepper, astra_new_user_item("Stepper 2 RST", stepper2_reset_wrapper, NULL, NULL));
 
   ebtn_APP_Key_INIT();
 
