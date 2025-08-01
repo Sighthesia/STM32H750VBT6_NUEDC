@@ -194,7 +194,7 @@ int main(void)
 
   /* ---------------------------------- Flag ---------------------------------- */
 
-  astra_list_item_t *Flag = astra_new_list_item("Control");
+  astra_list_item_t *Flag = astra_new_list_item("Flag");
   astra_push_item_to_list(Settings, Flag);
 
   astra_push_item_to_list(Flag, astra_new_switch_item("Stepper Tracking", &menu_stepper_tracking_enable));
@@ -213,8 +213,6 @@ int main(void)
   astra_push_item_to_list(Stepper, astra_new_user_item("Stepper_All RST", Stepper_All_Reset, NULL, NULL));
   astra_push_item_to_list(Stepper, astra_new_user_item("Stepper_All DIS", Stepper_All_Disable, NULL, NULL));
   astra_push_item_to_list(Stepper, astra_new_user_item("Stepper_All EN", Stepper_All_Enable, NULL, NULL));
-  astra_push_item_to_list(Stepper, astra_new_user_item("Stepper_Yaw RST", stepper1_reset, NULL, NULL));
-  astra_push_item_to_list(Stepper, astra_new_user_item("Stepper_Pitch RST", stepper2_reset, NULL, NULL));
 
   /* ----------------------------------- PID ---------------------------------- */
 
@@ -237,9 +235,24 @@ int main(void)
 
   // 添加PID参数调节到Debug菜单
   astra_push_item_to_list(Debug, PID);
+  astra_push_item_to_list(PID, astra_new_slider_item("Kp", &pid_kp_slider_val, 1, 0, 100));
+  astra_push_item_to_list(PID, astra_new_slider_item("Ki", &pid_ki_slider_val, 1, 0, 100));
+  astra_push_item_to_list(PID, astra_new_slider_item("Kd", &pid_kd_slider_val, 1, 0, 100));
+  astra_push_item_to_list(PID, astra_new_slider_item("tau", &pid_tau_slider_val, 1, 0, 100));
+  astra_push_item_to_list(PID, astra_new_slider_item("limMin", &pid_lim_min_slider_val, 1, -100, 0));
+  astra_push_item_to_list(PID, astra_new_slider_item("limMax", &pid_lim_max_slider_val, 1, 0, 100));
+  astra_push_item_to_list(PID, astra_new_slider_item("limMinInt", &pid_lim_min_int_slider_val, 1, -50, 0));
+  astra_push_item_to_list(PID, astra_new_slider_item("limMaxInt", &pid_lim_max_int_slider_val, 1, 0, 50));
+  astra_push_item_to_list(PID, astra_new_slider_item("SampleTime", &pid_sample_time_slider_val, 1, 1, 100));
 
   // 添加控制标志位到Debug菜单
   astra_push_item_to_list(Debug, Flag);
+  astra_push_item_to_list(Flag, astra_new_switch_item("Stepper Tracking", &menu_stepper_tracking_enable));
+  astra_push_item_to_list(Flag, astra_new_switch_item("UART Data RX", &menu_uart_data_receive_enable));
+  astra_push_item_to_list(Flag, astra_new_switch_item("PID Params Update", &menu_pid_params_update_enable));
+  astra_push_item_to_list(Flag, astra_new_switch_item("PID Calc Debug", &menu_pid_calculation_debug));
+  astra_push_item_to_list(Flag, astra_new_switch_item("Stepper Cmd Debug", &menu_stepper_command_debug));
+  astra_push_item_to_list(Flag, astra_new_switch_item("PID Params Debug", &menu_pid_params_debug));
 
   // 步进电机重置/启动/关闭函数
   astra_push_item_to_list(Debug, astra_new_user_item("Stepper_All RST", Stepper_All_Reset, NULL, NULL));

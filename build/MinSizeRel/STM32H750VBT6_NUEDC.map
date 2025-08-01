@@ -7583,7 +7583,7 @@ LOAD /usr/lib/gcc/arm-none-eabi/14.2.0/thumb/v7e-m+dp/hard/crtn.o
                 0x08000000                g_pfnVectors
                 0x08000298                        . = ALIGN (0x4)
 
-.text           0x080002a0     0xcd0c
+.text           0x080002a0     0xcd20
                 0x080002a0                        . = ALIGN (0x4)
  *(.text)
  .text          0x080002a0       0xa0 /usr/lib/gcc/arm-none-eabi/14.2.0/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-memchr.o)
@@ -8845,229 +8845,232 @@ LOAD /usr/lib/gcc/arm-none-eabi/14.2.0/thumb/v7e-m+dp/hard/crtn.o
                 0x0800c498      0x178 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Software/TIM/TIM.c.obj
                 0x0800c498                HAL_TIM_PeriodElapsedCallback
  .text.UART_Parse_Packet
-                0x0800c610       0x98 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Software/UART/USART.c.obj
+                0x0800c610       0xac CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Software/UART/USART.c.obj
                 0x0800c610                UART_Parse_Packet
  .text.UART3_Start_Receive_IT
-                0x0800c6a8       0x14 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Software/UART/USART.c.obj
-                0x0800c6a8                UART3_Start_Receive_IT
+                0x0800c6bc       0x14 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Software/UART/USART.c.obj
+                0x0800c6bc                UART3_Start_Receive_IT
  .text.HAL_UART_RxCpltCallback
-                0x0800c6bc       0x2c CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Software/UART/USART.c.obj
-                0x0800c6bc                HAL_UART_RxCpltCallback
+                0x0800c6d0       0x2c CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Software/UART/USART.c.obj
+                0x0800c6d0                HAL_UART_RxCpltCallback
  .text.HAL_UARTEx_RxEventCallback
-                0x0800c6e8        0x4 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Software/UART/USART.c.obj
-                0x0800c6e8                HAL_UARTEx_RxEventCallback
+                0x0800c6fc        0x4 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Software/UART/USART.c.obj
+                0x0800c6fc                HAL_UARTEx_RxEventCallback
  .text.lwrb_init
-                0x0800c6ec       0x1e CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Software/lwrb/lwrb.c.obj
-                0x0800c6ec                lwrb_init
+                0x0800c700       0x1e CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Software/lwrb/lwrb.c.obj
+                0x0800c700                lwrb_init
  .text.lwrb_get_free
-                0x0800c70a       0x20 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Software/lwrb/lwrb.c.obj
-                0x0800c70a                lwrb_get_free
+                0x0800c71e       0x20 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Software/lwrb/lwrb.c.obj
+                0x0800c71e                lwrb_get_free
  .text.lwrb_write
-                0x0800c72a       0x8a CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Software/lwrb/lwrb.c.obj
-                0x0800c72a                lwrb_write
+                0x0800c73e       0x8a CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Software/lwrb/lwrb.c.obj
+                0x0800c73e                lwrb_write
  .text.lwrb_get_full
-                0x0800c7b4       0x22 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Software/lwrb/lwrb.c.obj
-                0x0800c7b4                lwrb_get_full
+                0x0800c7c8       0x22 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Software/lwrb/lwrb.c.obj
+                0x0800c7c8                lwrb_get_full
  .text.lwrb_read
-                0x0800c7d6       0x8e CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Software/lwrb/lwrb.c.obj
-                0x0800c7d6                lwrb_read
+                0x0800c7ea       0x8e CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Software/lwrb/lwrb.c.obj
+                0x0800c7ea                lwrb_read
  .text.__udivmoddi4
-                0x0800c864      0x2bc /usr/lib/gcc/arm-none-eabi/14.2.0/thumb/v7e-m+dp/hard/libgcc.a(_udivmoddi4.o)
-                0x0800c864                __udivmoddi4
- .text.printf   0x0800cb20       0x24 /usr/lib/gcc/arm-none-eabi/14.2.0/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-printf.o)
-                0x0800cb20                printf
-                0x0800cb20                iprintf
- .text._puts_r  0x0800cb44       0xaa /usr/lib/gcc/arm-none-eabi/14.2.0/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-puts.o)
-                0x0800cb44                _puts_r
- *fill*         0x0800cbee        0x2 
- .text.puts     0x0800cbf0       0x10 /usr/lib/gcc/arm-none-eabi/14.2.0/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-puts.o)
-                0x0800cbf0                puts
+                0x0800c878      0x2bc /usr/lib/gcc/arm-none-eabi/14.2.0/thumb/v7e-m+dp/hard/libgcc.a(_udivmoddi4.o)
+                0x0800c878                __udivmoddi4
+ .text.printf   0x0800cb34       0x24 /usr/lib/gcc/arm-none-eabi/14.2.0/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-printf.o)
+                0x0800cb34                printf
+                0x0800cb34                iprintf
+ .text._puts_r  0x0800cb58       0xaa /usr/lib/gcc/arm-none-eabi/14.2.0/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-puts.o)
+                0x0800cb58                _puts_r
+ *fill*         0x0800cc02        0x2 
+ .text.puts     0x0800cc04       0x10 /usr/lib/gcc/arm-none-eabi/14.2.0/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-puts.o)
+                0x0800cc04                puts
  .text.snprintf
-                0x0800cc00       0x6c /usr/lib/gcc/arm-none-eabi/14.2.0/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-snprintf.o)
-                0x0800cc00                snprintf
-                0x0800cc00                sniprintf
- .text.sprintf  0x0800cc6c       0x44 /usr/lib/gcc/arm-none-eabi/14.2.0/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-sprintf.o)
-                0x0800cc6c                siprintf
-                0x0800cc6c                sprintf
- .text.memcmp   0x0800ccb0       0x20 /usr/lib/gcc/arm-none-eabi/14.2.0/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-memcmp.o)
-                0x0800ccb0                memcmp
- .text.__errno  0x0800ccd0        0xc /usr/lib/gcc/arm-none-eabi/14.2.0/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-errno.o)
-                0x0800ccd0                __errno
+                0x0800cc14       0x6c /usr/lib/gcc/arm-none-eabi/14.2.0/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-snprintf.o)
+                0x0800cc14                snprintf
+                0x0800cc14                sniprintf
+ .text.sprintf  0x0800cc80       0x44 /usr/lib/gcc/arm-none-eabi/14.2.0/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-sprintf.o)
+                0x0800cc80                siprintf
+                0x0800cc80                sprintf
+ .text.memcmp   0x0800ccc4       0x20 /usr/lib/gcc/arm-none-eabi/14.2.0/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-memcmp.o)
+                0x0800ccc4                memcmp
+ .text.__errno  0x0800cce4        0xc /usr/lib/gcc/arm-none-eabi/14.2.0/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-errno.o)
+                0x0800cce4                __errno
  .text.__ssputs_r
-                0x0800ccdc       0xc0 /usr/lib/gcc/arm-none-eabi/14.2.0/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-nano-svfprintf.o)
-                0x0800ccdc                __ssputs_r
+                0x0800ccf0       0xc0 /usr/lib/gcc/arm-none-eabi/14.2.0/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-nano-svfprintf.o)
+                0x0800ccf0                __ssputs_r
  .text._svfprintf_r
-                0x0800cd9c      0x1f8 /usr/lib/gcc/arm-none-eabi/14.2.0/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-nano-svfprintf.o)
-                0x0800cd9c                _svfprintf_r
-                0x0800cd9c                _svfiprintf_r
+                0x0800cdb0      0x1f8 /usr/lib/gcc/arm-none-eabi/14.2.0/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-nano-svfprintf.o)
+                0x0800cdb0                _svfprintf_r
+                0x0800cdb0                _svfiprintf_r
  *(.glue_7)
- .glue_7        0x0800cf94        0x0 linker stubs
+ .glue_7        0x0800cfa8        0x0 linker stubs
  *(.glue_7t)
- .glue_7t       0x0800cf94        0x0 linker stubs
+ .glue_7t       0x0800cfa8        0x0 linker stubs
  *(.eh_frame)
- .eh_frame      0x0800cf94        0x0 /usr/lib/gcc/arm-none-eabi/14.2.0/thumb/v7e-m+dp/hard/crtbegin.o
+ .eh_frame      0x0800cfa8        0x0 /usr/lib/gcc/arm-none-eabi/14.2.0/thumb/v7e-m+dp/hard/crtbegin.o
  *(.init)
- .init          0x0800cf94        0x4 /usr/lib/gcc/arm-none-eabi/14.2.0/thumb/v7e-m+dp/hard/crti.o
-                0x0800cf94                _init
- .init          0x0800cf98        0x8 /usr/lib/gcc/arm-none-eabi/14.2.0/thumb/v7e-m+dp/hard/crtn.o
+ .init          0x0800cfa8        0x4 /usr/lib/gcc/arm-none-eabi/14.2.0/thumb/v7e-m+dp/hard/crti.o
+                0x0800cfa8                _init
+ .init          0x0800cfac        0x8 /usr/lib/gcc/arm-none-eabi/14.2.0/thumb/v7e-m+dp/hard/crtn.o
  *(.fini)
- .fini          0x0800cfa0        0x4 /usr/lib/gcc/arm-none-eabi/14.2.0/thumb/v7e-m+dp/hard/crti.o
-                0x0800cfa0                _fini
- .fini          0x0800cfa4        0x8 /usr/lib/gcc/arm-none-eabi/14.2.0/thumb/v7e-m+dp/hard/crtn.o
-                0x0800cfac                        . = ALIGN (0x4)
-                0x0800cfac                        _etext = .
+ .fini          0x0800cfb4        0x4 /usr/lib/gcc/arm-none-eabi/14.2.0/thumb/v7e-m+dp/hard/crti.o
+                0x0800cfb4                _fini
+ .fini          0x0800cfb8        0x8 /usr/lib/gcc/arm-none-eabi/14.2.0/thumb/v7e-m+dp/hard/crtn.o
+                0x0800cfc0                        . = ALIGN (0x4)
+                0x0800cfc0                        _etext = .
 
-.vfp11_veneer   0x0800cfac        0x0
- .vfp11_veneer  0x0800cfac        0x0 linker stubs
+.vfp11_veneer   0x0800cfc0        0x0
+ .vfp11_veneer  0x0800cfc0        0x0 linker stubs
 
-.v4_bx          0x0800cfac        0x0
- .v4_bx         0x0800cfac        0x0 linker stubs
+.v4_bx          0x0800cfc0        0x0
+ .v4_bx         0x0800cfc0        0x0 linker stubs
 
-.iplt           0x0800cfac        0x0
- .iplt          0x0800cfac        0x0 /usr/lib/gcc/arm-none-eabi/14.2.0/thumb/v7e-m+dp/hard/crtbegin.o
+.iplt           0x0800cfc0        0x0
+ .iplt          0x0800cfc0        0x0 /usr/lib/gcc/arm-none-eabi/14.2.0/thumb/v7e-m+dp/hard/crtbegin.o
 
-.rodata         0x0800cfb0     0x1b0c
-                0x0800cfb0                        . = ALIGN (0x4)
+.rodata         0x0800cfc0     0x1b2c
+                0x0800cfc0                        . = ALIGN (0x4)
  *(.rodata)
- .rodata        0x0800cfb0       0x2e CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Hardware/Astra_UI_Lite/astra_ui_drawer.c.obj
+ .rodata        0x0800cfc0       0x2e CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Hardware/Astra_UI_Lite/astra_ui_drawer.c.obj
  *(.rodata*)
  .rodata._printf_float.str1.1
-                0x0800cfde      0x6a3 /usr/lib/gcc/arm-none-eabi/14.2.0/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-nano-vfprintf_float.o)
+                0x0800cfee      0x6c1 /usr/lib/gcc/arm-none-eabi/14.2.0/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-nano-vfprintf_float.o)
                                  0x12 (size before relaxing)
  .rodata._printf_i.str1.1
-                0x0800d681       0x22 /usr/lib/gcc/arm-none-eabi/14.2.0/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-nano-vfprintf_i.o)
+                0x0800d6af       0x22 /usr/lib/gcc/arm-none-eabi/14.2.0/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-nano-vfprintf_i.o)
  .rodata._dtoa_r.str1.1
-                0x0800d681       0x79 /usr/lib/gcc/arm-none-eabi/14.2.0/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-dtoa.o)
+                0x0800d6af       0x79 /usr/lib/gcc/arm-none-eabi/14.2.0/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-dtoa.o)
  .rodata._Balloc.str1.1
-                0x0800d681       0x5a /usr/lib/gcc/arm-none-eabi/14.2.0/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-mprec.o)
+                0x0800d6af       0x5a /usr/lib/gcc/arm-none-eabi/14.2.0/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-mprec.o)
  .rodata.__multadd.str1.1
-                0x0800d681       0x11 /usr/lib/gcc/arm-none-eabi/14.2.0/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-mprec.o)
- *fill*         0x0800d681        0x3 
- .rodata.p05.0  0x0800d684        0xc /usr/lib/gcc/arm-none-eabi/14.2.0/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-mprec.o)
+                0x0800d6af       0x11 /usr/lib/gcc/arm-none-eabi/14.2.0/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-mprec.o)
+ *fill*         0x0800d6af        0x1 
+ .rodata.p05.0  0x0800d6b0        0xc /usr/lib/gcc/arm-none-eabi/14.2.0/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-mprec.o)
+ *fill*         0x0800d6bc        0x4 
  .rodata.__mprec_bigtens
-                0x0800d690       0x28 /usr/lib/gcc/arm-none-eabi/14.2.0/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-mprec.o)
-                0x0800d690                __mprec_bigtens
+                0x0800d6c0       0x28 /usr/lib/gcc/arm-none-eabi/14.2.0/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-mprec.o)
+                0x0800d6c0                __mprec_bigtens
  .rodata.__mprec_tens
-                0x0800d6b8       0xc8 /usr/lib/gcc/arm-none-eabi/14.2.0/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-mprec.o)
-                0x0800d6b8                __mprec_tens
+                0x0800d6e8       0xc8 /usr/lib/gcc/arm-none-eabi/14.2.0/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-mprec.o)
+                0x0800d6e8                __mprec_tens
  .rodata._setlocale_r.str1.1
-                0x0800d780        0x9 /usr/lib/gcc/arm-none-eabi/14.2.0/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-locale.o)
+                0x0800d7b0        0x9 /usr/lib/gcc/arm-none-eabi/14.2.0/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-locale.o)
  .rodata.str1.1
-                0x0800d780        0x2 /usr/lib/gcc/arm-none-eabi/14.2.0/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-locale.o)
+                0x0800d7b0        0x2 /usr/lib/gcc/arm-none-eabi/14.2.0/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-locale.o)
  .rodata.__assert_func.str1.1
-                0x0800d780       0x3d /usr/lib/gcc/arm-none-eabi/14.2.0/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-assert.o)
+                0x0800d7b0       0x3d /usr/lib/gcc/arm-none-eabi/14.2.0/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-assert.o)
  .rodata._ctype_
-                0x0800d780      0x101 /usr/lib/gcc/arm-none-eabi/14.2.0/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-ctype_.o)
-                0x0800d780                _ctype_
+                0x0800d7b0      0x101 /usr/lib/gcc/arm-none-eabi/14.2.0/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-ctype_.o)
+                0x0800d7b0                _ctype_
  .rodata._vfprintf_r.str1.1
-                0x0800d881       0x11 /usr/lib/gcc/arm-none-eabi/14.2.0/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-nano-vfprintf.o)
+                0x0800d8b1       0x11 /usr/lib/gcc/arm-none-eabi/14.2.0/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-nano-vfprintf.o)
  .rodata.D1CorePrescTable
-                0x0800d881       0x10 cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Core/Src/system_stm32h7xx.c.obj
-                0x0800d881                D1CorePrescTable
+                0x0800d8b1       0x10 cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Core/Src/system_stm32h7xx.c.obj
+                0x0800d8b1                D1CorePrescTable
  .rodata.flagBitshiftOffset.0
-                0x0800d891        0x8 cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_dma.c.obj
- *fill*         0x0800d899        0x1 
+                0x0800d8c1        0x8 cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_dma.c.obj
+ *fill*         0x0800d8c9        0x1 
  .rodata.UARTPrescTable
-                0x0800d89a       0x18 cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_uart.c.obj
-                0x0800d89a                UARTPrescTable
+                0x0800d8ca       0x18 cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_uart.c.obj
+                0x0800d8ca                UARTPrescTable
  .rodata.denominator.0
-                0x0800d8b2        0x8 cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_uart_ex.c.obj
+                0x0800d8e2        0x8 cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_uart_ex.c.obj
  .rodata.numerator.1
-                0x0800d8ba        0x8 cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_uart_ex.c.obj
+                0x0800d8ea        0x8 cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32H7xx_HAL_Driver/Src/stm32h7xx_hal_uart_ex.c.obj
  .rodata.main.str1.1
-                0x0800d8c2      0x142 CMakeFiles/STM32H750VBT6_NUEDC.dir/Core/Src/main.c.obj
+                0x0800d8f2      0x142 CMakeFiles/STM32H750VBT6_NUEDC.dir/Core/Src/main.c.obj
  .rodata.astra_draw_list_item.str1.1
-                0x0800d8c2        0x5 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Hardware/Astra_UI_Lite/astra_ui_drawer.c.obj
+                0x0800d8f2        0x5 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Hardware/Astra_UI_Lite/astra_ui_drawer.c.obj
  .rodata.astra_get_root_list.str1.1
-                0x0800d8c2        0x5 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Hardware/Astra_UI_Lite/astra_ui_item.c.obj
+                0x0800d8f2        0x5 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Hardware/Astra_UI_Lite/astra_ui_item.c.obj
  .rodata.assign_message_based_on_command.str1.1
-                0x0800d8c2       0xc0 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Hardware/ZDT_Step_Motor/ZDT_Stepper.c.obj
+                0x0800d8f2       0xc0 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Hardware/ZDT_Step_Motor/ZDT_Stepper.c.obj
  .rodata.receive_motor_status.str1.1
-                0x0800d8c2      0x1d1 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Hardware/ZDT_Step_Motor/ZDT_Stepper.c.obj
- *fill*         0x0800d8c2        0x2 
+                0x0800d8f2      0x1d1 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Hardware/ZDT_Step_Motor/ZDT_Stepper.c.obj
+ *fill*         0x0800d8f2        0x2 
  .rodata.zdt_stepper_motor_config_table
-                0x0800d8c4       0x18 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Hardware/ZDT_Step_Motor/ZDT_Stepper.c.obj
+                0x0800d8f4       0x18 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Hardware/ZDT_Step_Motor/ZDT_Stepper.c.obj
  .rodata.ebtn_APP_Event_Handler.str1.1
-                0x0800d8dc       0x39 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Hardware/easy_button_APP/ebtn_APP.c.obj
+                0x0800d90c       0x39 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Hardware/easy_button_APP/ebtn_APP.c.obj
  .rodata.key_list_size
-                0x0800d8dc        0x1 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Hardware/easy_button_APP/ebtn_Custom_Config.c.obj
-                0x0800d8dc                key_list_size
+                0x0800d90c        0x1 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Hardware/easy_button_APP/ebtn_Custom_Config.c.obj
+                0x0800d90c                key_list_size
  .rodata.btn_combo_array_size
-                0x0800d8dd        0x1 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Hardware/easy_button_APP/ebtn_Custom_Config.c.obj
-                0x0800d8dd                btn_combo_array_size
+                0x0800d90d        0x1 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Hardware/easy_button_APP/ebtn_Custom_Config.c.obj
+                0x0800d90d                btn_combo_array_size
  .rodata.btn_array_size
-                0x0800d8de        0x1 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Hardware/easy_button_APP/ebtn_Custom_Config.c.obj
-                0x0800d8de                btn_array_size
+                0x0800d90e        0x1 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Hardware/easy_button_APP/ebtn_Custom_Config.c.obj
+                0x0800d90e                btn_array_size
  .rodata.wenquanyi_Custom_16px
-                0x0800d8df     0x1166 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Hardware/u8g2_APP/wenquanyi_Custom_16px.c.obj
-                0x0800d8df                wenquanyi_Custom_16px
- *fill*         0x0800ea45        0x3 
+                0x0800d90f     0x1166 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Hardware/u8g2_APP/wenquanyi_Custom_16px.c.obj
+                0x0800d90f                wenquanyi_Custom_16px
+ *fill*         0x0800ea75        0x3 
  .rodata.u8g2_cb_r0
-                0x0800ea48        0xc CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Hardware/u8g2_csrc_SSD1306/u8g2_setup.c.obj
-                0x0800ea48                u8g2_cb_r0
+                0x0800ea78        0xc CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Hardware/u8g2_csrc_SSD1306/u8g2_setup.c.obj
+                0x0800ea78                u8g2_cb_r0
  .rodata.u8x8_ssd1306_128x64_noname_display_info
-                0x0800ea54       0x18 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Hardware/u8g2_csrc_SSD1306/u8x8_d_ssd1306_128x64_noname.c.obj
+                0x0800ea84       0x18 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Hardware/u8g2_csrc_SSD1306/u8x8_d_ssd1306_128x64_noname.c.obj
  .rodata.u8x8_d_ssd1306_128x64_noname_flip1_seq
-                0x0800ea6c        0x7 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Hardware/u8g2_csrc_SSD1306/u8x8_d_ssd1306_128x64_noname.c.obj
+                0x0800ea9c        0x7 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Hardware/u8g2_csrc_SSD1306/u8x8_d_ssd1306_128x64_noname.c.obj
  .rodata.u8x8_d_ssd1306_128x64_noname_flip0_seq
-                0x0800ea73        0x7 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Hardware/u8g2_csrc_SSD1306/u8x8_d_ssd1306_128x64_noname.c.obj
+                0x0800eaa3        0x7 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Hardware/u8g2_csrc_SSD1306/u8x8_d_ssd1306_128x64_noname.c.obj
  .rodata.u8x8_d_ssd1306_128x64_noname_powersave1_seq
-                0x0800ea7a        0x5 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Hardware/u8g2_csrc_SSD1306/u8x8_d_ssd1306_128x64_noname.c.obj
+                0x0800eaaa        0x5 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Hardware/u8g2_csrc_SSD1306/u8x8_d_ssd1306_128x64_noname.c.obj
  .rodata.u8x8_d_ssd1306_128x64_noname_powersave0_seq
-                0x0800ea7f        0x5 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Hardware/u8g2_csrc_SSD1306/u8x8_d_ssd1306_128x64_noname.c.obj
+                0x0800eaaf        0x5 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Hardware/u8g2_csrc_SSD1306/u8x8_d_ssd1306_128x64_noname.c.obj
  .rodata.u8x8_d_ssd1306_128x64_noname_init_seq
-                0x0800ea84       0x35 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Hardware/u8g2_csrc_SSD1306/u8x8_d_ssd1306_128x64_noname.c.obj
+                0x0800eab4       0x35 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Hardware/u8g2_csrc_SSD1306/u8x8_d_ssd1306_128x64_noname.c.obj
  .rodata.sync_pid_slider_to_float.str1.1
-                0x0800eab9       0x69 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Software/Stepper_Control/Stepper_PID.c.obj
+                0x0800eae9       0x69 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Software/Stepper_Control/Stepper_PID.c.obj
  .rodata.Yaw_Stepper_Position_Update.str1.1
-                0x0800eab9       0x3f CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Software/Stepper_Control/Stepper_PID.c.obj
+                0x0800eae9       0x3f CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Software/Stepper_Control/Stepper_PID.c.obj
  .rodata.Pitch_Stepper_Position_Update.str1.1
-                0x0800eab9       0x3a CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Software/Stepper_Control/Stepper_PID.c.obj
+                0x0800eae9       0x3a CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Software/Stepper_Control/Stepper_PID.c.obj
  .rodata.HAL_TIM_PeriodElapsedCallback.str1.1
-                0x0800eab9       0x70 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Software/TIM/TIM.c.obj
+                0x0800eae9       0x70 CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Software/TIM/TIM.c.obj
+ .rodata.UART_Parse_Packet.str1.1
+                0x0800eae9       0x1e CMakeFiles/STM32H750VBT6_NUEDC.dir/BSP/Software/UART/USART.c.obj
  .rodata._svfprintf_r.str1.1
-                0x0800eab9       0x11 /usr/lib/gcc/arm-none-eabi/14.2.0/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-nano-svfprintf.o)
-                0x0800eb2c                        . = ALIGN (0x4)
- *fill*         0x0800eab9        0x3 
+                0x0800eae9       0x11 /usr/lib/gcc/arm-none-eabi/14.2.0/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-nano-svfprintf.o)
+                0x0800eb5c                        . = ALIGN (0x4)
+ *fill*         0x0800eae9        0x3 
 
 .ARM.extab
  *(.ARM.extab* .gnu.linkonce.armextab.*)
 
-.ARM            0x0800eabc        0x8
-                0x0800eabc                        __exidx_start = .
+.ARM            0x0800eaec        0x8
+                0x0800eaec                        __exidx_start = .
  *(.ARM.exidx*)
- .ARM.exidx     0x0800eabc        0x8 /usr/lib/gcc/arm-none-eabi/14.2.0/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-memchr.o)
- .ARM.exidx     0x0800eac4        0x0 /usr/lib/gcc/arm-none-eabi/14.2.0/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-strlen.o)
+ .ARM.exidx     0x0800eaec        0x8 /usr/lib/gcc/arm-none-eabi/14.2.0/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-memchr.o)
+ .ARM.exidx     0x0800eaf4        0x0 /usr/lib/gcc/arm-none-eabi/14.2.0/../../../../arm-none-eabi/lib/thumb/v7e-m+dp/hard/libc_nano.a(libc_a-strlen.o)
                                   0x8 (size before relaxing)
  .ARM.exidx.text.__udivmoddi4
-                0x0800eac4        0x0 /usr/lib/gcc/arm-none-eabi/14.2.0/thumb/v7e-m+dp/hard/libgcc.a(_udivmoddi4.o)
+                0x0800eaf4        0x0 /usr/lib/gcc/arm-none-eabi/14.2.0/thumb/v7e-m+dp/hard/libgcc.a(_udivmoddi4.o)
                                   0x8 (size before relaxing)
-                0x0800eac4                        __exidx_end = .
+                0x0800eaf4                        __exidx_end = .
 
-.rel.dyn        0x0800eac4        0x0
- .rel.iplt      0x0800eac4        0x0 /usr/lib/gcc/arm-none-eabi/14.2.0/thumb/v7e-m+dp/hard/crtbegin.o
+.rel.dyn        0x0800eaf4        0x0
+ .rel.iplt      0x0800eaf4        0x0 /usr/lib/gcc/arm-none-eabi/14.2.0/thumb/v7e-m+dp/hard/crtbegin.o
 
-.preinit_array  0x0800eac4        0x0
-                0x0800eac4                        PROVIDE (__preinit_array_start = .)
+.preinit_array  0x0800eaf4        0x0
+                0x0800eaf4                        PROVIDE (__preinit_array_start = .)
  *(.preinit_array*)
-                0x0800eac4                        PROVIDE (__preinit_array_end = .)
+                0x0800eaf4                        PROVIDE (__preinit_array_end = .)
 
-.init_array     0x0800eac4        0x4
-                0x0800eac4                        PROVIDE (__init_array_start = .)
+.init_array     0x0800eaf4        0x4
+                0x0800eaf4                        PROVIDE (__init_array_start = .)
  *(SORT_BY_NAME(.init_array.*))
  *(.init_array*)
- .init_array    0x0800eac4        0x4 /usr/lib/gcc/arm-none-eabi/14.2.0/thumb/v7e-m+dp/hard/crtbegin.o
-                0x0800eac8                        PROVIDE (__init_array_end = .)
+ .init_array    0x0800eaf4        0x4 /usr/lib/gcc/arm-none-eabi/14.2.0/thumb/v7e-m+dp/hard/crtbegin.o
+                0x0800eaf8                        PROVIDE (__init_array_end = .)
 
-.fini_array     0x0800eac8        0x4
-                0x0800eac8                        PROVIDE (__fini_array_start = .)
+.fini_array     0x0800eaf8        0x4
+                0x0800eaf8                        PROVIDE (__fini_array_start = .)
  *(SORT_BY_NAME(.fini_array.*))
  *(.fini_array*)
- .fini_array    0x0800eac8        0x4 /usr/lib/gcc/arm-none-eabi/14.2.0/thumb/v7e-m+dp/hard/crtbegin.o
-                0x0800eacc                        PROVIDE (__fini_array_end = .)
-                0x0800eacc                        _sidata = LOADADDR (.data)
+ .fini_array    0x0800eaf8        0x4 /usr/lib/gcc/arm-none-eabi/14.2.0/thumb/v7e-m+dp/hard/crtbegin.o
+                0x0800eafc                        PROVIDE (__fini_array_end = .)
+                0x0800eafc                        _sidata = LOADADDR (.data)
 
-.data           0x20000000      0x2ac load address 0x0800eacc
+.data           0x20000000      0x2ac load address 0x0800eafc
                 0x20000000                        . = ALIGN (0x4)
                 0x20000000                        _sdata = .
  *(.data)
@@ -9161,11 +9164,11 @@ LOAD /usr/lib/gcc/arm-none-eabi/14.2.0/thumb/v7e-m+dp/hard/crtn.o
  *fill*         0x200002aa        0x2 
                 0x200002ac                        _edata = .
 
-.igot.plt       0x200002ac        0x0 load address 0x0800ed78
+.igot.plt       0x200002ac        0x0 load address 0x0800eda8
  .igot.plt      0x200002ac        0x0 /usr/lib/gcc/arm-none-eabi/14.2.0/thumb/v7e-m+dp/hard/crtbegin.o
                 0x200002ac                        . = ALIGN (0x4)
 
-.bss            0x200002ac      0xd4c load address 0x0800ed78
+.bss            0x200002ac      0xd4c load address 0x0800eda8
                 0x200002ac                        _sbss = .
                 0x200002ac                        __bss_start__ = _sbss
  *(.bss)
@@ -9373,7 +9376,7 @@ LOAD /usr/lib/gcc/arm-none-eabi/14.2.0/thumb/v7e-m+dp/hard/crtn.o
                 0x20000ff8                        __bss_end__ = _ebss
 
 ._user_heap_stack
-                0x20000ff8      0x600 load address 0x0800ed78
+                0x20000ff8      0x600 load address 0x0800eda8
                 0x20000ff8                        . = ALIGN (0x8)
                 [!provide]                        PROVIDE (end = .)
                 0x20000ff8                        PROVIDE (_end = .)
