@@ -90,10 +90,17 @@ extern float pitch_pid_error;
 extern PIDController yaw_pid;   // 航向轴PID控制器
 extern PIDController pitch_pid; // 俯仰轴PID控制器
 
-extern _Bool stepper_update_flag;        // PID更新标志位
-extern _Bool stepper_update_enable_flag; // 步进电机使能标志位
-extern _Bool stepper_pid_debug_flag;     // PID调试标志位
-extern _Bool pid_debug_enable_flag;      // PID调试使能标志位
+/* --------------------------------- 系统状态标志位（内部使用） -------------------------------- */
+extern _Bool stepper_update_pending; // 步进电机更新待处理标志位（系统设置）
+/* --------------------------------- 自定义部分结束 -------------------------------- */
+
+/* --------------------------------- 用户控制标志位（在main.c中定义） -------------------------------- */
+extern _Bool menu_stepper_tracking_enable;  // 菜单控制：步进电机跟踪使能
+extern _Bool menu_uart_data_receive_enable; // 菜单控制：UART数据接收使能
+extern _Bool menu_pid_params_update_enable; // 菜单控制：PID参数实时更新使能
+extern _Bool menu_pid_calculation_debug;    // 菜单控制：PID计算过程调试输出
+extern _Bool menu_stepper_command_debug;    // 菜单控制：步进电机指令调试输出
+/* --------------------------------- 自定义部分结束 -------------------------------- */
 
 extern int16_t pid_kp_slider_val;
 extern int16_t pid_ki_slider_val;

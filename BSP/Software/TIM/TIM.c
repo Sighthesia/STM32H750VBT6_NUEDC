@@ -12,14 +12,16 @@
  */
 #include "TIM.h"
 
-_Bool pid_cal_out_debug_flag = 0;
+/* --------------------------------- 系统状态标志位（内部使用） -------------------------------- */
+_Bool tim_pid_calculation_debug = 0; // TIM模块：PID计算调试输出标志位（系统设置）
+/* --------------------------------- 自定义部分结束 -------------------------------- */
 
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
     if (htim->Instance == TIM7)
     {
         /* -------------------------------- 菜单更新编码器值 -------------------------------- */
-        if (pid_debug_enable_flag == 1)
+        if (menu_pid_params_update_enable == 1)
         {
             // 同步PID滑块到浮点数
             sync_pid_slider_to_float();
@@ -29,7 +31,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
         ebtn_APP_Key_Process(); // 处理按键事件
 
         /* ----------------------------------- 解包 ----------------------------------- */
-        if (uart_rx_enable_flag) // 允许解包
+        if (menu_uart_data_receive_enable) // 允许解包
         {
             uint8_t data;
             while (lwrb_read(&uart3_rx_buffer, &data, 1) > 0)
@@ -39,37 +41,37 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
         }
 
         /* ---------------------------------- 计算PID --------------------------------- */
-        if (pid_update_flag)
+        if (uart_packet_received)
         {
             yaw_pid_output = PIDController_Update(&yaw_pid, yaw_pid_target, (float)rectangle_coordinate_arr[0]);
             pitch_pid_output = PIDController_Update(&pitch_pid, pitch_pid_target, (float)rectangle_coordinate_arr[1]);
-            if (pid_cal_out_debug_flag)
+            if (menu_pid_calculation_debug)
             {
                 printf("Target: Yaw=%f, Pitch=%f | Current: Yaw=%f, Pitch=%f\n",
                        yaw_pid_target, pitch_pid_target,
                        (float)rectangle_coordinate_arr[0], (float)rectangle_coordinate_arr[1]);
             }
 
-            pid_update_flag = 0;     // 清零标志，等待下次接收
-            stepper_update_flag = 1; // 设置PID更新标志位
+            uart_packet_received = 0;   // 清零标志，等待下次接收
+            stepper_update_pending = 1; // 设置PID更新标志位
         }
 
         /* --------------------------------- 步进电机跟踪 --------------------------------- */
-        if (stepper_update_enable_flag == 1) // 如果步进电机使能标志位为1
+        if (menu_stepper_tracking_enable == 1) // 如果步进电机使能标志位为1
         {
-            if (stepper_update_flag)
+            if (stepper_update_pending)
             {
                 // 更新步进电机位置
                 Yaw_Stepper_Position_Update(yaw_pid_output);
                 Pitch_Stepper_Position_Update(pitch_pid_output);
             }
 
-            if (pid_cal_out_debug_flag)
+            if (menu_pid_calculation_debug)
             {
-                printf("PID Output: Yaw: %d, Pitch: %d\n", yaw_pid_output, pitch_pid_output);
+                printf("PID Output: Yaw: %.2f, Pitch: %.2f\n", yaw_pid_output, pitch_pid_output);
             }
 
-            stepper_update_flag = 0; // 清零标志，等待下次更新
+            stepper_update_pending = 0; // 清零标志，等待下次更新
         }
     }
 }

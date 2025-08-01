@@ -38,9 +38,10 @@ typedef struct
 
 // 全局坐标数据存储变量，初始化为(0, 0)
 extern int16_t rectangle_coordinate_arr[2]; // [0]: x, [1]: y
-// 接收控制标志位
-extern volatile _Bool uart_rx_enable_flag; // 1:允许接收，0:禁止接收
-extern volatile _Bool pid_update_flag;     // 1:接收完成，0:未完成
+
+/* --------------------------------- 系统状态标志位（内部使用） -------------------------------- */
+extern volatile _Bool uart_packet_received; // UART数据包接收完成标志位（系统设置）
+/* --------------------------------- 自定义部分结束 -------------------------------- */
 
 extern uint8_t packet_buf[UART_PACKET_LEN]; // 存储当前正在接收的数据包
 extern uint8_t packet_index;                // 当前数据包接收的字节索引

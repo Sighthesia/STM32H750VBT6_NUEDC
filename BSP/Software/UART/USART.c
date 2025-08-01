@@ -19,9 +19,10 @@ volatile uint8_t uart3_rx_byte;            // UART3单字节接收缓存
 
 // 全局坐标数据存储变量，初始化为(0, 0)
 int16_t rectangle_coordinate_arr[2] = {0, 0}; // [0]: x, [1]: y
-// 接收控制标志位
-volatile _Bool uart_rx_enable_flag = 0; // 1:允许接收，0:禁止接收
-volatile _Bool pid_update_flag = 0;     // 1:接收完成，0:未完成
+
+/* --------------------------------- 系统状态标志位（内部使用） -------------------------------- */
+volatile _Bool uart_packet_received = 0; // UART数据包接收完成标志位（系统设置）
+/* --------------------------------- 自定义部分结束 -------------------------------- */
 
 // 状态机变量
 uint8_t packet_buf[UART_PACKET_LEN]; // 存储当前正在接收的数据包
@@ -79,7 +80,7 @@ uint8_t UART_Parse_Packet(uint8_t data)
                     {
                         rectangle_coordinate_arr[1] = diff; // y
                     }
-                    pid_update_flag = 1; // 解包成功，置接收完成标志
+                    uart_packet_received = 1; // 解包成功，置接收完成标志
                     // printf("UART Packet Received: %d, %d\n", rectangle_coordinate_arr[0], rectangle_coordinate_arr[1]);
                     return 1;
                 }

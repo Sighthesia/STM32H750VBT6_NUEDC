@@ -12,6 +12,7 @@
  */
 
 #include "Stepper_PID.h"
+#include <math.h> // 用于 fabsf 函数
 
 /* --------------------------------- 此处修改: PID参数变量定义与初始化 -------------------------------- */
 float pid_kp = 0.0f;
@@ -45,10 +46,9 @@ float pitch_pid_target = 0.0f;
 float yaw_pid_error = 0.0f;
 float pitch_pid_error = 0.0f;
 
-_Bool stepper_update_flag = 0;        // 步进电机PID更新标志位
-_Bool pid_debug_enable_flag = 0;      // PID使能标志位
-_Bool stepper_update_enable_flag = 0; // 步进电机使能标志位
-_Bool stepper_pid_debug_flag = 0;     // 步进电机PID调试输出标志位
+/* --------------------------------- 系统状态标志位（内部使用） -------------------------------- */
+_Bool stepper_update_pending = 0; // 步进电机更新待处理标志位（系统设置）
+/* --------------------------------- 自定义部分结束 -------------------------------- */
 
 // 中间变量
 int16_t pid_kp_slider_val = 20;           // 比例系数滑块值（2.0f -> 20*0.1）
@@ -105,7 +105,7 @@ void Yaw_Stepper_Position_Update(float pid_output)
     float speed = fabsf(pid_output);
     pid_yaw_angle = pid_output;
     /* --------------------------------- 此处修改: 条件调试输出 -------------------------------- */
-    if (stepper_pid_debug_flag)
+    if (menu_stepper_command_debug)
     {
         printf("[Yaw] Dir: %s, Speed: %.2f, Angle: %.2f, PID Output: %.2f\r\n",
                dir ? "CCW" : "CW", yaw_speed, speed, pid_output);
@@ -124,7 +124,7 @@ void Pitch_Stepper_Position_Update(float pid_output)
     float speed = fabsf(pid_output);
     pid_pitch_angle = pid_output;
     /* --------------------------------- 此处修改: 条件调试输出 -------------------------------- */
-    if (stepper_pid_debug_flag)
+    if (menu_stepper_command_debug)
     {
         printf("[Pitch] Dir: %s, Speed: %.2f, Angle: %.2f, PID Output: %.2f\r\n",
                dir ? "CCW" : "CW", pitch_speed, speed, pid_output);

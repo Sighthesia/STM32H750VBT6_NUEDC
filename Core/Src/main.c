@@ -59,7 +59,13 @@
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
-
+/* --------------------------------- 用户控制标志位（菜单配置） -------------------------------- */
+_Bool menu_stepper_tracking_enable = 0;  // 菜单控制：步进电机跟踪使能
+_Bool menu_uart_data_receive_enable = 1; // 菜单控制：UART数据接收使能
+_Bool menu_pid_params_update_enable = 0; // 菜单控制：PID参数实时更新使能
+_Bool menu_pid_calculation_debug = 0;    // 菜单控制：PID计算过程调试输出
+_Bool menu_stepper_command_debug = 0;    // 菜单控制：步进电机指令调试输出
+/* --------------------------------- 自定义部分结束 -------------------------------- */
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -187,15 +193,16 @@ int main(void)
 
   /* ---------------------------------- Flag ---------------------------------- */
 
-  astra_list_item_t *Flag = astra_new_list_item("Flag");
+  astra_list_item_t *Flag = astra_new_list_item("Control");
   astra_push_item_to_list(Settings, Flag);
 
-  astra_push_item_to_list(Flag, astra_new_switch_item("Stepper UP EN", &stepper_update_enable_flag));
-  astra_push_item_to_list(Flag, astra_new_switch_item("UART RX EN", &uart_rx_enable_flag));
-  astra_push_item_to_list(Flag, astra_new_switch_item("PID CAL OUT DEBUG", &pid_cal_out_debug_flag));
-  astra_push_item_to_list(Flag, astra_new_switch_item("Stepper PID DEBUG", &stepper_pid_debug_flag));
+  astra_push_item_to_list(Flag, astra_new_switch_item("Stepper Tracking", &menu_stepper_tracking_enable));
+  astra_push_item_to_list(Flag, astra_new_switch_item("UART Data RX", &menu_uart_data_receive_enable));
+  astra_push_item_to_list(Flag, astra_new_switch_item("PID Params Update", &menu_pid_params_update_enable));
+  astra_push_item_to_list(Flag, astra_new_switch_item("PID Calc Debug", &menu_pid_calculation_debug));
+  astra_push_item_to_list(Flag, astra_new_switch_item("Stepper Cmd Debug", &menu_stepper_command_debug));
 
-  uart_rx_enable_flag = 1; // 允许接收数据
+  menu_uart_data_receive_enable = 1; // 默认允许接收数据
 
   // 步进电机
   astra_list_item_t *Stepper = astra_new_list_item("Stepper");
@@ -226,24 +233,12 @@ int main(void)
   astra_list_item_t *Debug = astra_new_list_item("DEBUG");
   astra_push_item_to_list(astra_get_root_list(), Debug);
 
-  astra_push_item_to_list(Debug, PID); // 复制PID菜单滑块项到DEBUG菜单
-  astra_push_item_to_list(PID, astra_new_slider_item("Kp", &pid_kp_slider_val, 1, 0, 100));
-  astra_push_item_to_list(PID, astra_new_slider_item("Ki", &pid_ki_slider_val, 1, 0, 100));
-  astra_push_item_to_list(PID, astra_new_slider_item("Kd", &pid_kd_slider_val, 1, 0, 100));
-  astra_push_item_to_list(PID, astra_new_slider_item("tau", &pid_tau_slider_val, 1, 0, 100));
-  astra_push_item_to_list(PID, astra_new_slider_item("limMin", &pid_lim_min_slider_val, 1, -100, 0));
-  astra_push_item_to_list(PID, astra_new_slider_item("limMax", &pid_lim_max_slider_val, 1, 0, 100));
-  astra_push_item_to_list(PID, astra_new_slider_item("limMinInt", &pid_lim_min_int_slider_val, 1, -50, 0));
-  astra_push_item_to_list(PID, astra_new_slider_item("limMaxInt", &pid_lim_max_int_slider_val, 1, 0, 50));
-  astra_push_item_to_list(PID, astra_new_slider_item("SampleTime", &pid_sample_time_slider_val, 1, 1, 100));
+  // 添加PID参数调节到Debug菜单
+  astra_push_item_to_list(Debug, PID);
 
-  astra_push_item_to_list(Debug, Flag); // 将Flag菜单项添加到Debug菜单
-  astra_push_item_to_list(Flag, astra_new_switch_item("Stepper Update EN", &stepper_update_enable_flag));
-  astra_push_item_to_list(Flag, astra_new_switch_item("UART RX EN", &uart_rx_enable_flag));
-  astra_push_item_to_list(Flag, astra_new_switch_item("PID CAL OUT DEBUG", &pid_cal_out_debug_flag));
-  astra_push_item_to_list(Flag, astra_new_switch_item("Stepper PID DEBUG", &stepper_pid_debug_flag));
+  // 添加控制标志位到Debug菜单
+  astra_push_item_to_list(Debug, Flag);
 
-  astra_push_item_to_list(Debug, astra_new_switch_item("Stepper Update EN", &stepper_update_enable_flag));
   // 步进电机重置/启动/关闭函数
   astra_push_item_to_list(Debug, astra_new_user_item("Stepper_All RST", Stepper_All_Reset, NULL, NULL));
   astra_push_item_to_list(Debug, astra_new_user_item("Stepper_All DIS", Stepper_All_Disable, NULL, NULL));
@@ -289,7 +284,7 @@ int main(void)
 
     if (in_astra == 0)
     {
-      if (pid_update_flag == 1)
+      if (uart_packet_received == 1)
       {
         u8g2_DrawStr(&u8g2, 0, 10, "UART RX Done"); // 在OLED上显示接收完成信息
       }

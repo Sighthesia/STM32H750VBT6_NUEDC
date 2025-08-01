@@ -17,5 +17,5 @@
  */
 void Basic_2(void)
 {
-    stepper_update_flag = 1; // 设置步进电机更新标志位
+    // stepper_update_flag = 1; // 设置步进电机更新标志位
 }

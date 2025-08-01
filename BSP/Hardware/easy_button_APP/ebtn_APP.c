@@ -93,7 +93,7 @@ static void ebtn_APP_Event_Handler(struct ebtn_btn *btn, ebtn_evt_t evt)
             /* ----------------------------------- 三击时 ---------------------------------- */
             else if (btn->click_cnt == 3)
             {
-                stepper_update_enable_flag = !stepper_update_enable_flag;
+                // stepper_update_enable_flag = !stepper_update_enable_flag;
             }
         }
         /* ------------------------- 长按达到最短时间（默认600ms），触发长按计数时 ------------------------ */
