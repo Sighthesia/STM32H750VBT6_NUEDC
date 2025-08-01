@@ -212,25 +212,31 @@ int main(void)
   astra_list_item_t *PID = astra_new_list_item("PID");
   astra_push_item_to_list(Settings, PID);
 
-  // PID参数滑块
-  astra_push_item_to_list(PID, astra_new_slider_item(
-                                   "Kp", &pid_kp_slider_val, 1, 0, 100));
-  astra_push_item_to_list(PID, astra_new_slider_item(
-                                   "Ki", &pid_ki_slider_val, 1, 0, 100));
-  astra_push_item_to_list(PID, astra_new_slider_item(
-                                   "Kd", &pid_kd_slider_val, 1, 0, 100));
-  astra_push_item_to_list(PID, astra_new_slider_item(
-                                   "tau", &pid_tau_slider_val, 1, 0, 100));
-  astra_push_item_to_list(PID, astra_new_slider_item(
-                                   "limMin", &pid_lim_min_slider_val, 1, -100, 0));
-  astra_push_item_to_list(PID, astra_new_slider_item(
-                                   "limMax", &pid_lim_max_slider_val, 1, 0, 100));
-  astra_push_item_to_list(PID, astra_new_slider_item(
-                                   "limMinInt", &pid_lim_min_int_slider_val, 1, -50, 0));
-  astra_push_item_to_list(PID, astra_new_slider_item(
-                                   "limMaxInt", &pid_lim_max_int_slider_val, 1, 0, 50));
-  astra_push_item_to_list(PID, astra_new_slider_item(
-                                   "SampleTime", &pid_sample_time_slider_val, 1, 1, 100));
+  astra_push_item_to_list(PID, astra_new_slider_item("Kp", &pid_kp_slider_val, 1, 0, 100));
+  astra_push_item_to_list(PID, astra_new_slider_item("Ki", &pid_ki_slider_val, 1, 0, 100));
+  astra_push_item_to_list(PID, astra_new_slider_item("Kd", &pid_kd_slider_val, 1, 0, 100));
+  astra_push_item_to_list(PID, astra_new_slider_item("tau", &pid_tau_slider_val, 1, 0, 100));
+  astra_push_item_to_list(PID, astra_new_slider_item("limMin", &pid_lim_min_slider_val, 1, -100, 0));
+  astra_push_item_to_list(PID, astra_new_slider_item("limMax", &pid_lim_max_slider_val, 1, 0, 100));
+  astra_push_item_to_list(PID, astra_new_slider_item("limMinInt", &pid_lim_min_int_slider_val, 1, -50, 0));
+  astra_push_item_to_list(PID, astra_new_slider_item("limMaxInt", &pid_lim_max_int_slider_val, 1, 0, 50));
+  astra_push_item_to_list(PID, astra_new_slider_item("SampleTime", &pid_sample_time_slider_val, 1, 1, 100));
+
+  /* ----------------------------------- DEBUG ---------------------------------- */
+  /* --------------------------------- 此处修改: DEBUG菜单 -------------------------------- */
+  astra_list_item_t *Debug = astra_new_list_item("DEBUG");
+  astra_push_item_to_list(astra_get_root_list(), Debug);
+
+  // 复制PID菜单滑块项到DEBUG菜单
+  astra_push_item_to_list(Debug, PID); // 复制PID菜单滑块项到DEBUG菜单
+  // 所有debug标志
+  astra_push_item_to_list(Debug, Flag); // 将Flag菜单项添加到Debug菜单
+
+  astra_push_item_to_list(Flag, astra_new_switch_item("Stepper Update EN", &stepper_update_enable_flag));
+  // 步进电机重置/启动/关闭函数
+  astra_push_item_to_list(Debug, astra_new_user_item("Stepper_All RST", Stepper_All_Reset, NULL, NULL));
+  astra_push_item_to_list(Debug, astra_new_user_item("Stepper_All DIS", Stepper_All_Disable, NULL, NULL));
+  astra_push_item_to_list(Debug, astra_new_user_item("Stepper_All EN", Stepper_All_Enable, NULL, NULL));
 
   // 同步PID滑块到浮点数
   sync_pid_slider_to_float();
