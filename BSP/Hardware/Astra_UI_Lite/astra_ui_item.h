@@ -53,17 +53,16 @@ extern void astra_push_pop_up(char *_content, const uint16_t _span);
 /*** 弹窗 ***/
 
 /*** 列表项 ***/
-#define MAX_LIST_CHILD_NUM     10
-#define MAX_LIST_LAYER         10
-#define SCREEN_HEIGHT          64
-#define SCREEN_WIDTH           128
-#define LIST_ITEM_SPACING      15
-#define LIST_ITEM_OFFSET       8
-#define LIST_ITEM_LEFT_MARGIN  4
+#define MAX_LIST_CHILD_NUM 10
+#define MAX_LIST_LAYER 10
+#define SCREEN_HEIGHT 64
+#define SCREEN_WIDTH 128
+#define LIST_ITEM_SPACING 15
+#define LIST_ITEM_OFFSET 8
+#define LIST_ITEM_LEFT_MARGIN 4
 #define LIST_ITEM_RIGHT_MARGIN 20
-#define LIST_INFO_BAR_HEIGHT   7
-#define LIST_FONT_TOP_MARGIN   4
-
+#define LIST_INFO_BAR_HEIGHT 7
+#define LIST_FONT_TOP_MARGIN 2 // 减少字体顶部边距，从4改为2
 
 typedef enum
 {
