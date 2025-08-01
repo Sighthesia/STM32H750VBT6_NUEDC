@@ -49,11 +49,14 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
             stepper_update_flag = 1; // 设置PID更新标志位
         }
 
-        if (stepper_update_flag)
+        if (stepper_enable_flag == 1) // 如果步进电机使能标志位为1
         {
-            // 更新步进电机位置
-            Yaw_Stepper_Position_Update(yaw_pid_output);
-            Pitch_Stepper_Position_Update(pitch_pid_output);
+            if (stepper_update_flag)
+            {
+                // 更新步进电机位置
+                Yaw_Stepper_Position_Update(yaw_pid_output);
+                Pitch_Stepper_Position_Update(pitch_pid_output);
+            }
 
 #ifdef TIM_DEBUG
             printf("PID Update: Yaw: %d, Pitch: %d\n", yaw_pid_output, pitch_pid_output);

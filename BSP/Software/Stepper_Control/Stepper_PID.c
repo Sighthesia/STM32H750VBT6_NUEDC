@@ -47,6 +47,7 @@ float pitch_pid_error = 0.0f;
 
 _Bool stepper_update_flag = 0; // PID更新标志位
 _Bool pid_debug_flag = 0;      // PID调试标志位
+_Bool stepper_enable_flag = 0; // 步进电机使能标志位
 
 // 中间变量
 int16_t pid_kp_slider_val = 20;           // 2.0f -> 20*0.1

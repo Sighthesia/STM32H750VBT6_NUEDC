@@ -92,6 +92,7 @@ extern PIDController pitch_pid; // 俯仰轴PID控制器
 
 extern _Bool stepper_update_flag; // PID更新标志位
 extern _Bool pid_debug_flag;      // PID调试标志位
+extern _Bool stepper_enable_flag; // 步进电机使能标志位
 
 extern int16_t pid_kp_slider_val;
 extern int16_t pid_ki_slider_val;

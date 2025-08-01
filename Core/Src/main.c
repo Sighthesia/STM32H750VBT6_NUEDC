@@ -173,10 +173,11 @@ int main(void)
   astra_list_item_t *Flag = astra_new_list_item("Flag");
   astra_push_item_to_list(Settings, Flag);
 
-  astra_push_item_to_list(Flag, astra_new_switch_item("UART RX En", &uart_rx_enable_flag));
+  astra_push_item_to_list(Flag, astra_new_switch_item("UART RX EN", &uart_rx_enable_flag));
   astra_push_item_to_list(Flag, astra_new_switch_item("PID Update", &pid_update_flag));
-  astra_push_item_to_list(Flag, astra_new_switch_item("Stepper Update", &stepper_update_flag));
   astra_push_item_to_list(Flag, astra_new_switch_item("PID DEBUG", &pid_debug_flag));
+  astra_push_item_to_list(Flag, astra_new_switch_item("Stepper Enable", &stepper_enable_flag));
+  astra_push_item_to_list(Flag, astra_new_switch_item("Stepper Update", &stepper_update_flag));
 
   uart_rx_enable_flag = 1; // 允许接收数据
   pid_debug_flag = 1;      // 允许PID调试
