@@ -39,10 +39,11 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
         {
             yaw_pid_output = PIDController_Update(&yaw_pid, yaw_pid_target, (float)rectangle_coordinate_arr[0]);
             pitch_pid_output = PIDController_Update(&pitch_pid, pitch_pid_target, (float)rectangle_coordinate_arr[1]);
-
+#ifdef TIM_DEBUG
             printf("Target: Yaw=%f, Pitch=%f | Current: Yaw=%f, Pitch=%f\n",
                    yaw_pid_target, pitch_pid_target,
                    (float)rectangle_coordinate_arr[0], (float)rectangle_coordinate_arr[1]);
+#endif // TIM_DEBUG
 
             pid_update_flag = 0;     // 清零标志，等待下次接收
             stepper_update_flag = 1; // 设置PID更新标志位
@@ -51,10 +52,12 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
         if (stepper_update_flag)
         {
             // 更新步进电机位置
-            // Yaw_Stepper_Position_Update(yaw_pid_output);
-            // Pitch_Stepper_Position_Update(pitch_pid_output);
+            Yaw_Stepper_Position_Update(yaw_pid_output);
+            Pitch_Stepper_Position_Update(pitch_pid_output);
 
+#ifdef TIM_DEBUG
             printf("PID Update: Yaw: %d, Pitch: %d\n", yaw_pid_output, pitch_pid_output);
+#endif // TIM_DEBUG
 
             stepper_update_flag = 0; // 清零标志，等待下次更新
         }
