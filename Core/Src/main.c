@@ -228,6 +228,7 @@ int main(void)
   astra_push_item_to_list(PID, astra_new_slider_item("limMinInt", &pid_lim_min_int_slider_val, 1, -50, 0));
   astra_push_item_to_list(PID, astra_new_slider_item("limMaxInt", &pid_lim_max_int_slider_val, 1, 0, 50));
   astra_push_item_to_list(PID, astra_new_slider_item("SampleTime", &pid_sample_time_slider_val, 1, 1, 100));
+  astra_push_item_to_list(PID, astra_new_slider_item("Deadzone", &stepper_deadzone_slider_val, 1, 0, 50));
 
   /* ----------------------------------- DEBUG ---------------------------------- */
   astra_list_item_t *Debug = astra_new_list_item("DEBUG");
@@ -244,6 +245,7 @@ int main(void)
   astra_push_item_to_list(PID, astra_new_slider_item("limMinInt", &pid_lim_min_int_slider_val, 1, -50, 0));
   astra_push_item_to_list(PID, astra_new_slider_item("limMaxInt", &pid_lim_max_int_slider_val, 1, 0, 50));
   astra_push_item_to_list(PID, astra_new_slider_item("SampleTime", &pid_sample_time_slider_val, 1, 1, 100));
+  astra_push_item_to_list(PID, astra_new_slider_item("Deadzone", &stepper_deadzone_slider_val, 1, 0, 50));
 
   // 添加控制标志位到Debug菜单
   astra_push_item_to_list(Debug, Flag);

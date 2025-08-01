@@ -74,6 +74,12 @@ extern float pid_lim_max_int;
  * @note 控制算法的执行周期，影响积分和微分项的计算
  */
 extern float sample_time_s;
+
+/**
+ * @brief 步进电机死区阈值
+ * @note 小于此值的PID输出将被忽略，消除微小震荡，单位：RPM
+ */
+extern float stepper_deadzone_threshold;
 /* --------------------------------- 自定义部分结束 -------------------------------- */
 
 extern float yaw_pid_output;   // 航向轴PID输出
@@ -112,6 +118,7 @@ extern int16_t pid_lim_max_slider_val;
 extern int16_t pid_lim_min_int_slider_val;
 extern int16_t pid_lim_max_int_slider_val;
 extern int16_t pid_sample_time_slider_val;
+extern int16_t stepper_deadzone_slider_val; // 步进电机死区阈值滑块值
 
 void Yaw_Stepper_Position_Update(float pid_output);
 
