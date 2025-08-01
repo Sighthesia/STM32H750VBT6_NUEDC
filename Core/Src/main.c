@@ -60,7 +60,7 @@
 
 /* USER CODE BEGIN PV */
 /* --------------------------------- 用户控制标志位（菜单配置） -------------------------------- */
-_Bool menu_stepper_tracking_enable = 0;  // 菜单控制：步进电机跟踪使能
+_Bool menu_stepper_tracking_enable = 1;  // 菜单控制：步进电机跟踪使能
 _Bool menu_uart_data_receive_enable = 1; // 菜单控制：UART数据接收使能
 _Bool menu_pid_params_update_enable = 1; // 菜单控制：PID参数实时更新使能
 _Bool menu_pid_calculation_debug = 0;    // 菜单控制：PID计算过程调试输出

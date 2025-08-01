@@ -112,12 +112,17 @@ void Yaw_Stepper_Position_Update(float pid_output)
     uint8_t dir = (pid_output >= 0) ? 0x00 : 0x01; // 0x01: CCW(逆时针), 0x00: CW(顺时针)
     float speed = fabsf(pid_output);
     pid_yaw_angle = pid_output;
+
     /* --------------------------------- 此处修改: 条件调试输出 -------------------------------- */
     if (menu_stepper_command_debug)
     {
         printf("[Yaw] Dir: %s, Speed: %.2f, Angle: %.2f, Output: %.2f\r\n",
                dir ? "CCW" : "CW", speed, pid_yaw_angle, pid_output);
     }
+
+    // 内存屏障，防止编译器过度优化
+    __asm volatile("" ::: "memory");
+
     /* --------------------------------- 自定义部分结束 -------------------------------- */
     ZDT_Stepper_Set_Speed(zdt_stepper_motors[0], dir, speed, ZDT_STEPPER_REL_POS_MODE, ZDT_STEPPER_SYNC_DISABLE);
 }
@@ -131,12 +136,17 @@ void Pitch_Stepper_Position_Update(float pid_output)
     uint8_t dir = (pid_output >= 0) ? 0x01 : 0x00; // 0x00: CW(顺时针), 0x01: CCW(逆时针)
     float speed = fabsf(pid_output);
     pid_pitch_angle = pid_output;
+
     /* --------------------------------- 此处修改: 条件调试输出 -------------------------------- */
     if (menu_stepper_command_debug)
     {
         printf("[Pitch] Dir: %s, Speed: %.2f, Angle: %.2f, Output: %.2f\r\n",
                dir ? "CCW" : "CW", speed, pid_pitch_angle, pid_output);
     }
+
+    // 内存屏障，防止编译器过度优化
+    __asm volatile("" ::: "memory");
+
     /* --------------------------------- 自定义部分结束 -------------------------------- */
     ZDT_Stepper_Set_Speed(zdt_stepper_motors[1], dir, speed, ZDT_STEPPER_REL_POS_MODE, ZDT_STEPPER_SYNC_DISABLE);
 }

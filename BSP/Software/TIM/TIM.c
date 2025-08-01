@@ -63,14 +63,14 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
                 // 更新步进电机位置
                 Yaw_Stepper_Position_Update(yaw_pid_output);
                 Pitch_Stepper_Position_Update(pitch_pid_output);
-            }
 
-            if (menu_pid_calculation_debug)
-            {
-                printf("[PID Output] Yaw: %.2f, Pitch: %.2f\r\n", yaw_pid_output, pitch_pid_output);
-            }
+                if (menu_pid_calculation_debug)
+                {
+                    printf("[PID Output] Yaw: %.2f, Pitch: %.2f\r\n", yaw_pid_output, pitch_pid_output);
+                }
 
-            stepper_update_pending = 0; // 清零标志，等待下次更新
+                stepper_update_pending = 0; // 清零标志，等待下次更新
+            }
         }
 
         ebtn_APP_Key_Process(); // 处理按键事件
