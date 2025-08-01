@@ -64,7 +64,7 @@ _Bool menu_stepper_tracking_enable = 1;  // 菜单控制：步进电机跟踪使
 _Bool menu_uart_data_receive_enable = 1; // 菜单控制：UART数据接收使能
 _Bool menu_pid_params_update_enable = 1; // 菜单控制：PID参数实时更新使能
 _Bool menu_pid_calculation_debug = 0;    // 菜单控制：PID计算过程调试输出
-_Bool menu_stepper_command_debug = 0;    // 菜单控制：步进电机指令调试输出
+_Bool menu_stepper_command_debug = 1;    // 菜单控制：步进电机指令调试输出
 _Bool menu_pid_params_debug = 0;         // 菜单控制：PID参数更新调试输出
 /* --------------------------------- 自定义部分结束 -------------------------------- */
 /* USER CODE END PV */
