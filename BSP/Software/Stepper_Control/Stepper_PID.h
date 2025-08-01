@@ -18,6 +18,8 @@
 #include "PID.h"
 #include "ZDT_Stepper.h"
 
+#define STEPPER_PID_DEBUG
+
 /* --------------------------------- 此处修改: 宏定义改为全局变量 -------------------------------- */
 /**
  * @brief 比例增益系数

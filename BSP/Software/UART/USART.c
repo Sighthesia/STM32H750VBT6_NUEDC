@@ -80,7 +80,7 @@ uint8_t UART_Parse_Packet(uint8_t data)
                         rectangle_coordinate_arr[1] = diff; // y
                     }
                     pid_update_flag = 1; // 解包成功，置接收完成标志
-                    printf("UART Packet Received: %d, %d\n", rectangle_coordinate_arr[0], rectangle_coordinate_arr[1]);
+                    // printf("UART Packet Received: %d, %d\n", rectangle_coordinate_arr[0], rectangle_coordinate_arr[1]);
                     return 1;
                 }
             }
