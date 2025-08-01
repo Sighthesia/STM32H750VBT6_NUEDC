@@ -1043,13 +1043,13 @@
 		{
 			"backtrace" : 7,
 			"compileGroupIndex" : 0,
-			"path" : "BSP/Software/PID/Stepper_PID.c",
+			"path" : "BSP/Software/Stepper_Control/Stepper_Control.c",
 			"sourceGroupIndex" : 0
 		},
 		{
 			"backtrace" : 7,
 			"compileGroupIndex" : 0,
-			"path" : "BSP/Software/Stepper_Control/Stepper_Control.c",
+			"path" : "BSP/Software/Stepper_Control/Stepper_PID.c",
 			"sourceGroupIndex" : 0
 		},
 		{

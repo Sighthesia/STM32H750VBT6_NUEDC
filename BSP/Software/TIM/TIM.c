@@ -50,7 +50,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 
         if (stepper_update_flag)
         {
-            printf("Stepper: Update: Yaw: %f, Pitch: %f\n", yaw_pid_output, pitch_pid_output);
+            printf("Stepper: Output: Yaw: %f, Pitch: %f\n", yaw_pid_output, pitch_pid_output);
             // 更新步进电机位置
             Yaw_Stepper_Position_Update(yaw_pid_output);
             Pitch_Stepper_Position_Update(pitch_pid_output);

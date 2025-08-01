@@ -12,6 +12,11 @@
  */
 #include "USART.h"
 
+// 环形缓冲区相关变量
+volatile lwrb_t uart3_rx_buffer;           // UART3接收环形缓冲区结构体
+volatile uint8_t uart3_rx_buffer_data[16]; // UART3接收缓冲区数据数组
+volatile uint8_t uart3_rx_byte;            // UART3单字节接收缓存
+
 // 全局坐标数据存储变量，初始化为(0, 0)
 int16_t rectangle_coordinate_arr[2] = {0, 0}; // [0]: x, [1]: y
 // 接收控制标志位
@@ -89,11 +94,6 @@ uint8_t UART_Parse_Packet(uint8_t data)
     return 0;
 }
 
-// 环形缓冲区相关变量
-volatile lwrb_t uart3_rx_buffer;           // UART3接收环形缓冲区结构体
-volatile uint8_t uart3_rx_buffer_data[16]; // UART3接收缓冲区数据数组
-volatile uint8_t uart3_rx_byte;            // UART3单字节接收缓存
-
 /** ***************************************************************************
  * @brief  启动UART3中断接收
  */
@@ -127,3 +127,12 @@ void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size)
 {
     ZDT_Stepper_USRT_RX_callback(huart, Size);
 }
+
+// void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart)
+// {
+//     if (huart->Instance == USART3)
+//     {
+//         // 发送完成，可以进行下一步操作
+//         printf("UART3 Transmission Complete\n");
+//     }
+// }

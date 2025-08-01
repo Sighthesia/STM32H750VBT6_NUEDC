@@ -14,7 +14,7 @@
  */
 static void Uart_Transmit(UART_HandleTypeDef *huart, uint8_t *data, uint16_t size)
 {
-    HAL_UART_Transmit_DMA(huart, data, size);
+    HAL_UART_Transmit_IT(huart, data, size);
 }
 
 /**
