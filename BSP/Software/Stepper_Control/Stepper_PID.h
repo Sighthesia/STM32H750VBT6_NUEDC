@@ -100,6 +100,7 @@ extern _Bool menu_uart_data_receive_enable; // 菜单控制：UART数据接收�
 extern _Bool menu_pid_params_update_enable; // 菜单控制：PID参数实时更新使能
 extern _Bool menu_pid_calculation_debug;    // 菜单控制：PID计算过程调试输出
 extern _Bool menu_stepper_command_debug;    // 菜单控制：步进电机指令调试输出
+extern _Bool menu_pid_params_debug;         // 菜单控制：PID参数更新调试输出
 /* --------------------------------- 自定义部分结束 -------------------------------- */
 
 extern int16_t pid_kp_slider_val;

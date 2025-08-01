@@ -93,6 +93,14 @@ void sync_pid_slider_to_float(void)
     pid_lim_min_int = pid_lim_min_int_slider_val * 0.1f;
     pid_lim_max_int = pid_lim_max_int_slider_val * 0.1f;
     sample_time_s = pid_sample_time_slider_val * 0.01f;
+
+    /* --------------------------------- 此处修改: 条件调试输出 -------------------------------- */
+    if (menu_pid_params_debug)
+    {
+        printf("[PID Params] Kp=%.2f, Ki=%.2f, Kd=%.2f, Tau=%.3f, Min=%.2f, Max=%.2f, MinInt=%.2f, MaxInt=%.2f, T=%.3f\r\n",
+               pid_kp, pid_ki, pid_kd, pid_tau, pid_lim_min, pid_lim_max, pid_lim_min_int, pid_lim_max_int, sample_time_s);
+    }
+    /* --------------------------------- 自定义部分结束 -------------------------------- */
 }
 
 /** ***************************************************************************
@@ -107,8 +115,8 @@ void Yaw_Stepper_Position_Update(float pid_output)
     /* --------------------------------- 此处修改: 条件调试输出 -------------------------------- */
     if (menu_stepper_command_debug)
     {
-        printf("[Yaw] Dir: %s, Speed: %.2f, Angle: %.2f, PID Output: %.2f\r\n",
-               dir ? "CCW" : "CW", yaw_speed, speed, pid_output);
+        printf("[Yaw] Dir: %s, Speed: %.2f, Angle: %.2f, Output: %.2f\r\n",
+               dir ? "CCW" : "CW", speed, pid_yaw_angle, pid_output);
     }
     /* --------------------------------- 自定义部分结束 -------------------------------- */
     ZDT_Stepper_Set_Speed(zdt_stepper_motors[0], dir, speed, ZDT_STEPPER_REL_POS_MODE, ZDT_STEPPER_SYNC_DISABLE);
@@ -126,8 +134,8 @@ void Pitch_Stepper_Position_Update(float pid_output)
     /* --------------------------------- 此处修改: 条件调试输出 -------------------------------- */
     if (menu_stepper_command_debug)
     {
-        printf("[Pitch] Dir: %s, Speed: %.2f, Angle: %.2f, PID Output: %.2f\r\n",
-               dir ? "CCW" : "CW", pitch_speed, speed, pid_output);
+        printf("[Pitch] Dir: %s, Speed: %.2f, Angle: %.2f, Output: %.2f\r\n",
+               dir ? "CCW" : "CW", speed, pid_pitch_angle, pid_output);
     }
     /* --------------------------------- 自定义部分结束 -------------------------------- */
     ZDT_Stepper_Set_Speed(zdt_stepper_motors[1], dir, speed, ZDT_STEPPER_REL_POS_MODE, ZDT_STEPPER_SYNC_DISABLE);

@@ -62,9 +62,10 @@
 /* --------------------------------- 用户控制标志位（菜单配置） -------------------------------- */
 _Bool menu_stepper_tracking_enable = 0;  // 菜单控制：步进电机跟踪使能
 _Bool menu_uart_data_receive_enable = 1; // 菜单控制：UART数据接收使能
-_Bool menu_pid_params_update_enable = 0; // 菜单控制：PID参数实时更新使能
+_Bool menu_pid_params_update_enable = 1; // 菜单控制：PID参数实时更新使能
 _Bool menu_pid_calculation_debug = 0;    // 菜单控制：PID计算过程调试输出
 _Bool menu_stepper_command_debug = 0;    // 菜单控制：步进电机指令调试输出
+_Bool menu_pid_params_debug = 0;         // 菜单控制：PID参数更新调试输出
 /* --------------------------------- 自定义部分结束 -------------------------------- */
 /* USER CODE END PV */
 
@@ -201,6 +202,7 @@ int main(void)
   astra_push_item_to_list(Flag, astra_new_switch_item("PID Params Update", &menu_pid_params_update_enable));
   astra_push_item_to_list(Flag, astra_new_switch_item("PID Calc Debug", &menu_pid_calculation_debug));
   astra_push_item_to_list(Flag, astra_new_switch_item("Stepper Cmd Debug", &menu_stepper_command_debug));
+  astra_push_item_to_list(Flag, astra_new_switch_item("PID Params Debug", &menu_pid_params_debug));
 
   menu_uart_data_receive_enable = 1; // 默认允许接收数据
 

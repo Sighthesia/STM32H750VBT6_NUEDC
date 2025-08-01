@@ -28,7 +28,6 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
             Stepper_PID_Parameters_Init(&yaw_pid);   // 同步航向轴PID参数
             Stepper_PID_Parameters_Init(&pitch_pid); // 同步俯仰轴PID参数
         }
-        ebtn_APP_Key_Process(); // 处理按键事件
 
         /* ----------------------------------- 解包 ----------------------------------- */
         if (menu_uart_data_receive_enable) // 允许解包
@@ -36,7 +35,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
             uint8_t data;
             while (lwrb_read(&uart3_rx_buffer, &data, 1) > 0)
             {
-                UART_Parse_Packet(data); // 这里调用解包函数
+                UART_Parse_Packet(data); // 调用解包函数
             }
         }
 
@@ -47,7 +46,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
             pitch_pid_output = PIDController_Update(&pitch_pid, pitch_pid_target, (float)rectangle_coordinate_arr[1]);
             if (menu_pid_calculation_debug)
             {
-                printf("Target: Yaw=%f, Pitch=%f | Current: Yaw=%f, Pitch=%f\n",
+                printf("[PID Calc] Target: Yaw=%.2f, Pitch=%.2f | Current: Yaw=%.2f, Pitch=%.2f\r\n",
                        yaw_pid_target, pitch_pid_target,
                        (float)rectangle_coordinate_arr[0], (float)rectangle_coordinate_arr[1]);
             }
@@ -68,11 +67,13 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 
             if (menu_pid_calculation_debug)
             {
-                printf("PID Output: Yaw: %.2f, Pitch: %.2f\n", yaw_pid_output, pitch_pid_output);
+                printf("[PID Output] Yaw: %.2f, Pitch: %.2f\r\n", yaw_pid_output, pitch_pid_output);
             }
 
             stepper_update_pending = 0; // 清零标志，等待下次更新
         }
+
+        ebtn_APP_Key_Process(); // 处理按键事件
     }
 }
 
