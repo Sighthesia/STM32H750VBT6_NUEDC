@@ -24,7 +24,10 @@ float pid_lim_max = 0.0f;
 float pid_lim_min_int = 0.0f;
 float pid_lim_max_int = 0.0f;
 float sample_time_s = 0.0f;
-float stepper_deadzone_threshold = 0.0f; // 步进电机死区阈值（单位：RPM）
+float stepper_deadzone_threshold = 0.0f;  // 步进电机死区阈值（单位：RPM）
+float error_deadzone_threshold = 5.0f;    // 误差死区阈值（单位：像素）
+uint32_t min_update_interval_ms = 50;     // 最小更新间隔（单位：ms）
+float min_output_change_threshold = 0.1f; // 最小输出变化阈值
 /* --------------------------------- 自定义部分结束 -------------------------------- */
 
 float yaw_speed = 0.0f;   // 航向轴步进电机速度（单位：RPM）
@@ -48,7 +51,11 @@ float yaw_pid_error = 0.0f;
 float pitch_pid_error = 0.0f;
 
 /* --------------------------------- 系统状态标志位（内部使用） -------------------------------- */
-_Bool stepper_update_pending = 0; // 步进电机更新待处理标志位（系统设置）
+_Bool stepper_update_pending = 0;    // 步进电机更新待处理标志位（系统设置）
+uint32_t last_yaw_update_time = 0;   // 航向轴上次更新时间（ms）
+uint32_t last_pitch_update_time = 0; // 俯仰轴上次更新时间（ms）
+float last_yaw_output = 0.0f;        // 航向轴上次输出值
+float last_pitch_output = 0.0f;      // 俯仰轴上次输出值
 /* --------------------------------- 自定义部分结束 -------------------------------- */
 
 // 中间变量
@@ -62,6 +69,9 @@ int16_t pid_lim_min_int_slider_val = -50; // 积分下限滑块值（-5.0f -> -5
 int16_t pid_lim_max_int_slider_val = 50;  // 积分上限滑块值（5.0f -> 50*0.1）
 int16_t pid_sample_time_slider_val = 1;   // 采样时间滑块值（0.01f -> 1*0.01）
 int16_t stepper_deadzone_slider_val = 30; // 死区阈值滑块值（1.0f -> 10*0.1）
+int16_t error_deadzone_slider_val = 50;   // 误差死区滑块值（5.0f -> 50*0.1）
+int16_t update_interval_slider_val = 50;  // 更新间隔滑块值（50ms -> 50*1）
+int16_t output_change_slider_val = 10;    // 输出变化阈值滑块值（0.1f -> 10*0.01）
 
 /** ***************************************************************************
  * @brief  初始化步进电机PID参数
@@ -96,12 +106,17 @@ void sync_pid_slider_to_float(void)
     pid_lim_max_int = pid_lim_max_int_slider_val * 0.1f;
     sample_time_s = pid_sample_time_slider_val * 0.01f;
     stepper_deadzone_threshold = stepper_deadzone_slider_val * 0.01f;
+    error_deadzone_threshold = error_deadzone_slider_val * 0.1f;
+    min_update_interval_ms = update_interval_slider_val;
+    min_output_change_threshold = output_change_slider_val * 0.01f;
 
     /* --------------------------------- 此处修改: 条件调试输出 -------------------------------- */
     if (menu_pid_params_debug)
     {
-        printf("[PID Params] Kp=%.2f, Ki=%.2f, Kd=%.2f, Tau=%.3f, Min=%.2f, Max=%.2f, MinInt=%.2f, MaxInt=%.2f, T=%.3f, Deadzone=%.2f\r\n",
-               pid_kp, pid_ki, pid_kd, pid_tau, pid_lim_min, pid_lim_max, pid_lim_min_int, pid_lim_max_int, sample_time_s, stepper_deadzone_threshold);
+        printf("[PID Params] Kp=%.2f, Ki=%.2f, Kd=%.2f, Tau=%.3f, Min=%.2f, Max=%.2f, MinInt=%.2f, MaxInt=%.2f, T=%.3f\r\n",
+               pid_kp, pid_ki, pid_kd, pid_tau, pid_lim_min, pid_lim_max, pid_lim_min_int, pid_lim_max_int, sample_time_s);
+        printf("[Control Params] Deadzone=%.2f, ErrorDeadzone=%.1f, UpdateInterval=%lums, OutputChange=%.3f\r\n",
+               stepper_deadzone_threshold, error_deadzone_threshold, min_update_interval_ms, min_output_change_threshold);
     }
     /* --------------------------------- 自定义部分结束 -------------------------------- */
 }
@@ -112,6 +127,30 @@ void sync_pid_slider_to_float(void)
  */
 void Yaw_Stepper_Position_Update(float pid_output)
 {
+    uint32_t current_time = HAL_GetTick(); // 获取当前时间戳
+
+    // 频率限制：距离上次更新时间过短则跳过
+    if ((current_time - last_yaw_update_time) < min_update_interval_ms)
+    {
+        if (menu_stepper_command_debug)
+        {
+            printf("[Yaw] Update too frequent, skipped (interval: %lums)\r\n",
+                   current_time - last_yaw_update_time);
+        }
+        return;
+    }
+
+    // 输出变化检测：变化太小则跳过
+    if (fabsf(pid_output - last_yaw_output) < min_output_change_threshold)
+    {
+        if (menu_stepper_command_debug)
+        {
+            printf("[Yaw] Output change too small: %.3f, skipped\r\n",
+                   fabsf(pid_output - last_yaw_output));
+        }
+        return;
+    }
+
     uint8_t dir = (pid_output >= 0) ? 0x00 : 0x01; // 0x01: CCW(逆时针), 0x00: CW(顺时针)
     float speed = fabsf(pid_output);
     pid_yaw_angle = pid_output;
@@ -130,10 +169,15 @@ void Yaw_Stepper_Position_Update(float pid_output)
     {
         if (menu_stepper_command_debug)
         {
-            printf("[Yaw] Dir: %s, Speed: %.2f, Angle: %.2f, Output: %.2f\r\n",
-                   dir ? "CCW" : "CW", speed, pid_yaw_angle, pid_output);
+            printf("[Yaw] Dir: %s, Speed: %.2f, Angle: %.2f, Output: %.2f, Interval: %lums\r\n",
+                   dir ? "CCW" : "CW", speed, pid_yaw_angle, pid_output,
+                   current_time - last_yaw_update_time);
         }
     }
+
+    // 更新记录
+    last_yaw_update_time = current_time;
+    last_yaw_output = pid_output;
 
     // 内存屏障，防止编译器过度优化
     __asm volatile("" ::: "memory");
@@ -148,6 +192,30 @@ void Yaw_Stepper_Position_Update(float pid_output)
  */
 void Pitch_Stepper_Position_Update(float pid_output)
 {
+    uint32_t current_time = HAL_GetTick(); // 获取当前时间戳
+
+    // 频率限制：距离上次更新时间过短则跳过
+    if ((current_time - last_pitch_update_time) < min_update_interval_ms)
+    {
+        if (menu_stepper_command_debug)
+        {
+            printf("[Pitch] Update too frequent, skipped (interval: %lums)\r\n",
+                   current_time - last_pitch_update_time);
+        }
+        return;
+    }
+
+    // 输出变化检测：变化太小则跳过
+    if (fabsf(pid_output - last_pitch_output) < min_output_change_threshold)
+    {
+        if (menu_stepper_command_debug)
+        {
+            printf("[Pitch] Output change too small: %.3f, skipped\r\n",
+                   fabsf(pid_output - last_pitch_output));
+        }
+        return;
+    }
+
     uint8_t dir = (pid_output >= 0) ? 0x01 : 0x00; // 0x00: CW(顺时针), 0x01: CCW(逆时针)
     float speed = fabsf(pid_output);
     pid_pitch_angle = pid_output;
@@ -166,10 +234,15 @@ void Pitch_Stepper_Position_Update(float pid_output)
     {
         if (menu_stepper_command_debug)
         {
-            printf("[Pitch] Dir: %s, Speed: %.2f, Angle: %.2f, Output: %.2f\r\n",
-                   dir ? "CCW" : "CW", speed, pid_pitch_angle, pid_output);
+            printf("[Pitch] Dir: %s, Speed: %.2f, Angle: %.2f, Output: %.2f, Interval: %lums\r\n",
+                   dir ? "CCW" : "CW", speed, pid_pitch_angle, pid_output,
+                   current_time - last_pitch_update_time);
         }
     }
+
+    // 更新记录
+    last_pitch_update_time = current_time;
+    last_pitch_output = pid_output;
 
     // 内存屏障，防止编译器过度优化
     __asm volatile("" ::: "memory");

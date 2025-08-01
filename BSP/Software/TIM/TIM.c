@@ -11,6 +11,7 @@
  * @Modifi Date :
  */
 #include "TIM.h"
+#include <math.h> // 用于 fabsf 函数
 
 /* --------------------------------- 系统状态标志位（内部使用） -------------------------------- */
 _Bool tim_pid_calculation_debug = 0; // TIM模块：PID计算调试输出标志位（系统设置）
@@ -42,13 +43,35 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
         /* ---------------------------------- 计算PID --------------------------------- */
         if (uart_packet_received)
         {
-            yaw_pid_output = PIDController_Update(&yaw_pid, yaw_pid_target, (float)rectangle_coordinate_arr[0]);
-            pitch_pid_output = PIDController_Update(&pitch_pid, pitch_pid_target, (float)rectangle_coordinate_arr[1]);
+            // 计算当前误差
+            yaw_pid_error = yaw_pid_target - (float)rectangle_coordinate_arr[0];
+            pitch_pid_error = pitch_pid_target - (float)rectangle_coordinate_arr[1];
+
+            // 添加误差死区，减少小幅振荡
+            if (fabsf(yaw_pid_error) > error_deadzone_threshold)
+            {
+                yaw_pid_output = PIDController_Update(&yaw_pid, yaw_pid_target, (float)rectangle_coordinate_arr[0]);
+            }
+            else
+            {
+                yaw_pid_output = 0.0f; // 在误差死区内，输出为0
+            }
+
+            if (fabsf(pitch_pid_error) > error_deadzone_threshold)
+            {
+                pitch_pid_output = PIDController_Update(&pitch_pid, pitch_pid_target, (float)rectangle_coordinate_arr[1]);
+            }
+            else
+            {
+                pitch_pid_output = 0.0f; // 在误差死区内，输出为0
+            }
+
             if (menu_pid_calculation_debug)
             {
-                printf("[PID Calc] Target: Yaw=%.2f, Pitch=%.2f | Current: Yaw=%.2f, Pitch=%.2f\r\n",
+                printf("[PID Calc] Target: Yaw=%.2f, Pitch=%.2f | Current: Yaw=%.2f, Pitch=%.2f | Error: Yaw=%.2f, Pitch=%.2f\r\n",
                        yaw_pid_target, pitch_pid_target,
-                       (float)rectangle_coordinate_arr[0], (float)rectangle_coordinate_arr[1]);
+                       (float)rectangle_coordinate_arr[0], (float)rectangle_coordinate_arr[1],
+                       yaw_pid_error, pitch_pid_error);
             }
 
             uart_packet_received = 0;   // 清零标志，等待下次接收

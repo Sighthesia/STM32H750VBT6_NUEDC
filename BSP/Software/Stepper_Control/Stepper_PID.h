@@ -14,6 +14,7 @@
 #define __STEPPER_PID_H
 
 #include "stdint.h"
+#include "stm32h7xx_hal.h" // 用于 HAL_GetTick()
 
 #include "PID.h"
 #include "ZDT_Stepper.h"
@@ -119,6 +120,14 @@ extern int16_t pid_lim_min_int_slider_val;
 extern int16_t pid_lim_max_int_slider_val;
 extern int16_t pid_sample_time_slider_val;
 extern int16_t stepper_deadzone_slider_val; // 步进电机死区阈值滑块值
+extern int16_t error_deadzone_slider_val;   // 误差死区滑块值
+extern int16_t update_interval_slider_val;  // 更新间隔滑块值
+extern int16_t output_change_slider_val;    // 输出变化阈值滑块值
+
+// 控制参数（浮点数）
+extern float error_deadzone_threshold;    // 误差死区阈值（单位：像素）
+extern uint32_t min_update_interval_ms;   // 最小更新间隔（单位：ms）
+extern float min_output_change_threshold; // 最小输出变化阈值
 
 void Yaw_Stepper_Position_Update(float pid_output);
 
