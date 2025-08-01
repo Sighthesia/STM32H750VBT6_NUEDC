@@ -25,8 +25,8 @@ float pid_lim_max_int = 0.0f;
 float sample_time_s = 0.0f;
 /* --------------------------------- 自定义部分结束 -------------------------------- */
 
-float yaw_speed = 1.0f;   // 航向轴步进电机速度（单位：RPM）
-float pitch_speed = 1.0f; // 俯仰轴步进电机速度（单位：RPM）
+float yaw_speed = 0.0f;   // 航向轴步进电机速度（单位：RPM）
+float pitch_speed = 0.0f; // 俯仰轴步进电机速度（单位：RPM）
 
 float pid_yaw_angle = 0.0f;   // 航向轴PID输出角度（单位：度）
 float pid_pitch_angle = 0.0f; // 俯仰轴PID输出角度（单位：度）
@@ -55,8 +55,8 @@ int16_t pid_kp_slider_val = 20;           // 比例系数滑块值（2.0f -> 20*
 int16_t pid_ki_slider_val = 0;            // 积分系数滑块值（0.0f -> 0*0.1）
 int16_t pid_kd_slider_val = 0;            // 微分系数滑块值（0.0f -> 0*0.1）
 int16_t pid_tau_slider_val = 2;           // 滤波时间常数滑块值（0.02f -> 2*0.01）
-int16_t pid_lim_min_slider_val = -100;    // 输出下限滑块值（-10.0f -> -100*0.1）
-int16_t pid_lim_max_slider_val = 100;     // 输出上限滑块值（10.0f -> 100*0.1）
+int16_t pid_lim_min_slider_val = -1;      // 输出下限滑块值（-10.0f -> -100*0.1）
+int16_t pid_lim_max_slider_val = 1;       // 输出上限滑块值（10.0f -> 100*0.1）
 int16_t pid_lim_min_int_slider_val = -50; // 积分下限滑块值（-5.0f -> -50*0.1）
 int16_t pid_lim_max_int_slider_val = 50;  // 积分上限滑块值（5.0f -> 50*0.1）
 int16_t pid_sample_time_slider_val = 1;   // 采样时间滑块值（0.01f -> 1*0.01）
@@ -101,17 +101,17 @@ void sync_pid_slider_to_float(void)
  */
 void Yaw_Stepper_Position_Update(float pid_output)
 {
-    uint8_t dir = (pid_output >= 0) ? 0x01 : 0x00; // 0x01: CCW(逆时针), 0x00: CW(顺时针)
-    float angle = fabsf(pid_output);
+    uint8_t dir = (pid_output >= 0) ? 0x00 : 0x01; // 0x01: CCW(逆时针), 0x00: CW(顺时针)
+    float speed = fabsf(pid_output);
     pid_yaw_angle = pid_output;
     /* --------------------------------- 此处修改: 条件调试输出 -------------------------------- */
     if (stepper_pid_debug_flag)
     {
         printf("[Yaw] Dir: %s, Speed: %.2f, Angle: %.2f, PID Output: %.2f\r\n",
-               dir ? "CCW" : "CW", yaw_speed, angle, pid_output);
+               dir ? "CCW" : "CW", yaw_speed, speed, pid_output);
     }
     /* --------------------------------- 自定义部分结束 -------------------------------- */
-    ZDT_Stepper_Set_position(zdt_stepper_motors[0], dir, yaw_speed, angle, ZDT_STEPPER_REL_POS_MODE, ZDT_STEPPER_SYNC_DISABLE);
+    ZDT_Stepper_Set_Speed(zdt_stepper_motors[0], dir, speed, ZDT_STEPPER_REL_POS_MODE, ZDT_STEPPER_SYNC_DISABLE);
 }
 
 /** ***************************************************************************
@@ -121,14 +121,14 @@ void Yaw_Stepper_Position_Update(float pid_output)
 void Pitch_Stepper_Position_Update(float pid_output)
 {
     uint8_t dir = (pid_output >= 0) ? 0x01 : 0x00; // 0x00: CW(顺时针), 0x01: CCW(逆时针)
-    float angle = fabsf(pid_output);
+    float speed = fabsf(pid_output);
     pid_pitch_angle = pid_output;
     /* --------------------------------- 此处修改: 条件调试输出 -------------------------------- */
     if (stepper_pid_debug_flag)
     {
         printf("[Pitch] Dir: %s, Speed: %.2f, Angle: %.2f, PID Output: %.2f\r\n",
-               dir ? "CCW" : "CW", pitch_speed, angle, pid_output);
+               dir ? "CCW" : "CW", pitch_speed, speed, pid_output);
     }
     /* --------------------------------- 自定义部分结束 -------------------------------- */
-    ZDT_Stepper_Set_position(zdt_stepper_motors[1], dir, pitch_speed, angle, ZDT_STEPPER_REL_POS_MODE, ZDT_STEPPER_SYNC_DISABLE);
+    ZDT_Stepper_Set_Speed(zdt_stepper_motors[1], dir, speed, ZDT_STEPPER_REL_POS_MODE, ZDT_STEPPER_SYNC_DISABLE);
 }
