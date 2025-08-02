@@ -75,6 +75,10 @@ int16_t output_change_slider_val = 10;    // 输出变化阈值滑块值（0.1f 
 int16_t pitch_pid_target_slider_val = 20; // 俯仰轴目标值滑块值（0.0f -> 0*1）
 int16_t yaw_pid_target_slider_val = 10;   // 航向轴目标值滑块值（0.0f -> 0*1）
 
+// PID激光控制滑块变量定义
+int16_t pid_laser_threshold_slider_val = 50; // PID激光阈值滑块值（5.0f -> 50*0.1）
+int16_t pid_laser_duration_slider_val = 50;  // PID激光持续时间滑块值（50ms -> 50*1）
+
 /** ***************************************************************************
  * @brief  初始化步进电机PID参数
  * @param  pid: 指向PID控制器的指针
@@ -98,9 +102,9 @@ void Stepper_PID_Parameters_Init(PIDController *pid)
  */
 void sync_pid_slider_to_float(void)
 {
-    pid_kp = pid_kp_slider_val * 0.1f;
-    pid_ki = pid_ki_slider_val * 0.1f;
-    pid_kd = pid_kd_slider_val * 0.1f;
+    pid_kp = pid_kp_slider_val;
+    pid_ki = pid_ki_slider_val;
+    pid_kd = pid_kd_slider_val;
     pid_tau = pid_tau_slider_val * 0.01f;
     pid_lim_min = pid_lim_min_slider_val * 0.1f;
     pid_lim_max = pid_lim_max_slider_val * 0.1f;
@@ -113,6 +117,10 @@ void sync_pid_slider_to_float(void)
     min_output_change_threshold = output_change_slider_val * 0.01f;
     pitch_pid_target = pitch_pid_target_slider_val * 1.0f;
     yaw_pid_target = yaw_pid_target_slider_val * 1.0f;
+
+    // PID激光控制参数同步
+    pid_laser_threshold = pid_laser_threshold_slider_val * 0.1f;
+    pid_laser_duration_ms = pid_laser_duration_slider_val;
 
     /* --------------------------------- 此处修改: 条件调试输出 -------------------------------- */
     if (menu_pid_params_debug)

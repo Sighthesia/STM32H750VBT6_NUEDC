@@ -28,6 +28,9 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
             sync_pid_slider_to_float();
             Stepper_PID_Parameters_Init(&yaw_pid);   // 同步航向轴PID参数
             Stepper_PID_Parameters_Init(&pitch_pid); // 同步俯仰轴PID参数
+
+            // 同步扫描参数滑块到浮点数
+            Sync_Scan_Slider_To_Float();
         }
 
         /* ----------------------------------- 解包 ----------------------------------- */
@@ -40,6 +43,25 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
             }
         }
 
+        /* --------------------------------- 此处修改: 添加超时自动回零检测 -------------------------------- */
+        // 检测目标丢失超时，触发自动回零
+        if (target_lost && auto_zero_return_enable && !auto_zero_return_triggered)
+        {
+            uint32_t current_time = HAL_GetTick();
+            if ((current_time - target_lost_start_time) >= auto_zero_return_timeout_ms)
+            {
+                printf("[Auto Zero] Target lost for %lums, triggering auto zero return\r\n",
+                       current_time - target_lost_start_time);
+
+                // 触发双轴回零
+                ZDT_Stepper_trigger_zero_return(zdt_stepper_motors[0], 0, 0); // Yaw轴回零
+                ZDT_Stepper_trigger_zero_return(zdt_stepper_motors[1], 0, 0); // Pitch轴回零
+
+                auto_zero_return_triggered = 1; // 设置已触发标志，避免重复触发
+                printf("[Auto Zero] Zero return command sent to both motors\r\n");
+            }
+        }
+
         /* ---------------------------------- 计算PID --------------------------------- */
         if (uart_packet_received)
         {
@@ -47,32 +69,77 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
             yaw_pid_error = yaw_pid_target - (float)rectangle_coordinate_arr[0];
             pitch_pid_error = pitch_pid_target - (float)rectangle_coordinate_arr[1];
 
-            // 添加误差死区，减少小幅振荡
-            if (fabsf(yaw_pid_error) > error_deadzone_threshold)
+            if (target_lost)
             {
-                yaw_pid_output = PIDController_Update(&yaw_pid, yaw_pid_target, (float)rectangle_coordinate_arr[0]);
-            }
-            else
-            {
-                yaw_pid_output = 0.0f; // 在误差死区内，输出为0
-            }
+                // 目标丢失时的处理策略
+                if (menu_pid_calculation_debug)
+                {
+                    printf("[PID] Target lost, using last valid coordinates\r\n");
+                }
 
-            if (fabsf(pitch_pid_error) > error_deadzone_threshold)
-            {
-                pitch_pid_output = PIDController_Update(&pitch_pid, pitch_pid_target, (float)rectangle_coordinate_arr[1]);
+                // 策略1：继续使用上一次有效坐标进行控制（当前选择）
+                // 添加误差死区，减少小幅振荡
+                if (fabsf(yaw_pid_error) > error_deadzone_threshold)
+                {
+                    yaw_pid_output = PIDController_Update(&yaw_pid, yaw_pid_target, (float)rectangle_coordinate_arr[0]);
+                }
+                else
+                {
+                    yaw_pid_output = 0.0f; // 在误差死区内，输出为0
+                }
+
+                if (fabsf(pitch_pid_error) > error_deadzone_threshold)
+                {
+                    pitch_pid_output = PIDController_Update(&pitch_pid, pitch_pid_target, (float)rectangle_coordinate_arr[1]);
+                }
+                else
+                {
+                    pitch_pid_output = 0.0f; // 在误差死区内，输出为0
+                }
+
+                // 可选策略2：停止PID控制，保持当前位置
+                // yaw_pid_output = 0.0f;
+                // pitch_pid_output = 0.0f;
+
+                // 可选策略3：逐渐回到中心位置
+                // yaw_pid_output = PIDController_Update(&yaw_pid, 0.0f, (float)rectangle_coordinate_arr[0]);
+                // pitch_pid_output = PIDController_Update(&pitch_pid, 0.0f, (float)rectangle_coordinate_arr[1]);
             }
             else
             {
-                pitch_pid_output = 0.0f; // 在误差死区内，输出为0
+                // 目标正常，执行正常PID控制
+                // 添加误差死区，减少小幅振荡
+                if (fabsf(yaw_pid_error) > error_deadzone_threshold)
+                {
+                    yaw_pid_output = PIDController_Update(&yaw_pid, yaw_pid_target, (float)rectangle_coordinate_arr[0]);
+                }
+                else
+                {
+                    yaw_pid_output = 0.0f; // 在误差死区内，输出为0
+                }
+
+                if (fabsf(pitch_pid_error) > error_deadzone_threshold)
+                {
+                    pitch_pid_output = PIDController_Update(&pitch_pid, pitch_pid_target, (float)rectangle_coordinate_arr[1]);
+                }
+                else
+                {
+                    pitch_pid_output = 0.0f; // 在误差死区内，输出为0
+                }
             }
 
             if (menu_pid_calculation_debug)
             {
-                printf("[PID Calc] Target: Yaw=%.2f, Pitch=%.2f | Current: Yaw=%.2f, Pitch=%.2f | Error: Yaw=%.2f, Pitch=%.2f\r\n",
+                printf("[PID Calc] Target: Yaw=%.2f, Pitch=%.2f | Current: Yaw=%.2f, Pitch=%.2f | Status: %s\r\n",
                        yaw_pid_target, pitch_pid_target,
                        (float)rectangle_coordinate_arr[0], (float)rectangle_coordinate_arr[1],
-                       yaw_pid_error, pitch_pid_error);
+                       target_lost ? "LOST" : "OK");
+                printf("[PID Calc] Error: Yaw=%.2f, Pitch=%.2f | Output: Yaw=%.3f, Pitch=%.3f\r\n",
+                       yaw_pid_error, pitch_pid_error, yaw_pid_output, pitch_pid_output);
             }
+
+            // PID激光检查与发射
+            PID_Laser_Check_And_Fire();
 
             uart_packet_received = 0;   // 清零标志，等待下次接收
             stepper_update_pending = 1; // 设置PID更新标志位
@@ -84,7 +151,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
             if (stepper_update_pending)
             {
                 // 更新步进电机位置
-                Yaw_Stepper_Position_Update(yaw_pid_output);
+                // Yaw_Stepper_Position_Update(yaw_pid_output);
                 // Pitch_Stepper_Position_Update(pitch_pid_output);
 
                 if (menu_pid_calculation_debug)

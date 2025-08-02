@@ -28,6 +28,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "stdio.h"
+#include "math.h"
 #include "TIM.h"
 #include "u8g2.h"
 #include "u8g2_Custom_HW_I2C_HAL.h"
@@ -67,6 +68,19 @@ _Bool menu_pid_calculation_debug = 0;    // 菜单控制：PID计算过程调试
 _Bool menu_stepper_command_debug = 1;    // 菜单控制：步进电机指令调试输出
 _Bool menu_pid_params_debug = 0;         // 菜单控制：PID参数更新调试输出
 _Bool menu_lazer_enable = 0;             // 菜单控制：激光使能
+
+/* --------------------------------- 旋转检测相关变量 -------------------------------- */
+_Bool rotate_detect = 0;         // 旋转检测使能标志位
+_Bool rotation_active = 0;       // 旋转激活状态标志位
+_Bool rotation_target_found = 0; // 旋转过程中发现目标标志位
+
+/* --------------------------------- PID激光控制相关变量 -------------------------------- */
+_Bool pid_laser_enable = 0;          // PID激光控制使能标志位
+float pid_laser_threshold = 5.0f;    // PID激光触发阈值（坐标偏差）
+uint32_t pid_laser_duration_ms = 50; // PID激光持续时间（毫秒）
+_Bool pid_laser_active = 0;          // PID激光激活状态标志位
+uint32_t pid_laser_start_time = 0;   // PID激光开始时间
+
 /* --------------------------------- 自定义部分结束 -------------------------------- */
 /* USER CODE END PV */
 
@@ -127,6 +141,103 @@ void Stepper_All_Enable(void)
 {
   ZDT_Stepper_Enable(zdt_stepper_motors[0], ZDT_STEPPER_ENABLE, ZDT_STEPPER_SYNC_DISABLE);
   ZDT_Stepper_Enable(zdt_stepper_motors[1], ZDT_STEPPER_ENABLE, ZDT_STEPPER_SYNC_DISABLE);
+}
+
+/** ***************************************************************************
+ * @brief  启动旋转检测：开始360度旋转搜索目标
+ */
+void Start_Rotate_Detection(void)
+{
+  if (!rotation_active)
+  {
+    rotation_active = 1;
+    rotation_target_found = 0;
+
+    printf("[Rotate] Starting 360° rotation for target detection\r\n");
+
+    // 开始360度旋转
+    ZDT_Stepper_Set_position(zdt_stepper_motors[0],
+                             ZDT_STEPPER_CW,
+                             2.0f,                      // 2 RPM速度
+                             360.0f,                    // 360度
+                             ZDT_STEPPER_REL_POS_MODE,  // 相对位置模式
+                             ZDT_STEPPER_SYNC_DISABLE); // 不同步
+  }
+}
+
+/** ***************************************************************************
+ * @brief  停止旋转检测：停止电机并切换到PID模式
+ */
+void Stop_Rotate_Detection(void)
+{
+  if (rotation_active)
+  {
+    rotation_active = 0;
+
+    // 停止yaw轴电机
+    ZDT_Stepper_stop(zdt_stepper_motors[0], ZDT_STEPPER_SYNC_DISABLE);
+
+    printf("[Rotate] Target found! Stopping rotation and enabling PID tracking\r\n");
+
+    // 启用PID跟踪
+    menu_stepper_tracking_enable = 1;
+    rotation_target_found = 1;
+  }
+}
+
+/** ***************************************************************************
+ * @brief  处理旋转检测逻辑
+ */
+void Process_Rotate_Detection(void)
+{
+  // 检查是否收到UART数据包（目标检测到）
+  if (rotation_active && uart_packet_received)
+  {
+    Stop_Rotate_Detection();
+  }
+}
+
+/** ***************************************************************************
+ * @brief  PID激光检查与发射
+ */
+void PID_Laser_Check_And_Fire(void)
+{
+  if (!pid_laser_enable || menu_stepper_tracking_enable == 0)
+  {
+    return; // PID激光未启用或PID跟踪未启用
+  }
+
+  // 计算当前坐标偏差的总距离
+  float yaw_error = fabsf(yaw_pid_target - (float)rectangle_coordinate_arr[0]);
+  float pitch_error = fabsf(pitch_pid_target - (float)rectangle_coordinate_arr[1]);
+  float total_error = sqrtf(yaw_error * yaw_error + pitch_error * pitch_error);
+
+  // 如果偏差小于阈值且激光未激活，则触发激光
+  if (total_error < pid_laser_threshold && !pid_laser_active)
+  {
+    pid_laser_active = 1;
+    pid_laser_start_time = HAL_GetTick();
+
+    printf("[PID Laser] Target reached! Error: %.2f < %.2f, Laser ON for %lums\r\n",
+           total_error, pid_laser_threshold, pid_laser_duration_ms);
+  }
+}
+
+/** ***************************************************************************
+ * @brief  PID激光处理：检查激光持续时间并关闭
+ */
+void PID_Laser_Process(void)
+{
+  if (pid_laser_active)
+  {
+    uint32_t current_time = HAL_GetTick();
+    if ((current_time - pid_laser_start_time) >= pid_laser_duration_ms)
+    {
+      pid_laser_active = 0;
+
+      printf("[PID Laser] Laser OFF after %lums\r\n", current_time - pid_laser_start_time);
+    }
+  }
 }
 /* USER CODE END 0 */
 
@@ -246,6 +357,8 @@ int main(void)
   astra_push_item_to_list(PID, astra_new_slider_item("limMaxInt", &pid_lim_max_int_slider_val, 1, 0, 50));
   astra_push_item_to_list(PID, astra_new_slider_item("SampleTime", &pid_sample_time_slider_val, 1, 1, 100));
   astra_push_item_to_list(PID, astra_new_slider_item("Deadzone", &stepper_deadzone_slider_val, 1, 0, 50));
+  astra_push_item_to_list(PID, astra_new_slider_item("Laser Threshold", &pid_laser_threshold_slider_val, 1, 1, 100));
+  astra_push_item_to_list(PID, astra_new_slider_item("Laser Duration", &pid_laser_duration_slider_val, 1, 1, 500));
 
   // 添加控制标志位到Debug菜单
   astra_push_item_to_list(Debug, Flag);
@@ -255,6 +368,8 @@ int main(void)
   astra_push_item_to_list(Flag, astra_new_switch_item("PID Calc Debug", &menu_pid_calculation_debug));
   astra_push_item_to_list(Flag, astra_new_switch_item("Stepper Cmd Debug", &menu_stepper_command_debug));
   astra_push_item_to_list(Flag, astra_new_switch_item("PID Params Debug", &menu_pid_params_debug));
+  astra_push_item_to_list(Flag, astra_new_switch_item("Rotate Detect", &rotate_detect));
+  astra_push_item_to_list(Flag, astra_new_switch_item("PID Laser EN", &pid_laser_enable));
 
   // 步进电机重置/启动/关闭函数
   astra_push_item_to_list(Debug, astra_new_user_item("Stepper_All RST", Stepper_All_Reset, NULL, NULL));
@@ -304,7 +419,7 @@ int main(void)
       }
     }
 
-    if (menu_lazer_enable)
+    if (menu_lazer_enable || pid_laser_active)
     {
       HAL_GPIO_WritePin(Lazer_GPIO_Port, Lazer_Pin, GPIO_PIN_SET);
     }
@@ -313,17 +428,24 @@ int main(void)
       HAL_GPIO_WritePin(Lazer_GPIO_Port, Lazer_Pin, GPIO_PIN_RESET);
     }
 
-    if (in_astra == 0)
+    // 旋转检测控制逻辑
+    if (rotate_detect && !rotation_active)
     {
-      if (uart_packet_received == 1)
-      {
-        u8g2_DrawStr(&u8g2, 0, 10, "UART RX Done"); // 在OLED上显示接收完成信息
-      }
-      else
-      {
-        u8g2_DrawStr(&u8g2, 0, 10, "UART RX Not Done"); // 在OLED上显示接收未完成信息
-      }
+      // 启动旋转检测时，临时禁用PID跟踪
+      menu_stepper_tracking_enable = 0;
+      Start_Rotate_Detection();
     }
+    else if (!rotate_detect && rotation_active)
+    {
+      // 手动停止旋转检测
+      Stop_Rotate_Detection();
+    }
+
+    // 处理旋转检测过程中的目标发现
+    Process_Rotate_Detection();
+
+    // 处理PID激光控制
+    PID_Laser_Process();
 
     oled_clear_buffer();
 

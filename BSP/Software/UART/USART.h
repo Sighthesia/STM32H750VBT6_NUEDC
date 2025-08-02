@@ -51,6 +51,12 @@ extern volatile lwrb_t uart3_rx_buffer;           // UART3接收环形缓冲区�
 extern volatile uint8_t uart3_rx_buffer_data[16]; // UART3接收缓冲区数据数组
 extern volatile uint8_t uart3_rx_byte;            // UART3单字节接收缓存
 
+extern volatile _Bool target_lost;                // 目标丢失标志位（0=目标正常，1=目标丢失）
+extern volatile _Bool auto_zero_return_enable;    // 自动回零使能标志位
+extern volatile _Bool auto_zero_return_triggered; // 自动回零已触发标志位
+extern uint32_t target_lost_start_time;           // 目标丢失开始时间戳
+extern uint32_t auto_zero_return_timeout_ms;      // 自动回零超时时间（1秒）
+
 uint8_t UART_Parse_Packet(uint8_t data);
 
 void UART3_Start_Receive_IT(void);
