@@ -146,8 +146,8 @@ uint8_t UART_Parse_Packet(uint8_t data)
                     }
                     else
                     {
-                        // printf("[UART] Target OK - X: %d, Y: %d\r\n",
-                        //        rectangle_coordinate_arr[0], rectangle_coordinate_arr[1]);
+                        printf("[UART] Target OK - X: %d, Y: %d\r\n",
+                               rectangle_coordinate_arr[0], rectangle_coordinate_arr[1]);
                     }
 
                     return 1;
