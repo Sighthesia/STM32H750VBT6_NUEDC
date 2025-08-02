@@ -66,6 +66,7 @@ _Bool menu_pid_params_update_enable = 1; // 菜单控制：PID参数实时更新
 _Bool menu_pid_calculation_debug = 0;    // 菜单控制：PID计算过程调试输出
 _Bool menu_stepper_command_debug = 1;    // 菜单控制：步进电机指令调试输出
 _Bool menu_pid_params_debug = 0;         // 菜单控制：PID参数更新调试输出
+_Bool menu_lazer_enable = 0;             // 菜单控制：激光使能
 /* --------------------------------- 自定义部分结束 -------------------------------- */
 /* USER CODE END PV */
 
@@ -197,12 +198,12 @@ int main(void)
   astra_list_item_t *Flag = astra_new_list_item("Flag");
   astra_push_item_to_list(Settings, Flag);
 
-  astra_push_item_to_list(Flag, astra_new_switch_item("Stepper Tracking", &menu_stepper_tracking_enable));
-  astra_push_item_to_list(Flag, astra_new_switch_item("UART Data RX", &menu_uart_data_receive_enable));
-  astra_push_item_to_list(Flag, astra_new_switch_item("PID Params Update", &menu_pid_params_update_enable));
-  astra_push_item_to_list(Flag, astra_new_switch_item("PID Calc Debug", &menu_pid_calculation_debug));
-  astra_push_item_to_list(Flag, astra_new_switch_item("Stepper Cmd Debug", &menu_stepper_command_debug));
-  astra_push_item_to_list(Flag, astra_new_switch_item("PID Params Debug", &menu_pid_params_debug));
+  // astra_push_item_to_list(Flag, astra_new_switch_item("Stepper Tracking", &menu_stepper_tracking_enable));
+  // astra_push_item_to_list(Flag, astra_new_switch_item("UART Data RX", &menu_uart_data_receive_enable));
+  // astra_push_item_to_list(Flag, astra_new_switch_item("PID Params Update", &menu_pid_params_update_enable));
+  // astra_push_item_to_list(Flag, astra_new_switch_item("PID Calc Debug", &menu_pid_calculation_debug));
+  // astra_push_item_to_list(Flag, astra_new_switch_item("Stepper Cmd Debug", &menu_stepper_command_debug));
+  // astra_push_item_to_list(Flag, astra_new_switch_item("PID Params Debug", &menu_pid_params_debug));
 
   menu_uart_data_receive_enable = 1; // 默认允许接收数据
 
@@ -213,22 +214,21 @@ int main(void)
   astra_push_item_to_list(Stepper, astra_new_user_item("Stepper_All RST", Stepper_All_Reset, NULL, NULL));
   astra_push_item_to_list(Stepper, astra_new_user_item("Stepper_All DIS", Stepper_All_Disable, NULL, NULL));
   astra_push_item_to_list(Stepper, astra_new_user_item("Stepper_All EN", Stepper_All_Enable, NULL, NULL));
-
   /* ----------------------------------- PID ---------------------------------- */
 
   astra_list_item_t *PID = astra_new_list_item("PID");
   astra_push_item_to_list(Settings, PID);
 
-  astra_push_item_to_list(PID, astra_new_slider_item("Kp", &pid_kp_slider_val, 1, 0, 100));
-  astra_push_item_to_list(PID, astra_new_slider_item("Ki", &pid_ki_slider_val, 1, 0, 100));
-  astra_push_item_to_list(PID, astra_new_slider_item("Kd", &pid_kd_slider_val, 1, 0, 100));
-  astra_push_item_to_list(PID, astra_new_slider_item("tau", &pid_tau_slider_val, 1, 0, 100));
-  astra_push_item_to_list(PID, astra_new_slider_item("limMin", &pid_lim_min_slider_val, 1, -100, 0));
-  astra_push_item_to_list(PID, astra_new_slider_item("limMax", &pid_lim_max_slider_val, 1, 0, 100));
-  astra_push_item_to_list(PID, astra_new_slider_item("limMinInt", &pid_lim_min_int_slider_val, 1, -50, 0));
-  astra_push_item_to_list(PID, astra_new_slider_item("limMaxInt", &pid_lim_max_int_slider_val, 1, 0, 50));
-  astra_push_item_to_list(PID, astra_new_slider_item("SampleTime", &pid_sample_time_slider_val, 1, 1, 100));
-  astra_push_item_to_list(PID, astra_new_slider_item("Deadzone", &stepper_deadzone_slider_val, 1, 0, 50));
+  // astra_push_item_to_list(PID, astra_new_slider_item("Kp", &pid_kp_slider_val, 1, 0, 100));
+  // astra_push_item_to_list(PID, astra_new_slider_item("Ki", &pid_ki_slider_val, 1, 0, 100));
+  // astra_push_item_to_list(PID, astra_new_slider_item("Kd", &pid_kd_slider_val, 1, 0, 100));
+  // astra_push_item_to_list(PID, astra_new_slider_item("tau", &pid_tau_slider_val, 1, 0, 100));
+  // astra_push_item_to_list(PID, astra_new_slider_item("limMin", &pid_lim_min_slider_val, 1, -100, 0));
+  // astra_push_item_to_list(PID, astra_new_slider_item("limMax", &pid_lim_max_slider_val, 1, 0, 100));
+  // astra_push_item_to_list(PID, astra_new_slider_item("limMinInt", &pid_lim_min_int_slider_val, 1, -50, 0));
+  // astra_push_item_to_list(PID, astra_new_slider_item("limMaxInt", &pid_lim_max_int_slider_val, 1, 0, 50));
+  // astra_push_item_to_list(PID, astra_new_slider_item("SampleTime", &pid_sample_time_slider_val, 1, 1, 100));
+  // astra_push_item_to_list(PID, astra_new_slider_item("Deadzone", &stepper_deadzone_slider_val, 1, 0, 50));
 
   /* ----------------------------------- DEBUG ---------------------------------- */
   astra_list_item_t *Debug = astra_new_list_item("DEBUG");
@@ -260,6 +260,11 @@ int main(void)
   astra_push_item_to_list(Debug, astra_new_user_item("Stepper_All RST", Stepper_All_Reset, NULL, NULL));
   astra_push_item_to_list(Debug, astra_new_user_item("Stepper_All DIS", Stepper_All_Disable, NULL, NULL));
   astra_push_item_to_list(Debug, astra_new_user_item("Stepper_All EN", Stepper_All_Enable, NULL, NULL));
+
+  astra_push_item_to_list(Debug, astra_new_switch_item("Lazer EN", &menu_lazer_enable));
+
+  astra_push_item_to_list(Debug, astra_new_slider_item("Yaw Tar", &yaw_pid_target_slider_val, 1, -100, 100));
+  astra_push_item_to_list(Debug, astra_new_slider_item("Pitch Tar", &pitch_pid_target_slider_val, 1, -100, 100));
 
   // 同步PID滑块到浮点数
   sync_pid_slider_to_float();
@@ -297,6 +302,15 @@ int main(void)
       {
         astra_selector_go_prev_item();
       }
+    }
+
+    if (menu_lazer_enable)
+    {
+      HAL_GPIO_WritePin(Lazer_GPIO_Port, Lazer_Pin, GPIO_PIN_SET);
+    }
+    else
+    {
+      HAL_GPIO_WritePin(Lazer_GPIO_Port, Lazer_Pin, GPIO_PIN_RESET);
     }
 
     if (in_astra == 0)

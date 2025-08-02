@@ -85,7 +85,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
             {
                 // 更新步进电机位置
                 Yaw_Stepper_Position_Update(yaw_pid_output);
-                Pitch_Stepper_Position_Update(pitch_pid_output);
+                // Pitch_Stepper_Position_Update(pitch_pid_output);
 
                 if (menu_pid_calculation_debug)
                 {
