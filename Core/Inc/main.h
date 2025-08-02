@@ -115,6 +115,14 @@ extern "C"
   // PID激光控制函数声明
   void PID_Laser_Check_And_Fire(void);
   void PID_Laser_Process(void);
+
+  // 系统状态显示函数声明
+  void System_Status_Display(void);
+
+  // 调试信息控制变量声明
+  extern _Bool debug_coordinate_info;
+  extern _Bool debug_rotation_detection;
+  extern _Bool debug_pid_laser_info;
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/

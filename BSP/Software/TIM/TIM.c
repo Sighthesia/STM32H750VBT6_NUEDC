@@ -15,7 +15,6 @@
 
 /* --------------------------------- 系统状态标志位（内部使用） -------------------------------- */
 _Bool tim_pid_calculation_debug = 0; // TIM模块：PID计算调试输出标志位（系统设置）
-/* --------------------------------- 自定义部分结束 -------------------------------- */
 
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
@@ -28,9 +27,6 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
             sync_pid_slider_to_float();
             Stepper_PID_Parameters_Init(&yaw_pid);   // 同步航向轴PID参数
             Stepper_PID_Parameters_Init(&pitch_pid); // 同步俯仰轴PID参数
-
-            // 同步扫描参数滑块到浮点数
-            Sync_Scan_Slider_To_Float();
         }
 
         /* ----------------------------------- 解包 ----------------------------------- */
@@ -136,6 +132,25 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
                        target_lost ? "LOST" : "OK");
                 printf("[PID Calc] Error: Yaw=%.2f, Pitch=%.2f | Output: Yaw=%.3f, Pitch=%.3f\r\n",
                        yaw_pid_error, pitch_pid_error, yaw_pid_output, pitch_pid_output);
+            }
+
+            // 调试信息：坐标差值详细信息
+            if (debug_coordinate_info)
+            {
+                static uint32_t last_coord_debug_time = 0;
+                uint32_t current_time = HAL_GetTick();
+                
+                // 每200ms输出一次坐标信息
+                if ((current_time - last_coord_debug_time) >= 200)
+                {
+                    float total_error = sqrtf(yaw_pid_error * yaw_pid_error + pitch_pid_error * pitch_pid_error);
+                    printf("[坐标差值] X轴偏差: %.2f | Y轴偏差: %.2f | 总偏差: %.2f\r\n",
+                           yaw_pid_error, pitch_pid_error, total_error);
+                    printf("[坐标信息] 目标坐标: (%.1f, %.1f) | 当前坐标: (%d, %d)\r\n",
+                           yaw_pid_target, pitch_pid_target,
+                           rectangle_coordinate_arr[0], rectangle_coordinate_arr[1]);
+                    last_coord_debug_time = current_time;
+                }
             }
 
             // PID激光检查与发射

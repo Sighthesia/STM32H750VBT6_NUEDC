@@ -61,13 +61,18 @@
 
 /* USER CODE BEGIN PV */
 /* --------------------------------- 用户控制标志位（菜单配置） -------------------------------- */
-_Bool menu_stepper_tracking_enable = 1;  // 菜单控制：步进电机跟踪使能
-_Bool menu_uart_data_receive_enable = 1; // 菜单控制：UART数据接收使能
-_Bool menu_pid_params_update_enable = 1; // 菜单控制：PID参数实时更新使能
-_Bool menu_pid_calculation_debug = 0;    // 菜单控制：PID计算过程调试输出
-_Bool menu_stepper_command_debug = 1;    // 菜单控制：步进电机指令调试输出
-_Bool menu_pid_params_debug = 0;         // 菜单控制：PID参数更新调试输出
-_Bool menu_lazer_enable = 0;             // 菜单控制：激光使能
+_Bool menu_stepper_tracking_enable = 0;  // 菜单控制：步进电机跟踪使能 (PID跟踪主开关)
+_Bool menu_uart_data_receive_enable = 1; // 菜单控制：UART数据接收使能 (自动设置为开启)
+_Bool menu_pid_params_update_enable = 1; // 菜单控制：PID参数实时更新使能 (自动设置为开启)
+_Bool menu_pid_calculation_debug = 0;    // 菜单控制：PID计算过程调试输出 (默认关闭)
+_Bool menu_stepper_command_debug = 0;    // 菜单控制：步进电机指令调试输出 (简化，不在菜单显示)
+_Bool menu_pid_params_debug = 0;         // 菜单控制：PID参数更新调试输出 (简化，不在菜单显示)
+_Bool menu_lazer_enable = 0;             // 菜单控制：手动激光使能
+
+/* --------------------------------- 调试信息控制变量 -------------------------------- */
+_Bool debug_coordinate_info = 0;         // 调试：坐标差值信息显示 (默认关闭)
+_Bool debug_rotation_detection = 0;      // 调试：旋转检测与PID切换信息显示 (默认关闭)
+_Bool debug_pid_laser_info = 0;          // 调试：PID激光控制信息显示 (默认关闭)
 
 /* --------------------------------- 旋转检测相关变量 -------------------------------- */
 _Bool rotate_detect = 0;         // 旋转检测使能标志位
@@ -75,7 +80,7 @@ _Bool rotation_active = 0;       // 旋转激活状态标志位
 _Bool rotation_target_found = 0; // 旋转过程中发现目标标志位
 
 /* --------------------------------- PID激光控制相关变量 -------------------------------- */
-_Bool pid_laser_enable = 0;          // PID激光控制使能标志位
+_Bool pid_laser_enable = 1;          // PID激光控制使能标志位
 float pid_laser_threshold = 5.0f;    // PID激光触发阈值（坐标偏差）
 uint32_t pid_laser_duration_ms = 50; // PID激光持续时间（毫秒）
 _Bool pid_laser_active = 0;          // PID激光激活状态标志位
@@ -153,12 +158,17 @@ void Start_Rotate_Detection(void)
     rotation_active = 1;
     rotation_target_found = 0;
 
-    printf("[Rotate] Starting 360° rotation for target detection\r\n");
+    if (debug_rotation_detection)
+    {
+      printf("[Rotation] ========== 启动360°旋转检测 ==========\r\n");
+      printf("[Rotation] 旋转速度: 1.0 RPM | 旋转角度: 360°\r\n");
+      printf("[Rotation] PID跟踪已临时禁用，开始搜索目标...\r\n");
+    }
 
     // 开始360度旋转
     ZDT_Stepper_Set_position(zdt_stepper_motors[0],
-                             ZDT_STEPPER_CW,
-                             2.0f,                      // 2 RPM速度
+                             ZDT_STEPPER_CCW,
+                             1.0f,                      // 2 RPM速度
                              360.0f,                    // 360度
                              ZDT_STEPPER_REL_POS_MODE,  // 相对位置模式
                              ZDT_STEPPER_SYNC_DISABLE); // 不同步
@@ -177,11 +187,48 @@ void Stop_Rotate_Detection(void)
     // 停止yaw轴电机
     ZDT_Stepper_stop(zdt_stepper_motors[0], ZDT_STEPPER_SYNC_DISABLE);
 
-    printf("[Rotate] Target found! Stopping rotation and enabling PID tracking\r\n");
+    if (debug_rotation_detection)
+    {
+      printf("[Rotation] ========== 目标检测成功！ ==========\r\n");
+      printf("[Rotation] 停止旋转电机，切换到PID跟踪模式\r\n");
+      printf("[Rotation] 当前坐标: X=%d, Y=%d\r\n", 
+             rectangle_coordinate_arr[0], rectangle_coordinate_arr[1]);
+      printf("[Rotation] PID跟踪已启用，开始精确瞄准...\r\n");
+    }
 
     // 启用PID跟踪
     menu_stepper_tracking_enable = 1;
     rotation_target_found = 1;
+  }
+}
+
+/** ***************************************************************************
+ * @brief  系统状态显示函数
+ */
+void System_Status_Display(void)
+{
+  static uint32_t last_status_time = 0;
+  uint32_t current_time = HAL_GetTick();
+  
+  // 每5秒输出一次系统状态 (仅当有调试开关打开时)
+  if ((current_time - last_status_time) >= 5000 && 
+      (debug_coordinate_info || debug_rotation_detection || debug_pid_laser_info))
+  {
+    printf("\r\n========== 系统状态 ==========\r\n");
+    printf("PID跟踪: %s | 自动旋转: %s | 自动激光: %s | 手动激光: %s\r\n",
+           menu_stepper_tracking_enable ? "开启" : "关闭",
+           rotate_detect ? "开启" : "关闭",
+           pid_laser_enable ? "开启" : "关闭",
+           menu_lazer_enable ? "开启" : "关闭");
+    printf("目标坐标: X=%.1f, Y=%.1f | 当前坐标: X=%d, Y=%d\r\n",
+           yaw_pid_target, pitch_pid_target,
+           rectangle_coordinate_arr[0], rectangle_coordinate_arr[1]);
+    printf("旋转状态: %s | 激光状态: %s\r\n",
+           rotation_active ? "旋转中" : "停止",
+           pid_laser_active ? "发射中" : "待机");
+    printf("==============================\r\n\r\n");
+    
+    last_status_time = current_time;
   }
 }
 
@@ -193,6 +240,12 @@ void Process_Rotate_Detection(void)
   // 检查是否收到UART数据包（目标检测到）
   if (rotation_active && uart_packet_received)
   {
+    if (debug_rotation_detection)
+    {
+      printf("[Rotation] 检测到UART数据包！矩形坐标: X=%d, Y=%d\r\n",
+             rectangle_coordinate_arr[0], rectangle_coordinate_arr[1]);
+      printf("[Rotation] 准备停止旋转并切换到PID模式...\r\n");
+    }
     Stop_Rotate_Detection();
   }
 }
@@ -212,14 +265,35 @@ void PID_Laser_Check_And_Fire(void)
   float pitch_error = fabsf(pitch_pid_target - (float)rectangle_coordinate_arr[1]);
   float total_error = sqrtf(yaw_error * yaw_error + pitch_error * pitch_error);
 
+  // 调试信息：实时显示偏差信息
+  if (debug_pid_laser_info)
+  {
+    static uint32_t last_debug_time = 0;
+    uint32_t current_time = HAL_GetTick();
+    
+    // 每100ms输出一次调试信息
+    if ((current_time - last_debug_time) >= 100)
+    {
+      printf("[PID Laser] 偏差分析: Yaw=%.2f, Pitch=%.2f, 总偏差=%.2f, 阈值=%.2f\r\n",
+             yaw_error, pitch_error, total_error, pid_laser_threshold);
+      last_debug_time = current_time;
+    }
+  }
+
   // 如果偏差小于阈值且激光未激活，则触发激光
   if (total_error < pid_laser_threshold && !pid_laser_active)
   {
     pid_laser_active = 1;
     pid_laser_start_time = HAL_GetTick();
 
-    printf("[PID Laser] Target reached! Error: %.2f < %.2f, Laser ON for %lums\r\n",
-           total_error, pid_laser_threshold, pid_laser_duration_ms);
+    if (debug_pid_laser_info)
+    {
+      printf("[PID Laser] ========== 激光发射触发！ ==========\r\n");
+      printf("[PID Laser] 目标精度达到要求: %.2f < %.2f\r\n", total_error, pid_laser_threshold);
+      printf("[PID Laser] 激光持续时间: %lums\r\n", pid_laser_duration_ms);
+      printf("[PID Laser] 当前坐标: X=%d, Y=%d\r\n", 
+             rectangle_coordinate_arr[0], rectangle_coordinate_arr[1]);
+    }
   }
 }
 
@@ -235,7 +309,12 @@ void PID_Laser_Process(void)
     {
       pid_laser_active = 0;
 
-      printf("[PID Laser] Laser OFF after %lums\r\n", current_time - pid_laser_start_time);
+      if (debug_pid_laser_info)
+      {
+        printf("[PID Laser] ========== 激光发射结束 ==========\r\n");
+        printf("[PID Laser] 实际持续时间: %lums\r\n", current_time - pid_laser_start_time);
+        printf("[PID Laser] 激光关闭，等待下次触发条件...\r\n");
+      }
     }
   }
 }
@@ -293,93 +372,81 @@ int main(void)
   ZDT_Stepper_Enable(zdt_stepper_motors[0], 1, ZDT_STEPPER_SYNC_DISABLE);
   ZDT_Stepper_Enable(zdt_stepper_motors[1], 1, ZDT_STEPPER_SYNC_DISABLE);
 
-  /* ----------------------------------- 菜单 ----------------------------------- */
+  /* ----------------------------------- 菜单结构优化 ----------------------------------- */
   // 初始化OLED显示
   astra_ui_driver_init();
   astra_init_core();
 
+  /* ---------------------------------- 主控制菜单 ---------------------------------- */
   astra_list_item_t *Control = astra_new_list_item("Control");
   astra_push_item_to_list(astra_get_root_list(), Control);
 
-  astra_list_item_t *Settings = astra_new_list_item("Settings");
-  astra_push_item_to_list(astra_get_root_list(), Settings);
+  // 核心功能控制
+  astra_push_item_to_list(Control, astra_new_switch_item("PID Tracking", &menu_stepper_tracking_enable));
+  astra_push_item_to_list(Control, astra_new_switch_item("Auto Rotate", &rotate_detect));
+  astra_push_item_to_list(Control, astra_new_switch_item("Auto Laser", &pid_laser_enable));
+  astra_push_item_to_list(Control, astra_new_switch_item("Manual Laser", &menu_lazer_enable));
 
-  /* ---------------------------------- Flag ---------------------------------- */
+  // 目标坐标设置
+  astra_push_item_to_list(Control, astra_new_slider_item("Target X", &yaw_pid_target_slider_val, 1, -100, 100));
+  astra_push_item_to_list(Control, astra_new_slider_item("Target Y", &pitch_pid_target_slider_val, 1, -100, 100));
 
-  astra_list_item_t *Flag = astra_new_list_item("Flag");
-  astra_push_item_to_list(Settings, Flag);
+  // 激光参数
+  astra_push_item_to_list(Control, astra_new_slider_item("Laser Precision", &pid_laser_threshold_slider_val, 1, 1, 100));
+  astra_push_item_to_list(Control, astra_new_slider_item("Laser Duration", &pid_laser_duration_slider_val, 1, 1, 500));
 
-  // astra_push_item_to_list(Flag, astra_new_switch_item("Stepper Tracking", &menu_stepper_tracking_enable));
-  // astra_push_item_to_list(Flag, astra_new_switch_item("UART Data RX", &menu_uart_data_receive_enable));
-  // astra_push_item_to_list(Flag, astra_new_switch_item("PID Params Update", &menu_pid_params_update_enable));
-  // astra_push_item_to_list(Flag, astra_new_switch_item("PID Calc Debug", &menu_pid_calculation_debug));
-  // astra_push_item_to_list(Flag, astra_new_switch_item("Stepper Cmd Debug", &menu_stepper_command_debug));
-  // astra_push_item_to_list(Flag, astra_new_switch_item("PID Params Debug", &menu_pid_params_debug));
+  /* ---------------------------------- 参数调节菜单 ---------------------------------- */
+  astra_list_item_t *Parameters = astra_new_list_item("Parameters");
+  astra_push_item_to_list(astra_get_root_list(), Parameters);
 
-  menu_uart_data_receive_enable = 1; // 默认允许接收数据
+  // PID参数调节
+  astra_list_item_t *PID_Tuning = astra_new_list_item("PID Tuning");
+  astra_push_item_to_list(Parameters, PID_Tuning);
+  
+  astra_push_item_to_list(PID_Tuning, astra_new_slider_item("Kp", &pid_kp_slider_val, 1, 0, 100));
+  astra_push_item_to_list(PID_Tuning, astra_new_slider_item("Ki", &pid_ki_slider_val, 1, 0, 100));
+  astra_push_item_to_list(PID_Tuning, astra_new_slider_item("Kd", &pid_kd_slider_val, 1, 0, 100));
+  astra_push_item_to_list(PID_Tuning, astra_new_slider_item("Deadzone", &stepper_deadzone_slider_val, 1, 0, 50));
 
-  // 步进电机
-  astra_list_item_t *Stepper = astra_new_list_item("Stepper");
-  astra_push_item_to_list(Settings, Stepper);
+  // 电机控制
+  astra_list_item_t *Motor_Control = astra_new_list_item("Motor Control");
+  astra_push_item_to_list(Parameters, Motor_Control);
+  
+  astra_push_item_to_list(Motor_Control, astra_new_user_item("Reset All", Stepper_All_Reset, NULL, NULL));
+  astra_push_item_to_list(Motor_Control, astra_new_user_item("Enable All", Stepper_All_Enable, NULL, NULL));
+  astra_push_item_to_list(Motor_Control, astra_new_user_item("Disable All", Stepper_All_Disable, NULL, NULL));
 
-  astra_push_item_to_list(Stepper, astra_new_user_item("Stepper_All RST", Stepper_All_Reset, NULL, NULL));
-  astra_push_item_to_list(Stepper, astra_new_user_item("Stepper_All DIS", Stepper_All_Disable, NULL, NULL));
-  astra_push_item_to_list(Stepper, astra_new_user_item("Stepper_All EN", Stepper_All_Enable, NULL, NULL));
-  /* ----------------------------------- PID ---------------------------------- */
-
-  astra_list_item_t *PID = astra_new_list_item("PID");
-  astra_push_item_to_list(Settings, PID);
-
-  // astra_push_item_to_list(PID, astra_new_slider_item("Kp", &pid_kp_slider_val, 1, 0, 100));
-  // astra_push_item_to_list(PID, astra_new_slider_item("Ki", &pid_ki_slider_val, 1, 0, 100));
-  // astra_push_item_to_list(PID, astra_new_slider_item("Kd", &pid_kd_slider_val, 1, 0, 100));
-  // astra_push_item_to_list(PID, astra_new_slider_item("tau", &pid_tau_slider_val, 1, 0, 100));
-  // astra_push_item_to_list(PID, astra_new_slider_item("limMin", &pid_lim_min_slider_val, 1, -100, 0));
-  // astra_push_item_to_list(PID, astra_new_slider_item("limMax", &pid_lim_max_slider_val, 1, 0, 100));
-  // astra_push_item_to_list(PID, astra_new_slider_item("limMinInt", &pid_lim_min_int_slider_val, 1, -50, 0));
-  // astra_push_item_to_list(PID, astra_new_slider_item("limMaxInt", &pid_lim_max_int_slider_val, 1, 0, 50));
-  // astra_push_item_to_list(PID, astra_new_slider_item("SampleTime", &pid_sample_time_slider_val, 1, 1, 100));
-  // astra_push_item_to_list(PID, astra_new_slider_item("Deadzone", &stepper_deadzone_slider_val, 1, 0, 50));
-
-  /* ----------------------------------- DEBUG ---------------------------------- */
-  astra_list_item_t *Debug = astra_new_list_item("DEBUG");
+  /* ---------------------------------- 调试菜单 ---------------------------------- */
+  astra_list_item_t *Debug = astra_new_list_item("Debug");
   astra_push_item_to_list(astra_get_root_list(), Debug);
 
-  // 添加PID参数调节到Debug菜单
-  astra_push_item_to_list(Debug, PID);
-  astra_push_item_to_list(PID, astra_new_slider_item("Kp", &pid_kp_slider_val, 1, 0, 100));
-  astra_push_item_to_list(PID, astra_new_slider_item("Ki", &pid_ki_slider_val, 1, 0, 100));
-  astra_push_item_to_list(PID, astra_new_slider_item("Kd", &pid_kd_slider_val, 1, 0, 100));
-  astra_push_item_to_list(PID, astra_new_slider_item("tau", &pid_tau_slider_val, 1, 0, 100));
-  astra_push_item_to_list(PID, astra_new_slider_item("limMin", &pid_lim_min_slider_val, 1, -100, 0));
-  astra_push_item_to_list(PID, astra_new_slider_item("limMax", &pid_lim_max_slider_val, 1, 0, 100));
-  astra_push_item_to_list(PID, astra_new_slider_item("limMinInt", &pid_lim_min_int_slider_val, 1, -50, 0));
-  astra_push_item_to_list(PID, astra_new_slider_item("limMaxInt", &pid_lim_max_int_slider_val, 1, 0, 50));
-  astra_push_item_to_list(PID, astra_new_slider_item("SampleTime", &pid_sample_time_slider_val, 1, 1, 100));
-  astra_push_item_to_list(PID, astra_new_slider_item("Deadzone", &stepper_deadzone_slider_val, 1, 0, 50));
-  astra_push_item_to_list(PID, astra_new_slider_item("Laser Threshold", &pid_laser_threshold_slider_val, 1, 1, 100));
-  astra_push_item_to_list(PID, astra_new_slider_item("Laser Duration", &pid_laser_duration_slider_val, 1, 1, 500));
+  // 调试开关
+  astra_push_item_to_list(Debug, astra_new_switch_item("Show Coordinates", &debug_coordinate_info));
+  astra_push_item_to_list(Debug, astra_new_switch_item("Show Rotation", &debug_rotation_detection));
+  astra_push_item_to_list(Debug, astra_new_switch_item("Show Laser", &debug_pid_laser_info));
+  astra_push_item_to_list(Debug, astra_new_switch_item("PID Debug", &menu_pid_calculation_debug));
 
-  // 添加控制标志位到Debug菜单
-  astra_push_item_to_list(Debug, Flag);
-  astra_push_item_to_list(Flag, astra_new_switch_item("Stepper Tracking", &menu_stepper_tracking_enable));
-  astra_push_item_to_list(Flag, astra_new_switch_item("UART Data RX", &menu_uart_data_receive_enable));
-  astra_push_item_to_list(Flag, astra_new_switch_item("PID Params Update", &menu_pid_params_update_enable));
-  astra_push_item_to_list(Flag, astra_new_switch_item("PID Calc Debug", &menu_pid_calculation_debug));
-  astra_push_item_to_list(Flag, astra_new_switch_item("Stepper Cmd Debug", &menu_stepper_command_debug));
-  astra_push_item_to_list(Flag, astra_new_switch_item("PID Params Debug", &menu_pid_params_debug));
-  astra_push_item_to_list(Flag, astra_new_switch_item("Rotate Detect", &rotate_detect));
-  astra_push_item_to_list(Flag, astra_new_switch_item("PID Laser EN", &pid_laser_enable));
+  // 高级PID参数（调试用）
+  astra_list_item_t *Advanced_PID = astra_new_list_item("Advanced PID");
+  astra_push_item_to_list(Debug, Advanced_PID);
+  
+  astra_push_item_to_list(Advanced_PID, astra_new_slider_item("tau", &pid_tau_slider_val, 1, 0, 100));
+  astra_push_item_to_list(Advanced_PID, astra_new_slider_item("limMin", &pid_lim_min_slider_val, 1, -100, 0));
+  astra_push_item_to_list(Advanced_PID, astra_new_slider_item("limMax", &pid_lim_max_slider_val, 1, 0, 100));
+  astra_push_item_to_list(Advanced_PID, astra_new_slider_item("limMinInt", &pid_lim_min_int_slider_val, 1, -50, 0));
+  astra_push_item_to_list(Advanced_PID, astra_new_slider_item("limMaxInt", &pid_lim_max_int_slider_val, 1, 0, 50));
+  astra_push_item_to_list(Advanced_PID, astra_new_slider_item("SampleTime", &pid_sample_time_slider_val, 1, 1, 100));
 
-  // 步进电机重置/启动/关闭函数
-  astra_push_item_to_list(Debug, astra_new_user_item("Stepper_All RST", Stepper_All_Reset, NULL, NULL));
-  astra_push_item_to_list(Debug, astra_new_user_item("Stepper_All DIS", Stepper_All_Disable, NULL, NULL));
-  astra_push_item_to_list(Debug, astra_new_user_item("Stepper_All EN", Stepper_All_Enable, NULL, NULL));
-
-  astra_push_item_to_list(Debug, astra_new_switch_item("Lazer EN", &menu_lazer_enable));
-
-  astra_push_item_to_list(Debug, astra_new_slider_item("Yaw Tar", &yaw_pid_target_slider_val, 1, -100, 100));
-  astra_push_item_to_list(Debug, astra_new_slider_item("Pitch Tar", &pitch_pid_target_slider_val, 1, -100, 100));
+  /* ---------------------------------- 默认设置 ---------------------------------- */
+  // 核心功能默认设置
+  menu_uart_data_receive_enable = 1;    // 默认允许接收数据
+  menu_pid_params_update_enable = 1;    // 默认允许PID参数更新
+  
+  // 调试信息默认关闭（减少干扰）
+  debug_coordinate_info = 0;
+  debug_rotation_detection = 0;
+  debug_pid_laser_info = 0;
+  menu_pid_calculation_debug = 0;
 
   // 同步PID滑块到浮点数
   sync_pid_slider_to_float();
@@ -433,11 +500,22 @@ int main(void)
     {
       // 启动旋转检测时，临时禁用PID跟踪
       menu_stepper_tracking_enable = 0;
+      
+      if (debug_rotation_detection)
+      {
+        printf("[Rotation] 用户启动旋转检测模式\r\n");
+      }
+      
       Start_Rotate_Detection();
     }
     else if (!rotate_detect && rotation_active)
     {
       // 手动停止旋转检测
+      if (debug_rotation_detection)
+      {
+        printf("[Rotation] 用户手动停止旋转检测\r\n");
+      }
+      
       Stop_Rotate_Detection();
     }
 
@@ -446,6 +524,9 @@ int main(void)
 
     // 处理PID激光控制
     PID_Laser_Process();
+
+    // 系统状态显示 (定期显示)
+    System_Status_Display();
 
     oled_clear_buffer();
 
