@@ -23,13 +23,20 @@ uint8_t packet_index = 0;            // 当前数据包接收的字节索引
 uint8_t packet_receiving = 0;        // 数据包接收状态标志：0-未接收，1-正在接收
 
 // 全局坐标数据存储变量，初始化为(0, 0)
-int16_t rectangle_coordinate_arr[2] = {0, 0}; // [0]: x, [1]: y
+int16_t rectangle_coordinate_arr[2] = {0, 0}; // [0]: x差值, [1]: y差值 (相对于屏幕中心的偏移)
 
 volatile _Bool uart_packet_received = 0; // UART数据包接收完成标志位（系统设置）
 
 volatile _Bool target_lost = 0; // 目标丢失标志位（0=目标正常，1=目标丢失）
-int16_t last_valid_x = 0;       // 上一次有效的X坐标
-int16_t last_valid_y = 0;       // 上一次有效的Y坐标
+int16_t last_valid_x = 0;       // 上一次有效的X差值
+int16_t last_valid_y = 0;       // 上一次有效的Y差值
+
+// 目标丢失检测相关变量
+uint32_t last_packet_time = 0;     // 上一次接收到数据包的时间
+uint32_t packet_timeout_ms = 500;  // 数据包超时时间（500ms）
+uint32_t same_data_count = 0;      // 连续接收相同数据的次数
+uint32_t same_data_threshold = 10; // 判定为目标丢失的相同数据阈值
+int16_t prev_x = 0, prev_y = 0;    // 上一次的差值数据
 
 volatile _Bool auto_zero_return_enable = 1;    // 自动回零使能标志位
 volatile _Bool auto_zero_return_triggered = 0; // 自动回零已触发标志位
@@ -61,97 +68,122 @@ uint8_t UART_Parse_Packet(uint8_t data)
                 // 检查数据类型标志位
                 uint8_t data_type = packet_buf[1];
 
-                if (data_type == 0x00 || data_type == 0xFF || data_type == 0x01 || data_type == 0xF1)
+                // 根据K230发送格式：[0x55, data_type, sign, value_h, value_l, value_z, 0xFA]
+                // data_type: 0x00=X差值, 0xFF=Y差值
+                if (data_type == 0x00 || data_type == 0xFF)
                 {
-                    uint8_t sign = packet_buf[2];
-                    uint8_t h = packet_buf[3];
-                    uint8_t l = packet_buf[4];
-                    uint8_t z = packet_buf[5];
+                    uint8_t sign = packet_buf[2]; // 符号位：1=正数，0=负数
+                    uint8_t h = packet_buf[3];    // 高字节
+                    uint8_t l = packet_buf[4];    // 低字节
+                    uint8_t z = packet_buf[5];    // 扩展字节
                     uint16_t val = 0;
 
-                    // 解码坐标值
+                    // 解码差值绝对值（根据K230的conversion_position函数逻辑）
                     if (h == 255 && l == 255)
                     {
-                        val = 510 + z;
+                        val = 510 + z; // 大于510的值
                     }
                     else if (h == 255)
                     {
-                        val = 255 + l;
+                        val = 255 + l; // 255-510之间的值
                     }
                     else
                     {
-                        val = h;
+                        val = h; // 0-254之间的值
                     }
+
+                    // 应用符号位得到真实差值
                     int16_t diff = (sign ? 1 : -1) * (int16_t)val;
 
-                    // 根据数据类型处理坐标
+                    // 检测是否为连续相同数据（可能表示目标丢失）
+                    uint32_t current_time = HAL_GetTick();
+                    _Bool is_same_data = 0;
+
                     if (data_type == 0x00)
                     {
-                        // 正常X坐标
-                        rectangle_coordinate_arr[0] = diff;
-                        last_valid_x = diff; // 更新上一次有效X坐标
+                        is_same_data = (diff == prev_x);
+                        prev_x = diff;
+                    }
+                    else
+                    {
+                        is_same_data = (diff == prev_y);
+                        prev_y = diff;
+                    }
 
-                        // 如果之前目标丢失，现在检测到正常坐标，记录恢复
-                        if (target_lost)
-                        {
-                            printf("[Target] X coordinate recovered: %d\r\n", diff);
-                        }
-                        // 注意：这里不立即清除target_lost，需要Y坐标也正常才完全恢复
+                    // 检测目标丢失：连续相同数据或数据包超时
+                    if (is_same_data)
+                    {
+                        same_data_count++;
+                    }
+                    else
+                    {
+                        same_data_count = 0;
+                    }
+
+                    // 根据数据类型更新对应坐标差值
+                    if (data_type == 0x00)
+                    {
+                        // X差值更新
+                        rectangle_coordinate_arr[0] = diff;
+                        last_valid_x = diff;
                     }
                     else if (data_type == 0xFF)
                     {
-                        // 正常Y坐标
+                        // Y差值更新
                         rectangle_coordinate_arr[1] = diff;
-                        last_valid_y = diff; // 更新上一次有效Y坐标
+                        last_valid_y = diff;
+                    }
 
-                        // 如果之前目标丢失，现在检测到正常坐标，清除丢失标志
+                    // 判断目标状态
+                    _Bool target_lost_prev = target_lost;
+
+                    if (same_data_count >= same_data_threshold ||
+                        (current_time - last_packet_time) > packet_timeout_ms)
+                    {
+                        if (!target_lost)
+                        {
+                            target_lost = 1;
+                            target_lost_start_time = current_time;
+                            printf("[Target] 目标可能丢失：连续相同数据 %lu 次或超时\r\n", same_data_count);
+                        }
+                    }
+                    else
+                    {
                         if (target_lost)
                         {
-                            printf("[Target] Y coordinate recovered: %d\r\n", diff);
-                            target_lost = 0;                // 恢复正常，清除目标丢失标志
-                            auto_zero_return_triggered = 0; // 重置自动回零触发标志
-                            printf("[Target] Target tracking resumed\r\n");
+                            target_lost = 0;
+                            auto_zero_return_triggered = 0;
+                            printf("[Target] 目标跟踪恢复正常\r\n");
                         }
-                    }
-                    else if (data_type == 0x01)
-                    {
-                        // 目标丢失 - X坐标为上一次有效值
-                        rectangle_coordinate_arr[0] = last_valid_x;
-                        if (!target_lost) // 只在第一次丢失时输出和记录时间
-                        {
-                            printf("[Target] X coordinate lost, using last valid: %d\r\n", last_valid_x);
-                            target_lost_start_time = HAL_GetTick(); // 记录目标丢失开始时间
-                        }
-                        target_lost = 1; // 设置目标丢失标志
-                    }
-                    else if (data_type == 0xF1)
-                    {
-                        // 目标丢失 - Y坐标为上一次有效值
-                        rectangle_coordinate_arr[1] = last_valid_y;
-                        if (!target_lost) // 只在第一次丢失时记录时间
-                        {
-                            target_lost_start_time = HAL_GetTick(); // 记录目标丢失开始时间
-                        }
-                        target_lost = 1; // 设置目标丢失标志
-                        printf("[Target] Y lost, using last valid: %d\r\n", last_valid_y);
                     }
 
+                    last_packet_time = current_time;
                     uart_packet_received = 1; // 解包成功，置接收完成标志
 
-                    // 调试输出
+                    // 调试输出 - 显示差值信息
                     if (target_lost)
                     {
-                        printf("[UART] Target LOST - X: %d, Y: %d (using last valid)\r\n",
+                        printf("[UART] 目标丢失 - X差值: %d, Y差值: %d (可能为历史数据)\r\n",
                                rectangle_coordinate_arr[0], rectangle_coordinate_arr[1]);
                     }
                     else
                     {
-                        printf("[UART] Target OK - X: %d, Y: %d\r\n",
+                        printf("[UART] 目标正常 - X差值: %d, Y差值: %d (相对屏幕中心偏移)\r\n",
                                rectangle_coordinate_arr[0], rectangle_coordinate_arr[1]);
                     }
 
                     return 1;
                 }
+                else
+                {
+                    // 未知数据类型，丢弃数据包
+                    printf("[UART] 未知数据类型: 0x%02X\r\n", data_type);
+                }
+            }
+            else
+            {
+                // 包尾校验失败
+                printf("[UART] 包尾校验失败: 0x%02X\r\n", packet_buf[UART_PACKET_LEN - 1]);
             }
         }
         else if (packet_index > UART_PACKET_LEN)

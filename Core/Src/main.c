@@ -169,7 +169,7 @@ void Start_Rotate_Detection(void)
     ZDT_Stepper_Set_position(zdt_stepper_motors[0],
                              ZDT_STEPPER_CCW,
                              1.0f,                      // 1 RPM速度
-                             180.0f,                    // 180度
+                             360.0f,                    // 360度
                              ZDT_STEPPER_REL_POS_MODE,  // 相对位置模式
                              ZDT_STEPPER_SYNC_DISABLE); // 不同步
   }

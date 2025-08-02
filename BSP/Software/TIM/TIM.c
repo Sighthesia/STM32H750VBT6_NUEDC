@@ -139,7 +139,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
             {
                 static uint32_t last_coord_debug_time = 0;
                 uint32_t current_time = HAL_GetTick();
-                
+
                 // 每200ms输出一次坐标信息
                 if ((current_time - last_coord_debug_time) >= 200)
                 {
@@ -166,8 +166,8 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
             if (stepper_update_pending)
             {
                 // 更新步进电机位置
-                // Yaw_Stepper_Position_Update(yaw_pid_output);
-                // Pitch_Stepper_Position_Update(pitch_pid_output);
+                Yaw_Stepper_Position_Update(yaw_pid_output);
+                Pitch_Stepper_Position_Update(pitch_pid_output);
 
                 if (menu_pid_calculation_debug)
                 {

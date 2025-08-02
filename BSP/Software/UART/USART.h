@@ -37,7 +37,7 @@ typedef struct
 } uart_rect_coord_t;
 
 // 全局坐标数据存储变量，初始化为(0, 0)
-extern int16_t rectangle_coordinate_arr[2]; // [0]: x, [1]: y
+extern int16_t rectangle_coordinate_arr[2]; // [0]: x差值, [1]: y差值 (相对于屏幕中心的偏移)
 
 /* --------------------------------- 系统状态标志位（内部使用） -------------------------------- */
 extern volatile _Bool uart_packet_received; // UART数据包接收完成标志位（系统设置）
@@ -56,6 +56,12 @@ extern volatile _Bool auto_zero_return_enable;    // 自动回零使能标志位
 extern volatile _Bool auto_zero_return_triggered; // 自动回零已触发标志位
 extern uint32_t target_lost_start_time;           // 目标丢失开始时间戳
 extern uint32_t auto_zero_return_timeout_ms;      // 自动回零超时时间（1秒）
+
+// 目标丢失检测相关变量
+extern uint32_t last_packet_time;    // 上一次接收到数据包的时间
+extern uint32_t packet_timeout_ms;   // 数据包超时时间（500ms）
+extern uint32_t same_data_count;     // 连续接收相同数据的次数
+extern uint32_t same_data_threshold; // 判定为目标丢失的相同数据阈值
 
 uint8_t UART_Parse_Packet(uint8_t data);
 
