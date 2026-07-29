@@ -28,6 +28,7 @@
 #include "ZDT_Stepper.h"
 #include "Car_Motor_USART.h"
 #include "ANO_Host.h"
+#include "ips114_lcd.h"
 
 /* USER CODE END Includes */
 
@@ -128,6 +129,8 @@ static void App_Peripheral_Init(void)
   Car_Motor_Init();
 #endif
   ANO_Host_Init();
+  IPS114_LCD_Init();
+  IPS114_LCD_ShowSelfTest();
 }
 
 static void App_Process(void)
