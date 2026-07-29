@@ -1,2 +1,36 @@
 # Workflow runtime state (ignore all runtime state)
 .just-demand/state/
+
+# Build output
+build/
+cmake-build-*/
+
+# Compiled artifacts
+*.o
+*.d
+*.elf
+*.hex
+*.bin
+*.map
+*.srec
+
+# CMake generated
+compile_commands.json
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+CTestTestfile.cmake
+Makefile
+*.cmake
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# CubeMX generated (only if you keep manual changes under BSP/Core)
+# Uncomment if you want to track Generated/ explicitly:
+# !Core/Inc/
+# !Core/Src/
