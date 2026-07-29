@@ -59,6 +59,8 @@ void ZDT_Stepper_Register_Motor(UART_HandleTypeDef *huart, uint8_t motor_id);
 ZDTStepperMotor *ZDT_Stepper_Get_Motor(UART_HandleTypeDef *huart, uint8_t motor_id);
 void ZDT_Stepper_UART_Send_Data(ZDTStepperMotor *motor, uint8_t *data, size_t length);
 void ZDT_Stepper_USRT_RX_callback(UART_HandleTypeDef *huart, uint16_t Size);
+void ZDT_Stepper_UART_TxCplt_Callback(UART_HandleTypeDef *huart);
+void ZDT_Stepper_UART_Error_Callback(UART_HandleTypeDef *huart);
 
 void ZDT_Stepper_Enable(ZDTStepperMotor *motor, uint8_t enable, uint8_t sync_flag);
 void ZDT_Stepper_Set_Speed(ZDTStepperMotor *motor, uint8_t dir, float speed_f, uint8_t accel_accel, uint8_t sync_flag);

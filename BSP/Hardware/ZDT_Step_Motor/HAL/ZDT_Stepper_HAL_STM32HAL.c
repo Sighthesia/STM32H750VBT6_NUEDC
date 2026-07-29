@@ -12,9 +12,9 @@
  * @param   size  数据长度
  *****************************************************************************
  */
-static void Uart_Transmit(UART_HandleTypeDef *huart, uint8_t *data, uint16_t size)
+static HAL_StatusTypeDef Uart_Transmit(UART_HandleTypeDef *huart, const uint8_t *data, uint16_t size)
 {
-    HAL_UART_Transmit_IT(huart, data, size);
+    return HAL_UART_Transmit_IT(huart, data, size);
 }
 
 /**

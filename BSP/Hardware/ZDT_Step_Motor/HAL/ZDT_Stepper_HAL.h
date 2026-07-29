@@ -15,7 +15,7 @@ extern "C"
      */
     typedef struct
     {
-        void (*Uart_Transmit)(UART_HandleTypeDef *huart, uint8_t *data, uint16_t size);
+        HAL_StatusTypeDef (*Uart_Transmit)(UART_HandleTypeDef *huart, const uint8_t *data, uint16_t size);
         void (*Delay_Ms)(uint32_t ms);
     } zdt_stepper_hal_t;
 

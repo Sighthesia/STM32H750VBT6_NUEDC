@@ -229,11 +229,12 @@ void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size)
     ZDT_Stepper_USRT_RX_callback(huart, Size);
 }
 
-// void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart)
-// {
-//     if (huart->Instance == USART3)
-//     {
-//         // 发送完成，可以进行下一步操作
-//         printf("UART3 Transmission Complete\n");
-//     }
-// }
+void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart)
+{
+    ZDT_Stepper_UART_TxCplt_Callback(huart);
+}
+
+void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart)
+{
+    ZDT_Stepper_UART_Error_Callback(huart);
+}

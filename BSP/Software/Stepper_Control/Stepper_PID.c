@@ -56,6 +56,10 @@ uint32_t last_yaw_update_time = 0;   // 航向轴上次更新时间（ms）
 uint32_t last_pitch_update_time = 0; // 俯仰轴上次更新时间（ms）
 float last_yaw_output = 0.0f;        // 航向轴上次输出值
 float last_pitch_output = 0.0f;      // 俯仰轴上次输出值
+static _Bool yaw_stepper_running = 0;
+static _Bool pitch_stepper_running = 0;
+static uint8_t last_yaw_direction = ZDT_STEPPER_CCW;
+static uint8_t last_pitch_direction = ZDT_STEPPER_CCW;
 /* --------------------------------- 自定义部分结束 -------------------------------- */
 
 // 中间变量
@@ -140,62 +144,52 @@ void sync_pid_slider_to_float(void)
 void Yaw_Stepper_Position_Update(float pid_output)
 {
     uint32_t current_time = HAL_GetTick(); // 获取当前时间戳
-
-    // 频率限制：距离上次更新时间过短则跳过
-    if ((current_time - last_yaw_update_time) < min_update_interval_ms)
-    {
-        if (menu_stepper_command_debug)
-        {
-            printf("[Yaw] Update too frequent, skipped (interval: %lums)\r\n",
-                   current_time - last_yaw_update_time);
-        }
-        return;
-    }
-
-    // 输出变化检测：变化太小则跳过
-    if (fabsf(pid_output - last_yaw_output) < min_output_change_threshold)
-    {
-        if (menu_stepper_command_debug)
-        {
-            printf("[Yaw] Output change too small: %.3f, skipped\r\n",
-                   fabsf(pid_output - last_yaw_output));
-        }
-        return;
-    }
-
-    uint8_t dir = (pid_output >= 0) ? 0x00 : 0x01; // 0x01: CCW(逆时针), 0x00: CW(顺时针)
     float speed = fabsf(pid_output);
+    uint8_t dir = (pid_output >= 0) ? ZDT_STEPPER_CCW : ZDT_STEPPER_CW;
+    _Bool in_deadzone = speed <= stepper_deadzone_threshold;
+
+    // 进入死区必须立即停止，不受正常速度更新节流限制。
+    if (in_deadzone)
+    {
+        if (yaw_stepper_running)
+        {
+            ZDT_Stepper_stop(zdt_stepper_motors[0], ZDT_STEPPER_SYNC_DISABLE);
+            yaw_stepper_running = 0;
+            if (menu_stepper_command_debug)
+            {
+                printf("[Yaw] Entered deadzone, motor stopped\r\n");
+            }
+        }
+        last_yaw_update_time = current_time;
+        last_yaw_output = pid_output;
+        return;
+    }
+
+    // 频率和幅值节流只适用于已在运行的速度更新。
+    if (yaw_stepper_running && dir == last_yaw_direction &&
+        ((current_time - last_yaw_update_time) < min_update_interval_ms ||
+         fabsf(pid_output - last_yaw_output) < min_output_change_threshold))
+    {
+        if (menu_stepper_command_debug)
+        {
+            printf("[Yaw] Speed update skipped\r\n");
+        }
+        return;
+    }
+
     pid_yaw_angle = pid_output;
-
-    /* --------------------------------- 此处修改: 死区控制逻辑 -------------------------------- */
-    // 死区控制：小于阈值的输出被忽略，消除微小震荡
-    if (speed < stepper_deadzone_threshold)
-    {
-        speed = 0.0f; // 在死区内，停止电机
-        if (menu_stepper_command_debug)
-        {
-            printf("[Yaw] In Deadzone: %.2f < %.2f, Motor Stopped\r\n", speed, stepper_deadzone_threshold);
-        }
-    }
-    else
-    {
-        if (menu_stepper_command_debug)
-        {
-            printf("[Yaw] Dir: %s, Speed: %.2f, Angle: %.2f, Output: %.2f, Interval: %lums\r\n",
-                   dir ? "CCW" : "CW", speed, pid_yaw_angle, pid_output,
-                   current_time - last_yaw_update_time);
-        }
-    }
-
-    // 更新记录
+    ZDT_Stepper_Set_Speed(zdt_stepper_motors[0], dir, speed,
+                          ZDT_STEPPER_SPEED_ACCEL, ZDT_STEPPER_SYNC_DISABLE);
+    yaw_stepper_running = 1;
+    last_yaw_direction = dir;
     last_yaw_update_time = current_time;
     last_yaw_output = pid_output;
 
-    // 内存屏障，防止编译器过度优化
-    __asm volatile("" ::: "memory");
-
-    /* --------------------------------- 自定义部分结束 -------------------------------- */
-    ZDT_Stepper_Set_Speed(zdt_stepper_motors[0], dir, speed, ZDT_STEPPER_REL_POS_MODE, ZDT_STEPPER_SYNC_DISABLE);
+    if (menu_stepper_command_debug)
+    {
+        printf("[Yaw] Dir: %s, Speed: %.2f, Angle: %.2f, Output: %.2f\r\n",
+               dir == ZDT_STEPPER_CCW ? "CCW" : "CW", speed, pid_yaw_angle, pid_output);
+    }
 }
 
 /** ***************************************************************************
@@ -205,60 +199,50 @@ void Yaw_Stepper_Position_Update(float pid_output)
 void Pitch_Stepper_Position_Update(float pid_output)
 {
     uint32_t current_time = HAL_GetTick(); // 获取当前时间戳
-
-    // 频率限制：距离上次更新时间过短则跳过
-    if ((current_time - last_pitch_update_time) < min_update_interval_ms)
-    {
-        if (menu_stepper_command_debug)
-        {
-            printf("[Pitch] Update too frequent, skipped (interval: %lums)\r\n",
-                   current_time - last_pitch_update_time);
-        }
-        return;
-    }
-
-    // 输出变化检测：变化太小则跳过
-    if (fabsf(pid_output - last_pitch_output) < min_output_change_threshold)
-    {
-        if (menu_stepper_command_debug)
-        {
-            printf("[Pitch] Output change too small: %.3f, skipped\r\n",
-                   fabsf(pid_output - last_pitch_output));
-        }
-        return;
-    }
-
-    uint8_t dir = (pid_output >= 0) ? 0x01 : 0x00; // 0x00: CW(顺时针), 0x01: CCW(逆时针)
     float speed = fabsf(pid_output);
+    uint8_t dir = (pid_output >= 0) ? ZDT_STEPPER_CW : ZDT_STEPPER_CCW;
+    _Bool in_deadzone = speed <= stepper_deadzone_threshold;
+
+    // 进入死区必须立即停止，不受正常速度更新节流限制。
+    if (in_deadzone)
+    {
+        if (pitch_stepper_running)
+        {
+            ZDT_Stepper_stop(zdt_stepper_motors[1], ZDT_STEPPER_SYNC_DISABLE);
+            pitch_stepper_running = 0;
+            if (menu_stepper_command_debug)
+            {
+                printf("[Pitch] Entered deadzone, motor stopped\r\n");
+            }
+        }
+        last_pitch_update_time = current_time;
+        last_pitch_output = pid_output;
+        return;
+    }
+
+    // 频率和幅值节流只适用于已在运行的速度更新。
+    if (pitch_stepper_running && dir == last_pitch_direction &&
+        ((current_time - last_pitch_update_time) < min_update_interval_ms ||
+         fabsf(pid_output - last_pitch_output) < min_output_change_threshold))
+    {
+        if (menu_stepper_command_debug)
+        {
+            printf("[Pitch] Speed update skipped\r\n");
+        }
+        return;
+    }
+
     pid_pitch_angle = pid_output;
-
-    /* --------------------------------- 此处修改: 死区控制逻辑 -------------------------------- */
-    // 死区控制：小于阈值的输出被忽略，消除微小震荡
-    if (speed < stepper_deadzone_threshold)
-    {
-        speed = 0.0f; // 在死区内，停止电机
-        if (menu_stepper_command_debug)
-        {
-            printf("[Pitch] In Deadzone: %.2f < %.2f, Motor Stopped\r\n", speed, stepper_deadzone_threshold);
-        }
-    }
-    else
-    {
-        if (menu_stepper_command_debug)
-        {
-            printf("[Pitch] Dir: %s, Speed: %.2f, Angle: %.2f, Output: %.2f, Interval: %lums\r\n",
-                   dir ? "CCW" : "CW", speed, pid_pitch_angle, pid_output,
-                   current_time - last_pitch_update_time);
-        }
-    }
-
-    // 更新记录
+    ZDT_Stepper_Set_Speed(zdt_stepper_motors[1], dir, speed,
+                          ZDT_STEPPER_SPEED_ACCEL, ZDT_STEPPER_SYNC_DISABLE);
+    pitch_stepper_running = 1;
+    last_pitch_direction = dir;
     last_pitch_update_time = current_time;
     last_pitch_output = pid_output;
 
-    // 内存屏障，防止编译器过度优化
-    __asm volatile("" ::: "memory");
-
-    /* --------------------------------- 自定义部分结束 -------------------------------- */
-    ZDT_Stepper_Set_Speed(zdt_stepper_motors[1], dir, speed, ZDT_STEPPER_REL_POS_MODE, ZDT_STEPPER_SYNC_DISABLE);
+    if (menu_stepper_command_debug)
+    {
+        printf("[Pitch] Dir: %s, Speed: %.2f, Angle: %.2f, Output: %.2f\r\n",
+               dir == ZDT_STEPPER_CCW ? "CCW" : "CW", speed, pid_pitch_angle, pid_output);
+    }
 }

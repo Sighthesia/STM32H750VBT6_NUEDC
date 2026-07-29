@@ -15,6 +15,8 @@
 // 位置模式
 #define ZDT_STEPPER_REL_POS_MODE 0 // 相对位置模式
 #define ZDT_STEPPER_ABS_POS_MODE 1 // 绝对位置模式
+// 速度控制加速度档位；0 表示不使用曲线加减速。
+#define ZDT_STEPPER_SPEED_ACCEL 0
 // 是否存储
 #define ZDT_STEPPER_STORE 1    // 存储标志
 #define ZDT_STEPPER_NO_STORE 0 // 不存储标

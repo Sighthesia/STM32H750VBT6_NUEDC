@@ -13,6 +13,100 @@ static zdt_stepper_motor_config_t zdt_stepper_motor_config_table[] = {
 static ZDTStepperUart uart_motors[ZDT_STEPPER_MAX_UART];
 static uint8_t uart_count = 0;
 
+#define ZDT_STEPPER_TX_MAX_LENGTH 13U
+#define ZDT_STEPPER_TX_QUEUE_DEPTH 8U
+
+typedef struct
+{
+    UART_HandleTypeDef *huart;
+    uint8_t active_data[ZDT_STEPPER_TX_MAX_LENGTH];
+    uint8_t active_length;
+    uint8_t busy;
+    uint8_t queue[ZDT_STEPPER_TX_QUEUE_DEPTH][ZDT_STEPPER_TX_MAX_LENGTH];
+    uint8_t queue_length[ZDT_STEPPER_TX_QUEUE_DEPTH];
+    uint8_t queue_head;
+    uint8_t queue_tail;
+    uint8_t queue_count;
+    uint8_t pending_speed[ZDT_STEPPER_TX_MAX_LENGTH];
+    uint8_t pending_speed_length;
+    uint8_t speed_pending;
+    uint32_t dropped_commands;
+    uint32_t transmit_errors;
+} ZDTStepperTxState;
+
+static ZDTStepperTxState uart_tx[ZDT_STEPPER_MAX_UART];
+
+static ZDTStepperTxState *ZDT_Stepper_Get_Tx_State(UART_HandleTypeDef *huart)
+{
+    for (uint8_t i = 0; i < uart_count; i++)
+    {
+        if (uart_tx[i].huart == huart)
+        {
+            return &uart_tx[i];
+        }
+    }
+
+    return NULL;
+}
+
+static void ZDT_Stepper_Start_Next_Transmit(ZDTStepperTxState *state)
+{
+    if (!state || state->busy)
+    {
+        return;
+    }
+
+    const uint8_t *data = NULL;
+    uint8_t length = 0;
+    uint8_t from_queue = 0;
+    uint8_t queue_index = 0;
+
+    if (state->queue_count > 0U)
+    {
+        data = state->queue[state->queue_head];
+        length = state->queue_length[state->queue_head];
+        from_queue = 1;
+        queue_index = state->queue_head;
+    }
+    else if (state->speed_pending)
+    {
+        data = state->pending_speed;
+        length = state->pending_speed_length;
+    }
+    else
+    {
+        return;
+    }
+
+    memcpy(state->active_data, data, length);
+    state->active_length = length;
+    state->busy = 1U;
+    if (from_queue)
+    {
+        state->queue_head = (uint8_t)((state->queue_head + 1U) % ZDT_STEPPER_TX_QUEUE_DEPTH);
+        state->queue_count--;
+    }
+    else
+    {
+        state->speed_pending = 0U;
+    }
+
+    if (zdt_stepper_hal.Uart_Transmit(state->huart, state->active_data, length) != HAL_OK)
+    {
+        state->busy = 0U;
+        state->transmit_errors++;
+        if (from_queue)
+        {
+            state->queue_head = queue_index;
+            state->queue_count++;
+        }
+        else
+        {
+            state->speed_pending = 1U;
+        }
+    }
+}
+
 // 全局电机对象指针数组
 ZDTStepperMotor *zdt_stepper_motors[ZDT_STEPPER_MOTOR_CONFIG_NUM] = {0};
 
@@ -34,6 +128,7 @@ void ZDT_Stepper_Init(void)
 {
     uart_count = 0;
     memset(uart_motors, 0, sizeof(uart_motors));
+    memset(uart_tx, 0, sizeof(uart_tx));
 
     for (uint32_t i = 0; i < ZDT_STEPPER_MOTOR_CONFIG_NUM; i++)
     {
@@ -55,6 +150,7 @@ void ZDT_Stepper_Init(void)
             uart_motors[uart_count].huart = huart;
             uart_motors[uart_count].hdma_rx = hdma_rx;
             uart_motors[uart_count].motor_count = 0;
+            uart_tx[uart_count].huart = huart;
             uart_idx = uart_count;
             uart_count++;
         }
@@ -360,11 +456,72 @@ void ZDT_Stepper_USRT_RX_callback(UART_HandleTypeDef *huart, uint16_t Size)
  */
 void ZDT_Stepper_UART_Send_Data(ZDTStepperMotor *motor, uint8_t *data, size_t length)
 {
-    if (motor && motor->huart)
+    if (!motor || !motor->huart || !data || length == 0U || length > ZDT_STEPPER_TX_MAX_LENGTH)
     {
-        extern zdt_stepper_hal_t zdt_stepper_hal;
-        zdt_stepper_hal.Uart_Transmit(motor->huart, data, (uint16_t)length);
+        return;
     }
+
+    ZDTStepperTxState *state = ZDT_Stepper_Get_Tx_State(motor->huart);
+    if (!state)
+    {
+        return;
+    }
+
+    uint32_t primask = __get_PRIMASK();
+    __disable_irq();
+
+    if (data[1] == 0xF6U)
+    {
+        /* PID speed updates supersede older pending speed requests on this UART. */
+        memcpy(state->pending_speed, data, length);
+        state->pending_speed_length = (uint8_t)length;
+        state->speed_pending = 1U;
+    }
+    else if (state->queue_count < ZDT_STEPPER_TX_QUEUE_DEPTH)
+    {
+        memcpy(state->queue[state->queue_tail], data, length);
+        state->queue_length[state->queue_tail] = (uint8_t)length;
+        state->queue_tail = (uint8_t)((state->queue_tail + 1U) % ZDT_STEPPER_TX_QUEUE_DEPTH);
+        state->queue_count++;
+
+        if (data[1] == 0xFEU)
+        {
+            /* A stop must not be followed by an obsolete speed request. */
+            state->speed_pending = 0U;
+        }
+    }
+    else
+    {
+        state->dropped_commands++;
+    }
+
+    ZDT_Stepper_Start_Next_Transmit(state);
+    __set_PRIMASK(primask);
+}
+
+void ZDT_Stepper_UART_TxCplt_Callback(UART_HandleTypeDef *huart)
+{
+    ZDTStepperTxState *state = ZDT_Stepper_Get_Tx_State(huart);
+    if (!state)
+    {
+        return;
+    }
+
+    state->busy = 0U;
+    ZDT_Stepper_Start_Next_Transmit(state);
+}
+
+void ZDT_Stepper_UART_Error_Callback(UART_HandleTypeDef *huart)
+{
+    ZDTStepperTxState *state = ZDT_Stepper_Get_Tx_State(huart);
+    if (!state || huart->gState == HAL_UART_STATE_BUSY_TX)
+    {
+        return;
+    }
+
+    state->busy = 0U;
+    state->transmit_errors++;
+    ZDT_Stepper_Start_Next_Transmit(state);
 }
 /* 自定义部分结束 */
 
@@ -373,7 +530,7 @@ void ZDT_Stepper_Enable(ZDTStepperMotor *motor, uint8_t enable, uint8_t sync_fla
     if (!motor)
         return;
 
-    static uint8_t command[6];
+    uint8_t command[6];
     command[0] = motor->id; // 地址
     command[1] = 0xF3;      // 命令头
     command[2] = 0xAB;      // 命令码
@@ -400,7 +557,7 @@ void ZDT_Stepper_Set_Speed(ZDTStepperMotor *motor, uint8_t dir, float speed_f, u
 
     uint16_t speed = (uint16_t)(speed_f * 10); // 转换为两个字节的数据
     // 命令格式：地址 + 0xF6 + 方向 + 速度高 + 速度低 + 加速度档位 + 多机同步标志 + 校验字节
-    static uint8_t command[8];
+    uint8_t command[8];
     command[0] = motor->id;           // 地址
     command[1] = 0xF6;                // 命令头
     command[2] = dir;                 // 方向 (01: CCW, 00: CW)
@@ -437,7 +594,7 @@ void ZDT_Stepper_Set_position(ZDTStepperMotor *motor, uint8_t dir, float speed_f
     uint8_t accel_accel = 0;                   // 默认加速度档位为0（直线加减速）
 
     // 命令格式：地址 + 0xFD + 方向 + 速度高 + 速度低 + 加速度档位 + 脉冲数(4字节) + 相对/绝对 + 同步 + 校验
-    static uint8_t command[13];
+    uint8_t command[13];
     command[0] = motor->id;                  // 地址
     command[1] = 0xFD;                       // 命令头
     command[2] = dir;                        // 方向 (01: CCW, 00: CW)
@@ -474,7 +631,7 @@ void ZDT_Stepper_Set_T_position(ZDTStepperMotor *motor, uint8_t dir, float speed
     uint16_t speed = (uint16_t)(speed_f * 10); // 速度乘以 10
 
     // 命令格式：地址 + 0xFD + 方向 + 速度高 + 速度低 + 加速度档位 + 脉冲数(4字节) + 相对/绝对 + 同步 + 校验
-    static uint8_t command[13];
+    uint8_t command[13];
     command[0] = motor->id;                  // 地址
     command[1] = 0xFD;                       // 命令头
     command[2] = dir;                        // 方向 (01: CCW, 00: CW)
@@ -507,7 +664,7 @@ void ZDT_Stepper_torque_control(ZDTStepperMotor *motor, uint8_t dir, uint16_t cu
         return;
 
     // 命令格式
-    static uint8_t command[9];
+    uint8_t command[9];
     command[0] = motor->id;                  // 地址
     command[1] = 0xF5;                       // 命令头
     command[2] = dir;                        // 符号 (00: 正电流, 01: 负电流)
@@ -532,7 +689,7 @@ void ZDT_Stepper_start_sync_motion(ZDTStepperMotor *motor)
         return;
 
     // 命令格式
-    static uint8_t command[4];
+    uint8_t command[4];
     command[0] = motor->id; // 地址
     command[1] = 0xFF;      // 命令头
     command[2] = 0x66;      // 多机同步运动命令
@@ -553,7 +710,7 @@ void ZDT_Stepper_stop(ZDTStepperMotor *motor, uint8_t sync_flag)
         return;
 
     // 命令格式
-    static uint8_t command[5];
+    uint8_t command[5];
     command[0] = motor->id; // 地址
     command[1] = 0xFE;      // 命令头
     command[2] = 0x98;      // 立即停止命令
@@ -573,7 +730,7 @@ void ZDT_Stepper_clear_current_position(ZDTStepperMotor *motor)
         return;
 
     // 命令格式
-    static uint8_t command[4];
+    uint8_t command[4];
     command[0] = motor->id; // 地址
     command[1] = 0x0A;      // 命令头
     command[2] = 0x6D;      // 固定字节
@@ -594,7 +751,7 @@ void ZDT_Stepper_trigger_zero_return(ZDTStepperMotor *motor, uint8_t return_mode
         return;
 
     // 命令格式
-    static uint8_t command[5];
+    uint8_t command[5];
     command[0] = motor->id;   // 地址
     command[1] = 0x9A;        // 命令头
     command[2] = return_mode; // 回零模式
@@ -614,7 +771,7 @@ void ZDT_Stepper_release_stall_protection(ZDTStepperMotor *motor)
         return;
 
     // 命令格式
-    static uint8_t command[4];
+    uint8_t command[4];
     command[0] = motor->id; // 地址
     command[1] = 0x0E;      // 命令头
     command[2] = 0x52;      // 固定字节
@@ -633,7 +790,7 @@ void ZDT_Stepper_trigger_encoder_calibration(ZDTStepperMotor *motor)
         return;
 
     // 命令格式
-    static uint8_t command[4];
+    uint8_t command[4];
     command[0] = motor->id; // 地址
     command[1] = 0x06;      // 命令头
     command[2] = 0x45;      // 固定字节
@@ -655,7 +812,7 @@ void ZDT_Stepper_set_microstepping(ZDTStepperMotor *motor, uint8_t store_flag, u
     }
 
     // 命令格式
-    static uint8_t command[6];
+    uint8_t command[6];
     command[0] = motor->id;           // 电机地址
     command[1] = 0x84;                // 命令标识
     command[2] = 0x8A;                // 子命令标识
@@ -676,7 +833,7 @@ void ZDT_Stepper_Read_version(ZDTStepperMotor *motor)
         return;
 
     // 命令格式
-    static uint8_t command[3];
+    uint8_t command[3];
     command[0] = motor->id; // 地址
     command[1] = 0x1F;      // 命令头
     command[2] = 0x6B;      // 校验字节
@@ -693,7 +850,7 @@ void ZDT_Stepper_Read_resistance_and_inductance(ZDTStepperMotor *motor)
     if (!motor)
         return;
 
-    static uint8_t command[3]; // 包含地址、命令和校验字节
+    uint8_t command[3]; // 包含地址、命令和校验字节
     command[0] = motor->id;    // 电机地址
     command[1] = 0x20;         // 命令头
     command[2] = 0x6B;         // 校验字节
@@ -705,7 +862,7 @@ void ZDT_Stepper_Read_bus_voltage(ZDTStepperMotor *motor)
     if (!motor)
         return;
 
-    static uint8_t command[3]; // 包含地址、命令和校验字节
+    uint8_t command[3]; // 包含地址、命令和校验字节
     command[0] = motor->id;    // 电机地址
     command[1] = 0x24;         // 命令头
     command[2] = 0x6B;         // 校验字节
@@ -717,7 +874,7 @@ void ZDT_Stepper_Read_bus_average_current(ZDTStepperMotor *motor)
     if (!motor)
         return;
 
-    static uint8_t command[3]; // 包含地址、命令和校验字节
+    uint8_t command[3]; // 包含地址、命令和校验字节
     command[0] = motor->id;    // 电机地址
     command[1] = 0x26;         // 命令头
     command[2] = 0x6B;         // 校验字节
@@ -729,7 +886,7 @@ void ZDT_Stepper_Read_phase_current(ZDTStepperMotor *motor)
     if (!motor)
         return;
 
-    static uint8_t command[3]; // 包含地址、命令和校验字节
+    uint8_t command[3]; // 包含地址、命令和校验字节
     command[0] = motor->id;    // 电机地址
     command[1] = 0x27;         // 命令头
     command[2] = 0x6B;         // 校验字节
@@ -746,7 +903,7 @@ void ZDT_Stepper_Read_encoder_raw_value(ZDTStepperMotor *motor)
     if (!motor)
         return;
 
-    static uint8_t command[3]; // 包含地址、命令和校验字节
+    uint8_t command[3]; // 包含地址、命令和校验字节
     command[0] = motor->id;    // 电机地址
     command[1] = 0x29;         // 命令头
     command[2] = 0x6B;         // 校验字节
@@ -763,7 +920,7 @@ void ZDT_Stepper_Read_encoder_calibrated_value(ZDTStepperMotor *motor)
     if (!motor)
         return;
 
-    static uint8_t command[3]; // 包含地址、命令和校验字节
+    uint8_t command[3]; // 包含地址、命令和校验字节
     command[0] = motor->id;    // 电机地址
     command[1] = 0x31;         // 命令头
     command[2] = 0x6B;         // 校验字节
@@ -775,7 +932,7 @@ void ZDT_Stepper_Read_target_position(ZDTStepperMotor *motor)
     if (!motor)
         return;
 
-    static uint8_t command[3]; // 包含地址、命令和校验字节
+    uint8_t command[3]; // 包含地址、命令和校验字节
     command[0] = motor->id;    // 电机地址
     command[1] = 0x33;         // 命令头
     command[2] = 0x6B;         // 校验字节
@@ -787,7 +944,7 @@ void ZDT_Stepper_Read_current_speed(ZDTStepperMotor *motor)
     if (!motor)
         return;
 
-    static uint8_t command[3]; // 包含地址、命令和校验字节
+    uint8_t command[3]; // 包含地址、命令和校验字节
     command[0] = motor->id;    // 电机地址
     command[1] = 0x35;         // 命令头
     command[2] = 0x6B;         // 校验字节
@@ -799,7 +956,7 @@ void ZDT_Stepper_Read_current_position(ZDTStepperMotor *motor)
     if (!motor)
         return;
 
-    static uint8_t command[3]; // 包含地址、命令和校验字节
+    uint8_t command[3]; // 包含地址、命令和校验字节
     command[0] = motor->id;    // 电机地址
     command[1] = 0x36;         // 命令头
     command[2] = 0x6B;         // 校验字节
@@ -811,7 +968,7 @@ void ZDT_Stepper_Read_position_error(ZDTStepperMotor *motor)
     if (!motor)
         return;
 
-    static uint8_t command[3]; // 包含地址、命令和校验字节
+    uint8_t command[3]; // 包含地址、命令和校验字节
     command[0] = motor->id;    // 电机地址
     command[1] = 0x37;         // 命令头
     command[2] = 0x6B;         // 校验字节
@@ -823,7 +980,7 @@ void ZDT_Stepper_Read_driver_temperature(ZDTStepperMotor *motor)
     if (!motor)
         return;
 
-    static uint8_t command[3]; // 包含地址、命令和校验字节
+    uint8_t command[3]; // 包含地址、命令和校验字节
     command[0] = motor->id;    // 电机地址
     command[1] = 0x39;         // 命令头
     command[2] = 0x6B;         // 校验字节
@@ -835,7 +992,7 @@ void ZDT_Stepper_Read_motor_status_flags(ZDTStepperMotor *motor)
     if (!motor)
         return;
 
-    static uint8_t command[3]; // 包含地址、命令和校验字节
+    uint8_t command[3]; // 包含地址、命令和校验字节
     command[0] = motor->id;    // 电机地址
     command[1] = 0x3A;         // 命令头
     command[2] = 0x6B;         // 校验字节
