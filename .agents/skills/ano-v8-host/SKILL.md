@@ -85,6 +85,19 @@ Use persistence only when the product needs the host-selected UART rate to survi
 
 Do not switch baud rate while a response is still being transmitted. Otherwise the upper computer can receive a partial frame and lose the only confirmation of the new setting.
 
+## Nonvolatile Storage And Diagnostics
+
+Use a verified nonvolatile backend for all host settings that must survive reset. On the STM32H750 board, a W25Qxx connected through software SPI was used when the I2C AT24C02 path was unreliable and SPI1 was already reserved for the display.
+
+- Before trusting a serial-flash backend, issue `0x9F` and verify a plausible JEDEC ID. Treat a missing or unexpected manufacturer byte as a hardware/link failure, not as an empty configuration.
+- Store coupled settings such as the parameter set and host baud rate in one versioned record: magic, format version, payload, and checksum. Load it only when every validation passes; otherwise retain compiled defaults.
+- For a save command, erase the target sector, write page-aligned chunks, read the complete record back, and compare it before sending the protocol success acknowledgement. Report failure instead of accepting a save that cannot be restored after reset.
+- Keep storage operations out of UART interrupts. The foreground protocol path may block for the bounded flash erase/program timeout, but RX handling must remain lightweight.
+- Provide a periodic diagnostic frame when board access is limited. Include backend-ready state, current storage operation, last error/status, and JEDEC ID so a host can distinguish wiring, erase, program, and verification failures without a debugger.
+- A bit-banged W25Qxx bus can avoid a shared hardware-SPI display bus. Define explicit CS, CLK, DI, and DO ownership, drive CS inactive and CLK low before probing, and check that no selected pin has a conflicting board function.
+
+Retain an EEPROM driver without repairing it when it is no longer the active persistence backend and has no separate product requirement. Revisit EEPROM repair only when the product requires it or another I2C peripheral exposes a shared-bus fault. First verify power, address pins, and real external SDA/SCL pull-ups with a scope or logic analyzer; MCU internal pull-ups alone are normally not a reliable I2C bus design.
+
 ## Integration Checklist
 
 - Initialize the UART peripheral before host-protocol initialization.

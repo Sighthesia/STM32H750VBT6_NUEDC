@@ -54,6 +54,7 @@ file(GLOB_RECURSE BSP_SOURCES CONFIGURE_DEPENDS
     "BSP/Hardware/WeGUI/*.c"
     "BSP/Hardware/ANO_Host/*.c"
     "BSP/Hardware/AT24C02/*.c"
+    "BSP/Hardware/W25Qxx/*.c"
     "BSP/Software/PID/*.c"
     "BSP/Software/Stepper_Control/Stepper_PID.c"
     "BSP/Software/G030_I2C_Link/*.c"

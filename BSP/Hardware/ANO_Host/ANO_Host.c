@@ -1,8 +1,8 @@
 #include "ANO_Host.h"
 
 #include "Car_Motor_USART.h"
-#include "AT24C02.h"
 #include "Stepper_PID.h"
+#include "W25Qxx.h"
 #include "ZDT_Stepper.h"
 #include "usart.h"
 
@@ -22,16 +22,15 @@
 #define ANO_ID_PARAM_INFO 0xE2U
 #define ANO_ID_DEVICE_INFO 0xE3U
 #define ANO_ID_TELEMETRY 0xF1U
+#define ANO_ID_DIAGNOSTIC 0xF5U
 #define ANO_RX_QUEUE_SIZE 128U
 #define ANO_DATA_MAX 96U
 #define ANO_TX_QUEUE_DEPTH 4U
 #define ANO_DEFAULT_BAUD_RATE 460800U
 #define ANO_BAUD_SWITCH_DELAY_MS 50U
-#define ANO_BAUD_RECORD_MAGIC 0xA7C3U
-#define ANO_BAUD_RECORD_VERSION 1U
-#define ANO_PARAM_RECORD_ADDRESS 0x20U
-#define ANO_PARAM_RECORD_MAGIC 0x5D92U
-#define ANO_PARAM_RECORD_VERSION 2U
+#define ANO_STORAGE_ADDRESS 0U
+#define ANO_STORAGE_MAGIC 0x414E4F57UL
+#define ANO_STORAGE_VERSION 1U
 
 enum {
     CAR_KP,
@@ -49,6 +48,11 @@ enum {
     CAR_WHEEL_DIAMETER,
     CAR_REDUCTION_RATIO,
     HOST_BAUD,
+    CAR_DEBUG_CONTROL_MODE,
+    CAR_DEBUG_M1_VALUE,
+    CAR_DEBUG_M1_DIRECTION,
+    CAR_DEBUG_M2_VALUE,
+    CAR_DEBUG_M2_DIRECTION,
     ANO_PARAM_COUNT
 };
 
@@ -60,7 +64,10 @@ static const ano_command_desc_t commands[] = {
     {{0x02U, 0x12U, 0xFFU}, "ZDT双轴停止", "立即停止两个ZDT闭环步进电机"},
     {{0x03U, ANO_COMMAND_CAR_READ_FLASH, 0x00U}, "读取四驱配置", "请求四路电机驱动读取保存的配置"},
     {{0x03U, ANO_COMMAND_CAR_FACTORY_RESET, 0x00U}, "四驱恢复出厂", "请求四路电机驱动恢复出厂配置"},
-    {{0x03U, ANO_COMMAND_CAR_APPLY_CONFIG, 0x00U}, "下发四驱配置", "按类型、死区、相位线、减速比、轮径和PID下发当前配置"}
+    {{0x03U, ANO_COMMAND_CAR_APPLY_CONFIG, 0x00U}, "下发四驱配置", "按类型、死区、相位线、减速比、轮径和PID下发当前配置"},
+    {{0x03U, ANO_COMMAND_CAR_DEBUG_ENTER, 0x00U}, "进入M1M2调试", "四路PWM置零后允许M1和M2调试"},
+    {{0x03U, ANO_COMMAND_CAR_DEBUG_START, 0x00U}, "启动M1M2调试", "按调试参数仅输出M1和M2，M3和M4为零"},
+    {{0x03U, ANO_COMMAND_CAR_DEBUG_STOP, 0x00U}, "停止M1M2调试", "四路PWM置零并退出M1和M2调试模式"}
 };
 
 static uint8_t rx_byte;
@@ -74,29 +81,29 @@ static float car_deadzone = 1600.0f;
 static float car_line = 500.0f;
 static float car_wheel_diameter = 67.0f;
 static float car_reduction_ratio = 30.0f;
+static float car_debug_control_mode;
+static float car_debug_m1_value;
+static float car_debug_m1_direction;
+static float car_debug_m2_value;
+static float car_debug_m2_direction;
+static uint8_t car_debug_active;
 static uint32_t last_telemetry_ms;
+static uint32_t last_diagnostic_ms;
 static uint32_t host_baud_rate = ANO_DEFAULT_BAUD_RATE;
 static uint32_t pending_baud_rate;
 static uint32_t baud_switch_at_ms;
+static uint8_t storage_ready;
+static uint8_t storage_operation;
 
 typedef struct
 {
-    uint16_t magic;
+    uint32_t magic;
     uint8_t version;
-    uint8_t reserved;
     uint32_t baud_rate;
+    uint8_t reserved[3];
+    float values[HOST_BAUD];
     uint32_t checksum;
-    uint8_t padding[4];
-} ano_baud_record_t;
-
-typedef struct
-{
-    uint16_t magic;
-    uint8_t version;
-    uint8_t reserved;
-    float values[ANO_PARAM_COUNT - 1U];
-    uint32_t checksum;
-} ano_param_record_t;
+} ano_storage_record_t;
 
 static void put_u16(uint8_t *d, uint16_t *i, uint16_t v) { d[(*i)++] = (uint8_t)v; d[(*i)++] = (uint8_t)(v >> 8U); }
 static void put_i32(uint8_t *d, uint16_t *i, int32_t v) { memcpy(&d[*i], &v, 4U); *i += 4U; }
@@ -110,12 +117,7 @@ static bool baud_rate_is_valid(uint32_t baud_rate)
     return baud_rate == 115200U || baud_rate == 230400U || baud_rate == 460800U || baud_rate == 921600U;
 }
 
-static uint32_t baud_record_checksum(const ano_baud_record_t *record)
-{
-    return record->magic ^ ((uint32_t)record->version << 24U) ^ record->baud_rate ^ 0x5A39C71DU;
-}
-
-static uint32_t param_record_checksum(const ano_param_record_t *record)
+static uint32_t storage_record_checksum(const ano_storage_record_t *record)
 {
     const uint8_t *data = (const uint8_t *)record;
     uint32_t checksum = 0x6D2B79F5U;
@@ -123,25 +125,59 @@ static uint32_t param_record_checksum(const ano_param_record_t *record)
     return checksum;
 }
 
-static uint32_t load_baud_rate(void)
+static float *parameter(uint16_t id);
+static bool write_car_parameter(uint16_t parameter_id, float value);
+
+static bool save_storage(uint32_t baud_rate)
 {
-    ano_baud_record_t record = {0};
-    if (AT24C02_Read(0U, (uint8_t *)&record, sizeof(record)) && record.magic == ANO_BAUD_RECORD_MAGIC &&
-        record.version == ANO_BAUD_RECORD_VERSION && record.checksum == baud_record_checksum(&record) && baud_rate_is_valid(record.baud_rate))
+    ano_storage_record_t record = {0};
+    ano_storage_record_t verify = {0};
+    storage_operation = 3U;
+    record.magic = ANO_STORAGE_MAGIC;
+    record.version = ANO_STORAGE_VERSION;
+    record.baud_rate = baud_rate;
+    for (uint16_t id = 0U; id < HOST_BAUD; id++)
     {
-        return record.baud_rate;
+        float *value = parameter(id);
+        if (value == NULL || !isfinite(*value))
+        {
+            storage_operation = 3U;
+            return false;
+        }
+        record.values[id] = *value;
     }
-    return ANO_DEFAULT_BAUD_RATE;
+    record.checksum = storage_record_checksum(&record);
+    if (!W25Qxx_EraseSector(ANO_STORAGE_ADDRESS) ||
+        !W25Qxx_Write(ANO_STORAGE_ADDRESS, (const uint8_t *)&record, sizeof(record)) ||
+        !W25Qxx_Read(ANO_STORAGE_ADDRESS, (uint8_t *)&verify, sizeof(verify)) ||
+        memcmp(&record, &verify, sizeof(record)) != 0)
+    {
+        return false;
+    }
+    storage_operation = 0U;
+    return true;
 }
 
-static bool save_baud_rate(uint32_t baud_rate)
+static void load_storage(void)
 {
-    ano_baud_record_t record = {0};
-    record.magic = ANO_BAUD_RECORD_MAGIC;
-    record.version = ANO_BAUD_RECORD_VERSION;
-    record.baud_rate = baud_rate;
-    record.checksum = baud_record_checksum(&record);
-    return AT24C02_Write(0U, (const uint8_t *)&record, sizeof(record));
+    ano_storage_record_t record = {0};
+    storage_operation = 2U;
+    if (!W25Qxx_Read(ANO_STORAGE_ADDRESS, (uint8_t *)&record, sizeof(record)) ||
+        record.magic != ANO_STORAGE_MAGIC || record.version != ANO_STORAGE_VERSION ||
+        record.checksum != storage_record_checksum(&record) || !baud_rate_is_valid(record.baud_rate))
+    {
+        return;
+    }
+    for (uint16_t id = 0U; id < HOST_BAUD; id++)
+    {
+        float value = record.values[id];
+        float *target = parameter(id);
+        if (target == NULL || !isfinite(value)) continue;
+        if (id <= CAR_KD || id >= CAR_TYPE) (void)write_car_parameter(id, value);
+        else if (value >= -1000.0f && value <= 1000.0f) *target = value;
+    }
+    host_baud_rate = record.baud_rate;
+    storage_operation = 0U;
 }
 
 static void apply_baud_rate(uint32_t baud_rate)
@@ -190,7 +226,9 @@ static float *parameter(uint16_t id)
         &car_pid[0], &car_pid[1], &car_pid[2],
         &yaw_pid.Kp, &yaw_pid.Ki, &yaw_pid.Kd,
         &pitch_pid.Kp, &pitch_pid.Ki, &pitch_pid.Kd,
-        &car_type, &car_deadzone, &car_line, &car_wheel_diameter, &car_reduction_ratio, NULL
+        &car_type, &car_deadzone, &car_line, &car_wheel_diameter, &car_reduction_ratio, NULL,
+        &car_debug_control_mode, &car_debug_m1_value, &car_debug_m1_direction,
+        &car_debug_m2_value, &car_debug_m2_direction
     };
     return id < ANO_PARAM_COUNT ? values[id] : NULL;
 }
@@ -249,45 +287,6 @@ static bool write_car_parameter(uint16_t parameter_id, float value)
     return accepted;
 }
 
-static bool save_parameters(void)
-{
-    ano_param_record_t record = {0};
-    ano_param_record_t verify = {0};
-
-    record.magic = ANO_PARAM_RECORD_MAGIC;
-    record.version = ANO_PARAM_RECORD_VERSION;
-    for (uint16_t id = 0U; id < ANO_PARAM_COUNT - 1U; id++)
-    {
-        float *value = parameter(id);
-        if (value == NULL || !isfinite(*value)) return false;
-        record.values[id] = *value;
-    }
-    record.checksum = param_record_checksum(&record);
-    return AT24C02_Write(ANO_PARAM_RECORD_ADDRESS, (const uint8_t *)&record, sizeof(record)) &&
-           AT24C02_Read(ANO_PARAM_RECORD_ADDRESS, (uint8_t *)&verify, sizeof(verify)) &&
-           memcmp(&record, &verify, sizeof(record)) == 0;
-}
-
-static void load_parameters(void)
-{
-    ano_param_record_t record = {0};
-    if (!AT24C02_Read(ANO_PARAM_RECORD_ADDRESS, (uint8_t *)&record, sizeof(record)) ||
-        record.magic != ANO_PARAM_RECORD_MAGIC || record.version != ANO_PARAM_RECORD_VERSION ||
-        record.checksum != param_record_checksum(&record))
-    {
-        return;
-    }
-
-    for (uint16_t id = 0U; id < ANO_PARAM_COUNT - 1U; id++)
-    {
-        float value = record.values[id];
-        float *target = parameter(id);
-        if (target == NULL || !isfinite(value)) continue;
-        if (id <= CAR_KD || id >= CAR_TYPE) (void)write_car_parameter(id, value);
-        else if (value >= -1000.0f && value <= 1000.0f) *target = value;
-    }
-}
-
 static void send_check(uint8_t destination, uint8_t id, uint8_t sum, uint8_t add)
 {
     uint8_t d[3] = {id, sum, add};
@@ -314,13 +313,16 @@ static void send_param_info(uint16_t id)
         "四驱Kp", "四驱Ki", "四驱Kd",
         "YAW轴Kp", "YAW轴Ki", "YAW轴Kd",
         "PITCH轴Kp", "PITCH轴Ki", "PITCH轴Kd",
-        "四驱型号", "四驱死区", "四驱相位线", "车轮直径", "四驱减速比", "上位机波特率"
+        "四驱型号", "四驱死区", "四驱相位线", "车轮直径", "四驱减速比", "上位机波特率",
+        "M1M2控制模式", "M1调试数值", "M1调试方向", "M2调试数值", "M2调试方向"
     };
     static const char *const infos[ANO_PARAM_COUNT] = {
         "四驱速度环比例系数", "四驱速度环积分系数", "四驱速度环微分系数",
         "航向轴PID比例系数", "航向轴PID积分系数", "航向轴PID微分系数",
         "俯仰轴PID比例系数", "俯仰轴PID积分系数", "俯仰轴PID微分系数",
-        "四驱电机型号", "四驱控制死区", "四驱编码器相位线", "车轮直径，单位毫米", "四驱减速比", "匿名上位机波特率"
+        "四驱电机型号", "四驱控制死区", "四驱编码器相位线", "车轮直径，单位毫米", "四驱减速比", "匿名上位机波特率",
+        "0为速度模式，1为PWM模式", "速度范围0至1000，PWM范围0至3600", "0为正转，1为反转",
+        "速度范围0至1000，PWM范围0至3600", "0为正转，1为反转"
     };
     uint8_t d[ANO_DATA_MAX] = {0}; uint16_t i = 0U;
     if (id >= ANO_PARAM_COUNT) return;
@@ -368,6 +370,44 @@ static bool apply_car_config(void)
     };
     return Car_Motor_Apply_Config(&config);
 }
+
+static bool stop_car_debug(void)
+{
+    car_debug_active = 0U;
+    return Car_Motor_Set_PWM(0, 0, 0, 0);
+}
+
+static bool enter_car_debug(void)
+{
+    if (!Car_Motor_Set_PWM(0, 0, 0, 0))
+    {
+        return false;
+    }
+    car_debug_active = 1U;
+    return true;
+}
+
+static bool start_car_debug(void)
+{
+    int16_t m1;
+    int16_t m2;
+
+    if (!car_debug_active)
+    {
+        return false;
+    }
+
+    m1 = (int16_t)car_debug_m1_value;
+    m2 = (int16_t)car_debug_m2_value;
+    if (car_debug_m1_direction != 0.0f) m1 = (int16_t)-m1;
+    if (car_debug_m2_direction != 0.0f) m2 = (int16_t)-m2;
+    if (car_debug_control_mode == 0.0f)
+    {
+        return Car_Motor_Set_Speed(m1, m2, 0, 0);
+    }
+    return Car_Motor_Set_PWM(m1, m2, 0, 0);
+}
+
 static void send_telemetry(void)
 {
     const car_motor_telemetry_t *car = Car_Motor_Get_Telemetry(); uint8_t d[ANO_DATA_MAX]; uint16_t i = 0U;
@@ -378,22 +418,40 @@ static void send_telemetry(void)
     send_frame(ANO_ID_TELEMETRY, d, i);
 }
 
+static void send_storage_diagnostic(void)
+{
+    uint8_t d[8];
+    uint16_t i = 0U;
+    d[i++] = storage_ready;
+    d[i++] = storage_operation;
+    d[i++] = (uint8_t)W25Qxx_GetLastStatus();
+    d[i++] = 0U;
+    put_i32(d, &i, (int32_t)W25Qxx_GetDeviceId());
+    send_frame(ANO_ID_DIAGNOSTIC, d, i);
+}
+
 static bool command(const uint8_t *d, uint16_t n)
 {
-    if (n == 3U && d[0] == 0x03U && d[1] == 0x03U && d[2] == 0x00U) return Car_Motor_Set_Speed(0, 0, 0, 0);
+    if (n == 3U && d[0] == 0x03U && d[1] == 0x03U && d[2] == 0x00U) return car_debug_active ? stop_car_debug() : Car_Motor_Set_Speed(0, 0, 0, 0);
     if (n == 3U && d[0] == 0x02U && d[1] == 0x12U && d[2] == 0xFFU) { ZDT_Stepper_stop(zdt_stepper_motors[0], 0U); ZDT_Stepper_stop(zdt_stepper_motors[1], 0U); return true; }
     if (n == 3U && d[0] == 0x03U && d[1] == ANO_COMMAND_CAR_READ_FLASH && d[2] == 0x00U) return Car_Motor_Read_Flash();
     if (n == 3U && d[0] == 0x03U && d[1] == ANO_COMMAND_CAR_FACTORY_RESET && d[2] == 0x00U) return Car_Motor_Factory_Reset();
     if (n == 3U && d[0] == 0x03U && d[1] == ANO_COMMAND_CAR_APPLY_CONFIG && d[2] == 0x00U) return apply_car_config();
-    if (n == 9U && d[0] == 1U) return Car_Motor_Set_Speed(get_i16(&d[1]), get_i16(&d[3]), get_i16(&d[5]), get_i16(&d[7]));
-    if (n == 9U && d[0] == 2U) return Car_Motor_Set_PWM(get_i16(&d[1]), get_i16(&d[3]), get_i16(&d[5]), get_i16(&d[7]));
-    if (n == 1U && d[0] == 3U) return Car_Motor_Set_Speed(0, 0, 0, 0);
+    if (n == 3U && d[0] == 0x03U && d[1] == ANO_COMMAND_CAR_DEBUG_ENTER && d[2] == 0x00U) return enter_car_debug();
+    if (n == 3U && d[0] == 0x03U && d[1] == ANO_COMMAND_CAR_DEBUG_START && d[2] == 0x00U) return start_car_debug();
+    if (n == 3U && d[0] == 0x03U && d[1] == ANO_COMMAND_CAR_DEBUG_STOP && d[2] == 0x00U) return stop_car_debug();
+    if (n == 9U && d[0] == 1U && !car_debug_active) return Car_Motor_Set_Speed(get_i16(&d[1]), get_i16(&d[3]), get_i16(&d[5]), get_i16(&d[7]));
+    if (n == 9U && d[0] == 2U && !car_debug_active) return Car_Motor_Set_PWM(get_i16(&d[1]), get_i16(&d[3]), get_i16(&d[5]), get_i16(&d[7]));
+    if (n == 1U && d[0] == 3U) return car_debug_active ? stop_car_debug() : Car_Motor_Set_Speed(0, 0, 0, 0);
     if (n == 7U && d[0] == 0x10U && d[1] < 2U) { float s = get_float(&d[3]); if (s >= 0.0f && s <= 1000.0f) { ZDT_Stepper_Set_Speed(zdt_stepper_motors[d[1]], d[2] ? ZDT_STEPPER_CCW : ZDT_STEPPER_CW, s, 0U, 0U); return true; } }
     if (n == 12U && d[0] == 0x11U && d[1] < 2U) { float s = get_float(&d[3]), p = get_float(&d[7]); if (s >= 0.0f && s <= 1000.0f && p >= 0.0f && p <= 3600.0f) { ZDT_Stepper_Set_position(zdt_stepper_motors[d[1]], d[2] ? ZDT_STEPPER_CCW : ZDT_STEPPER_CW, s, p, d[11] ? ZDT_STEPPER_ABS_POS_MODE : ZDT_STEPPER_REL_POS_MODE, 0U); return true; } }
     if (n == 2U && d[0] == 0x12U) { if (d[1] == 0xFFU) { ZDT_Stepper_stop(zdt_stepper_motors[0], 0U); ZDT_Stepper_stop(zdt_stepper_motors[1], 0U); return true; } if (d[1] < 2U) { ZDT_Stepper_stop(zdt_stepper_motors[d[1]], 0U); return true; } }
     if (n == 1U && d[0] == ANO_COMMAND_CAR_READ_FLASH) return Car_Motor_Read_Flash();
     if (n == 1U && d[0] == ANO_COMMAND_CAR_FACTORY_RESET) return Car_Motor_Factory_Reset();
     if (n == 1U && d[0] == ANO_COMMAND_CAR_APPLY_CONFIG) return apply_car_config();
+    if (n == 1U && d[0] == ANO_COMMAND_CAR_DEBUG_ENTER) return enter_car_debug();
+    if (n == 1U && d[0] == ANO_COMMAND_CAR_DEBUG_START) return start_car_debug();
+    if (n == 1U && d[0] == ANO_COMMAND_CAR_DEBUG_STOP) return stop_car_debug();
     return false;
 }
 
@@ -405,18 +463,29 @@ static void handle(uint8_t source, uint8_t id, const uint8_t *d, uint16_t n, uin
         else if (d[0] == 1U) { uint8_t count[3] = {1U, ANO_PARAM_COUNT, 0U}; send_frame(ANO_ID_PARAM_COMMAND, count, 3U); }
         else if (d[0] == 2U) send_param(v);
         else if (d[0] == 3U) send_param_info(v);
-        else if (d[0] == 0x10U && v == 0x00ABU && save_parameters()) send_check(source, id, sum, add);
+        else if (d[0] == 0x10U && v == 0x00ABU && storage_ready && save_storage(host_baud_rate)) send_check(source, id, sum, add);
     }
     else if (id == ANO_ID_PARAM_VALUE && n == 6U) {
         bool accepted = false;
         uint16_t parameter_id = get_u16(d); float value = get_float(&d[2]); float *v = parameter(parameter_id);
         if (parameter_id == HOST_BAUD && isfinite(value) && value == (float)(uint32_t)value &&
-            baud_rate_is_valid((uint32_t)value) && save_baud_rate((uint32_t)value)) {
+            baud_rate_is_valid((uint32_t)value) && storage_ready && save_storage((uint32_t)value)) {
             pending_baud_rate = (uint32_t)value;
             baud_switch_at_ms = HAL_GetTick() + ANO_BAUD_SWITCH_DELAY_MS;
             accepted = true;
         } else if (parameter_id <= CAR_KD || (parameter_id >= CAR_TYPE && parameter_id < HOST_BAUD)) {
             accepted = write_car_parameter(parameter_id, value);
+        } else if (parameter_id == CAR_DEBUG_CONTROL_MODE && isfinite(value) && (value == 0.0f || value == 1.0f)) {
+            car_debug_control_mode = value;
+            accepted = true;
+        } else if ((parameter_id == CAR_DEBUG_M1_VALUE || parameter_id == CAR_DEBUG_M2_VALUE) && isfinite(value) &&
+                   value >= 0.0f && value <= (car_debug_control_mode == 0.0f ? 1000.0f : 3600.0f)) {
+            *v = value;
+            accepted = true;
+        } else if ((parameter_id == CAR_DEBUG_M1_DIRECTION || parameter_id == CAR_DEBUG_M2_DIRECTION) &&
+                   isfinite(value) && (value == 0.0f || value == 1.0f)) {
+            *v = value;
+            accepted = true;
         } else if (v != NULL && isfinite(value) && value >= -1000.0f && value <= 1000.0f) {
             *v = value;
             accepted = true;
@@ -456,12 +525,12 @@ void ANO_Host_Init(void)
 {
     pid_kp = 3.0f; pid_ki = 1.0f; pid_kd = 0.0f; pid_tau = 0.05f; pid_lim_min = -4.0f; pid_lim_max = 4.0f; pid_lim_min_int = -5.0f; pid_lim_max_int = 5.0f; sample_time_s = 0.01f;
     Stepper_PID_Parameters_Init(&yaw_pid); Stepper_PID_Parameters_Init(&pitch_pid);
-    load_parameters();
-    host_baud_rate = load_baud_rate();
+    storage_ready = W25Qxx_Init() ? 1U : 0U;
+    if (storage_ready) load_storage();
     if (host_baud_rate != huart1.Init.BaudRate) apply_baud_rate(host_baud_rate);
     else HAL_UART_Receive_IT(&huart1, &rx_byte, 1U);
 }
-void ANO_Host_Process(void) { while (rx_head != rx_tail) { uint8_t b = rx_queue[rx_head]; rx_head = (rx_head + 1U) % ANO_RX_QUEUE_SIZE; feed(b); } if (pending_baud_rate != 0U && (int32_t)(HAL_GetTick() - baud_switch_at_ms) >= 0 && !tx_active && tx_count == 0U) { uint32_t baud_rate = pending_baud_rate; pending_baud_rate = 0U; apply_baud_rate(baud_rate); } if (HAL_GetTick() - last_telemetry_ms >= 100U) { last_telemetry_ms = HAL_GetTick(); send_telemetry(); } }
+void ANO_Host_Process(void) { while (rx_head != rx_tail) { uint8_t b = rx_queue[rx_head]; rx_head = (rx_head + 1U) % ANO_RX_QUEUE_SIZE; feed(b); } if (pending_baud_rate != 0U && (int32_t)(HAL_GetTick() - baud_switch_at_ms) >= 0 && !tx_active && tx_count == 0U) { uint32_t baud_rate = pending_baud_rate; pending_baud_rate = 0U; apply_baud_rate(baud_rate); } if (HAL_GetTick() - last_telemetry_ms >= 100U) { last_telemetry_ms = HAL_GetTick(); send_telemetry(); } if (HAL_GetTick() - last_diagnostic_ms >= 500U) { last_diagnostic_ms = HAL_GetTick(); send_storage_diagnostic(); } }
 void ANO_Host_UART_RxCplt_Callback(void) { uint8_t next = (rx_tail + 1U) % ANO_RX_QUEUE_SIZE; if (next != rx_head) { rx_queue[rx_tail] = rx_byte; rx_tail = next; } HAL_UART_Receive_IT(&huart1, &rx_byte, 1U); }
 void ANO_Host_UART_TxCplt_Callback(void) { if (tx_active && tx_count) { tx_head = (tx_head + 1U) % ANO_TX_QUEUE_DEPTH; tx_count--; } tx_active = 0U; start_tx(); }
 void ANO_Host_UART_Error_Callback(void) { tx_active = 0U; HAL_UART_Receive_IT(&huart1, &rx_byte, 1U); }
