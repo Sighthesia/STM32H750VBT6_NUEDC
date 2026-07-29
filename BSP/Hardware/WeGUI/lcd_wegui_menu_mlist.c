@@ -88,12 +88,17 @@ void wegui_show_mList(uint16_t farmes)
 {
 	#define LINE0_START_X_SCAPE 3  //标题位置
 	#define LINE1_START_X_SCAPE 10 //菜单位置
+	#define MARQUEE_GAP 16U
+	#define MARQUEE_HOLD_FRAMES 30U
 	int16_t temp_y;
 	char* string;
 	uint8_t id;//序号
 	uint8_t id_min;//当前界面可视的最小菜单id号
 	menu_t* p;
 	uint16_t temp_show_id_max;
+	static char *marquee_string;
+	static uint16_t marquee_offset;
+	static uint16_t marquee_hold;
 	
 	temp_y=0;
 	//---------------------------------------1.菜单-------------------------------------------------
@@ -215,7 +220,39 @@ void wegui_show_mList(uint16_t farmes)
 			#endif
 			lcd_draw_ascii(LINE1_START_X_SCAPE-lcd_driver.fonts_ASCII->width-lcd_driver.fonts_ASCII->scape - 4,temp_y,'-');
 			string=wegui_get_string(p->discribe,wegui.setting.language);
-			lcd_draw_utf8_string(LINE1_START_X_SCAPE,temp_y,string);
+			if (mList_par.cursor_id == (uint16_t)(id + 1U) &&
+				lcd_get_utf8_string_xlen(string) > SCREEN_WIDTH - LINE1_START_X_SCAPE - 2U)
+			{
+				uint16_t text_width = lcd_get_utf8_string_xlen(string);
+				if (marquee_string != string)
+				{
+					marquee_string = string;
+					marquee_offset = 0U;
+					marquee_hold = 0U;
+				}
+				if (marquee_hold < MARQUEE_HOLD_FRAMES)
+				{
+					marquee_hold = (uint16_t)(marquee_hold + farmes);
+				}
+				else
+				{
+					marquee_offset = (uint16_t)(marquee_offset + farmes);
+					if (marquee_offset > text_width + MARQUEE_GAP)
+					{
+						marquee_offset = 0U;
+						marquee_hold = 0U;
+					}
+				}
+				lcd_draw_utf8_string((int16_t)LINE1_START_X_SCAPE - (int16_t)marquee_offset, temp_y, string);
+				if (marquee_offset != 0U)
+				{
+					lcd_draw_utf8_string((int16_t)LINE1_START_X_SCAPE + (int16_t)text_width + MARQUEE_GAP - (int16_t)marquee_offset, temp_y, string);
+				}
+			}
+			else
+			{
+				lcd_draw_utf8_string(LINE1_START_X_SCAPE,temp_y,string);
+			}
 
 			//---若菜单是带参数设置的, 末尾显示各自参数---
 			switch (p->menuType)

@@ -13,6 +13,8 @@
 #define CAR_MOTOR_FRAME_MAX_LENGTH 96U
 #define CAR_MOTOR_TX_QUEUE_DEPTH 8U
 #define CAR_MOTOR_VOLTAGE_TIMEOUT_MS 500U
+#define CAR_MOTOR_VOLTAGE_VALID_INTERVAL_MS 10000U
+#define CAR_MOTOR_VOLTAGE_RETRY_INTERVAL_MS 1000U
 
 typedef enum
 {
@@ -42,6 +44,7 @@ static uint16_t car_motor_last_sequence;
 static uint32_t car_motor_last_voltage_request_ms;
 static uint32_t car_motor_last_voltage_response_ms;
 static uint8_t car_motor_voltage_measurement_active;
+static uint8_t car_motor_output_stopped;
 
 static car_motor_telemetry_t car_motor_telemetry;
 
@@ -330,6 +333,7 @@ void Car_Motor_Init(void)
     car_motor_last_voltage_request_ms = 0U;
     car_motor_last_voltage_response_ms = 0U;
     car_motor_voltage_measurement_active = 0U;
+    car_motor_output_stopped = 1U;
     memset(&car_motor_telemetry, 0, sizeof(car_motor_telemetry));
     HAL_UART_Receive_IT(&huart3, &car_motor_rx_byte, 1U);
     char commands[3][CAR_MOTOR_FRAME_MAX_LENGTH] = {
@@ -369,6 +373,15 @@ void Car_Motor_Process(void)
     {
         car_motor_telemetry.encoder_upload_active = 1U;
         car_motor_voltage_measurement_active = 0U;
+    }
+    if (!car_motor_voltage_measurement_active && car_motor_output_stopped)
+    {
+        uint32_t interval = car_motor_telemetry.voltage_valid ?
+                            CAR_MOTOR_VOLTAGE_VALID_INTERVAL_MS : CAR_MOTOR_VOLTAGE_RETRY_INTERVAL_MS;
+        if (now - car_motor_last_voltage_request_ms >= interval)
+        {
+            (void)Car_Motor_Start_Voltage_Measurement(NULL);
+        }
     }
 }
 
@@ -590,9 +603,13 @@ bool Car_Motor_Set_Speed(int16_t m1, int16_t m2, int16_t m3, int16_t m4)
     }
     if (m1 == 0 && m2 == 0 && m3 == 0 && m4 == 0)
     {
-        return Car_Motor_Start_Voltage_Measurement("$spd:0,0,0,0#");
+        bool queued = Car_Motor_Start_Voltage_Measurement("$spd:0,0,0,0#");
+        if (queued) car_motor_output_stopped = 1U;
+        return queued;
     }
-    return Car_Motor_Format_Command("$spd:%d,%d,%d,%d#", m1, m2, m3, m4);
+    bool queued = Car_Motor_Format_Command("$spd:%d,%d,%d,%d#", m1, m2, m3, m4);
+    if (queued) car_motor_output_stopped = 0U;
+    return queued;
 }
 
 bool Car_Motor_Set_PWM(int16_t m1, int16_t m2, int16_t m3, int16_t m4)
@@ -604,9 +621,13 @@ bool Car_Motor_Set_PWM(int16_t m1, int16_t m2, int16_t m3, int16_t m4)
     }
     if (m1 == 0 && m2 == 0 && m3 == 0 && m4 == 0)
     {
-        return Car_Motor_Start_Voltage_Measurement("$pwm:0,0,0,0#");
+        bool queued = Car_Motor_Start_Voltage_Measurement("$pwm:0,0,0,0#");
+        if (queued) car_motor_output_stopped = 1U;
+        return queued;
     }
-    return Car_Motor_Format_Command("$pwm:%d,%d,%d,%d#", m1, m2, m3, m4);
+    bool queued = Car_Motor_Format_Command("$pwm:%d,%d,%d,%d#", m1, m2, m3, m4);
+    if (queued) car_motor_output_stopped = 0U;
+    return queued;
 }
 
 bool Car_Motor_Set_Upload(bool total_encoder, bool encoder_delta_10ms, bool speed)

@@ -30,6 +30,7 @@
 #include "ZDT_Stepper.h"
 #include "Car_Motor_USART.h"
 #include "ANO_Host.h"
+#include "JY61P.h"
 #include "lcd_driver.h"
 #include "lcd_wegui_driver.h"
 #include "wegui_menu_demo.h"
@@ -136,6 +137,7 @@ static void App_Peripheral_Init(void)
 #if APP_ENABLE_CAR_MOTOR
   Car_Motor_Init();
 #endif
+  JY61P_Init();
   ANO_Host_Init();
   lcd_driver_init();
 #if WEGUI_PANEL_SELF_TEST
@@ -152,6 +154,7 @@ static void App_Process(void)
 #if APP_ENABLE_CAR_MOTOR
   Car_Motor_Process();
 #endif
+  JY61P_Process();
   ANO_Host_Process();
   G030_I2C_Link_Process();
 #if !WEGUI_PANEL_SELF_TEST
