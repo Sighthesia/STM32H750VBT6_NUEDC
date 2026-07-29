@@ -23,7 +23,22 @@
 #define ANO_DATA_MAX 96U
 #define ANO_TX_QUEUE_DEPTH 4U
 
-enum { CAR_KP, CAR_KI, CAR_KD, YAW_KP, YAW_KI, YAW_KD, PITCH_KP, PITCH_KI, PITCH_KD, ANO_PARAM_COUNT };
+enum {
+    CAR_KP,
+    CAR_KI,
+    CAR_KD,
+    YAW_KP,
+    YAW_KI,
+    YAW_KD,
+    PITCH_KP,
+    PITCH_KI,
+    PITCH_KD,
+    CAR_TYPE,
+    CAR_DEADZONE,
+    CAR_LINE,
+    CAR_WHEEL_DIAMETER,
+    ANO_PARAM_COUNT
+};
 
 typedef struct { uint8_t state, source, destination, id, sum, checksum; uint16_t length, index; uint8_t data[ANO_DATA_MAX]; } ano_parser_t;
 
@@ -33,6 +48,10 @@ static uint8_t tx_queue[ANO_TX_QUEUE_DEPTH][ANO_DATA_MAX + 8U], tx_length[ANO_TX
 static volatile uint8_t tx_head, tx_tail, tx_count, tx_active;
 static ano_parser_t parser;
 static float car_pid[3] = {1.0f, 0.0f, 0.0f};
+static float car_type = (float)CAR_MOTOR_TYPE_520;
+static float car_deadzone;
+static float car_line;
+static float car_wheel_diameter;
 static uint32_t last_telemetry_ms;
 
 static void put_u16(uint8_t *d, uint16_t *i, uint16_t v) { d[(*i)++] = (uint8_t)v; d[(*i)++] = (uint8_t)(v >> 8U); }
@@ -66,8 +85,62 @@ static void send_frame(uint8_t id, const uint8_t *data, uint16_t length)
 
 static float *parameter(uint16_t id)
 {
-    static float *const values[ANO_PARAM_COUNT] = { &car_pid[0], &car_pid[1], &car_pid[2], &yaw_pid.Kp, &yaw_pid.Ki, &yaw_pid.Kd, &pitch_pid.Kp, &pitch_pid.Ki, &pitch_pid.Kd };
+    static float *const values[ANO_PARAM_COUNT] = {
+        &car_pid[0], &car_pid[1], &car_pid[2],
+        &yaw_pid.Kp, &yaw_pid.Ki, &yaw_pid.Kd,
+        &pitch_pid.Kp, &pitch_pid.Ki, &pitch_pid.Kd,
+        &car_type, &car_deadzone, &car_line, &car_wheel_diameter
+    };
     return id < ANO_PARAM_COUNT ? values[id] : NULL;
+}
+
+static bool write_car_parameter(uint16_t parameter_id, float value)
+{
+    float *target = parameter(parameter_id);
+    if (target == NULL || !isfinite(value))
+    {
+        return false;
+    }
+
+    bool accepted = false;
+    if (parameter_id <= CAR_KD)
+    {
+        if (value < -1000.0f || value > 1000.0f)
+        {
+            return false;
+        }
+
+        float previous = *target;
+        *target = value;
+        accepted = Car_Motor_Set_PID(car_pid[0], car_pid[1], car_pid[2]);
+        if (!accepted)
+        {
+            *target = previous;
+        }
+    }
+    else if (parameter_id == CAR_TYPE && value >= (float)CAR_MOTOR_TYPE_520 &&
+             value <= (float)CAR_MOTOR_TYPE_TT && value == floorf(value))
+    {
+        accepted = Car_Motor_Set_Type((car_motor_type_t)(uint8_t)value);
+        if (accepted) *target = value;
+    }
+    else if (parameter_id == CAR_DEADZONE && value >= 0.0f && value <= 3600.0f && value == floorf(value))
+    {
+        accepted = Car_Motor_Set_Deadzone((uint16_t)value);
+        if (accepted) *target = value;
+    }
+    else if (parameter_id == CAR_LINE && value >= 0.0f && value <= 65535.0f && value == floorf(value))
+    {
+        accepted = Car_Motor_Set_Line((uint16_t)value);
+        if (accepted) *target = value;
+    }
+    else if (parameter_id == CAR_WHEEL_DIAMETER && value > 0.0f)
+    {
+        accepted = Car_Motor_Set_Wheel_Diameter(value);
+        if (accepted) *target = value;
+    }
+
+    return accepted;
 }
 
 static void send_check(uint8_t id, uint8_t sum, uint8_t add) { uint8_t d[3] = {id, sum, add}; send_frame(ANO_ID_CHECK, d, sizeof(d)); }
@@ -82,7 +155,12 @@ static void send_device_info(void)
 }
 static void send_param_info(uint16_t id)
 {
-    static const char *const names[ANO_PARAM_COUNT] = {"car_kp", "car_ki", "car_kd", "yaw_kp", "yaw_ki", "yaw_kd", "pitch_kp", "pitch_ki", "pitch_kd"};
+    static const char *const names[ANO_PARAM_COUNT] = {
+        "car_kp", "car_ki", "car_kd",
+        "yaw_kp", "yaw_ki", "yaw_kd",
+        "pitch_kp", "pitch_ki", "pitch_kd",
+        "car_type", "car_deadzone", "car_line", "wheel_diameter"
+    };
     uint8_t d[23] = {0}; uint16_t i = 0U;
     if (id >= ANO_PARAM_COUNT) return;
     put_u16(d, &i, id); d[i++] = 8U; strncpy((char *)&d[i], names[id], 20U); send_frame(ANO_ID_PARAM_INFO, d, sizeof(d));
@@ -105,6 +183,8 @@ static void command(const uint8_t *d, uint16_t n)
     else if (n == 7U && d[0] == 0x10U && d[1] < 2U) { float s = get_float(&d[3]); if (s >= 0.0f && s <= 1000.0f) ZDT_Stepper_Set_Speed(zdt_stepper_motors[d[1]], d[2] ? ZDT_STEPPER_CCW : ZDT_STEPPER_CW, s, 0U, 0U); }
     else if (n == 12U && d[0] == 0x11U && d[1] < 2U) { float s = get_float(&d[3]), p = get_float(&d[7]); if (s >= 0.0f && s <= 1000.0f && p >= 0.0f && p <= 3600.0f) ZDT_Stepper_Set_position(zdt_stepper_motors[d[1]], d[2] ? ZDT_STEPPER_CCW : ZDT_STEPPER_CW, s, p, d[11] ? ZDT_STEPPER_ABS_POS_MODE : ZDT_STEPPER_REL_POS_MODE, 0U); }
     else if (n == 2U && d[0] == 0x12U) { if (d[1] == 0xFFU) { ZDT_Stepper_stop(zdt_stepper_motors[0], 0U); ZDT_Stepper_stop(zdt_stepper_motors[1], 0U); } else if (d[1] < 2U) ZDT_Stepper_stop(zdt_stepper_motors[d[1]], 0U); }
+    else if (n == 1U && d[0] == ANO_COMMAND_CAR_READ_FLASH) (void)Car_Motor_Read_Flash();
+    else if (n == 1U && d[0] == ANO_COMMAND_CAR_FACTORY_RESET) (void)Car_Motor_Factory_Reset();
 }
 
 static void handle(uint8_t id, const uint8_t *d, uint16_t n, uint8_t sum, uint8_t add)
@@ -112,9 +192,10 @@ static void handle(uint8_t id, const uint8_t *d, uint16_t n, uint8_t sum, uint8_
     if (id == ANO_ID_PARAM_COMMAND && n >= 3U) { uint16_t v = get_u16(&d[1]); if (d[0] == 0U) send_device_info(); else if (d[0] == 1U) { uint8_t count[3] = {1U, ANO_PARAM_COUNT, 0U}; send_frame(ANO_ID_PARAM_COMMAND, count, 3U); } else if (d[0] == 2U) send_param(v); else if (d[0] == 3U) send_param_info(v); }
     else if (id == ANO_ID_PARAM_VALUE && n == 6U) {
         uint16_t parameter_id = get_u16(d); float value = get_float(&d[2]); float *v = parameter(parameter_id);
-        if (v != NULL && isfinite(value) && value >= -1000.0f && value <= 1000.0f) {
+        if (parameter_id <= CAR_KD || parameter_id >= CAR_TYPE) {
+            (void)write_car_parameter(parameter_id, value);
+        } else if (v != NULL && isfinite(value) && value >= -1000.0f && value <= 1000.0f) {
             *v = value;
-            if (parameter_id <= CAR_KD) (void)Car_Motor_Set_PID(car_pid[0], car_pid[1], car_pid[2]);
         }
     }
     else if (id == ANO_ID_COMMAND) command(d, n); else return;
