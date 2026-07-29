@@ -5,6 +5,7 @@
 
 #define ANO_COMMAND_CAR_READ_FLASH 0x20U
 #define ANO_COMMAND_CAR_FACTORY_RESET 0x21U
+#define ANO_COMMAND_CAR_APPLY_CONFIG 0x22U
 
 void ANO_Host_Init(void);
 void ANO_Host_Process(void);

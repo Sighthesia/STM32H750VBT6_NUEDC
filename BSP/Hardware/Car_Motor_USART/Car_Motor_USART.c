@@ -69,6 +69,45 @@ static bool Car_Motor_Queue_Command(const char *command)
     return true;
 }
 
+static bool Car_Motor_Queue_Batch(char commands[][CAR_MOTOR_FRAME_MAX_LENGTH], uint8_t count)
+{
+    uint8_t lengths[CAR_MOTOR_TX_QUEUE_DEPTH];
+    if (count == 0U || count > CAR_MOTOR_TX_QUEUE_DEPTH)
+    {
+        return false;
+    }
+
+    for (uint8_t i = 0U; i < count; i++)
+    {
+        size_t length = strlen(commands[i]);
+        if (length == 0U || length >= CAR_MOTOR_FRAME_MAX_LENGTH)
+        {
+            return false;
+        }
+        lengths[i] = (uint8_t)length;
+    }
+
+    uint32_t primask = __get_PRIMASK();
+    __disable_irq();
+    if (car_motor_tx_count > (CAR_MOTOR_TX_QUEUE_DEPTH - count))
+    {
+        __set_PRIMASK(primask);
+        return false;
+    }
+
+    for (uint8_t i = 0U; i < count; i++)
+    {
+        memcpy(car_motor_tx_queue[car_motor_tx_tail], commands[i], lengths[i]);
+        car_motor_tx_length[car_motor_tx_tail] = lengths[i];
+        car_motor_tx_tail = (uint8_t)((car_motor_tx_tail + 1U) % CAR_MOTOR_TX_QUEUE_DEPTH);
+        car_motor_tx_count++;
+    }
+
+    Car_Motor_Start_Next_Transmit();
+    __set_PRIMASK(primask);
+    return true;
+}
+
 static bool Car_Motor_Format_Command(const char *format, ...)
 {
     char command[CAR_MOTOR_FRAME_MAX_LENGTH];
@@ -280,6 +319,11 @@ bool Car_Motor_Set_Line(uint16_t line)
     return Car_Motor_Format_Command("$mline:%u#", line);
 }
 
+bool Car_Motor_Set_Reduction_Ratio(uint16_t reduction_ratio)
+{
+    return reduction_ratio > 0U && Car_Motor_Format_Command("$mphase:%u#", reduction_ratio);
+}
+
 bool Car_Motor_Set_Wheel_Diameter(float diameter_mm)
 {
     return diameter_mm > 0.0f && Car_Motor_Format_Command("$wdiameter:%.3f#", (double)diameter_mm);
@@ -288,6 +332,35 @@ bool Car_Motor_Set_Wheel_Diameter(float diameter_mm)
 bool Car_Motor_Set_PID(float kp, float ki, float kd)
 {
     return Car_Motor_Format_Command("$MPID:%.3f,%.3f,%.3f#", (double)kp, (double)ki, (double)kd);
+}
+
+bool Car_Motor_Apply_Config(const car_motor_config_t *config)
+{
+    char commands[6][CAR_MOTOR_FRAME_MAX_LENGTH];
+    if (config == NULL || config->type < CAR_MOTOR_TYPE_520 || config->type > CAR_MOTOR_TYPE_TT ||
+        config->deadzone > 3600U || config->reduction_ratio == 0U || config->wheel_diameter_mm <= 0.0f)
+    {
+        return false;
+    }
+
+    int lengths[6] = {
+        snprintf(commands[0], sizeof(commands[0]), "$mtype:%u#", (unsigned int)config->type),
+        snprintf(commands[1], sizeof(commands[1]), "$deadzone:%u#", config->deadzone),
+        snprintf(commands[2], sizeof(commands[2]), "$mline:%u#", config->line),
+        snprintf(commands[3], sizeof(commands[3]), "$mphase:%u#", config->reduction_ratio),
+        snprintf(commands[4], sizeof(commands[4]), "$wdiameter:%.3f#", (double)config->wheel_diameter_mm),
+        snprintf(commands[5], sizeof(commands[5]), "$MPID:%.3f,%.3f,%.3f#",
+                 (double)config->pid_kp, (double)config->pid_ki, (double)config->pid_kd)
+    };
+    for (uint8_t i = 0U; i < sizeof(lengths) / sizeof(lengths[0]); i++)
+    {
+        if (lengths[i] < 0 || lengths[i] >= (int)sizeof(commands[i]))
+        {
+            return false;
+        }
+    }
+
+    return Car_Motor_Queue_Batch(commands, sizeof(commands) / sizeof(commands[0]));
 }
 
 bool Car_Motor_Factory_Reset(void)

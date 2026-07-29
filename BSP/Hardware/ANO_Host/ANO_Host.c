@@ -29,6 +29,9 @@
 #define ANO_BAUD_SWITCH_DELAY_MS 50U
 #define ANO_BAUD_RECORD_MAGIC 0xA7C3U
 #define ANO_BAUD_RECORD_VERSION 1U
+#define ANO_PARAM_RECORD_ADDRESS 0x20U
+#define ANO_PARAM_RECORD_MAGIC 0x5D92U
+#define ANO_PARAM_RECORD_VERSION 2U
 
 enum {
     CAR_KP,
@@ -44,6 +47,7 @@ enum {
     CAR_DEADZONE,
     CAR_LINE,
     CAR_WHEEL_DIAMETER,
+    CAR_REDUCTION_RATIO,
     HOST_BAUD,
     ANO_PARAM_COUNT
 };
@@ -55,7 +59,8 @@ static const ano_command_desc_t commands[] = {
     {{0x03U, 0x03U, 0x00U}, "四驱停止", "将四路电机速度设为零"},
     {{0x02U, 0x12U, 0xFFU}, "ZDT双轴停止", "立即停止两个ZDT闭环步进电机"},
     {{0x03U, ANO_COMMAND_CAR_READ_FLASH, 0x00U}, "读取四驱配置", "请求四路电机驱动读取保存的配置"},
-    {{0x03U, ANO_COMMAND_CAR_FACTORY_RESET, 0x00U}, "四驱恢复出厂", "请求四路电机驱动恢复出厂配置"}
+    {{0x03U, ANO_COMMAND_CAR_FACTORY_RESET, 0x00U}, "四驱恢复出厂", "请求四路电机驱动恢复出厂配置"},
+    {{0x03U, ANO_COMMAND_CAR_APPLY_CONFIG, 0x00U}, "下发四驱配置", "按类型、死区、相位线、减速比、轮径和PID下发当前配置"}
 };
 
 static uint8_t rx_byte;
@@ -63,11 +68,12 @@ static volatile uint8_t rx_queue[ANO_RX_QUEUE_SIZE], rx_head, rx_tail;
 static uint8_t tx_queue[ANO_TX_QUEUE_DEPTH][ANO_DATA_MAX + 8U], tx_length[ANO_TX_QUEUE_DEPTH];
 static volatile uint8_t tx_head, tx_tail, tx_count, tx_active;
 static ano_parser_t parser;
-static float car_pid[3] = {1.0f, 0.0f, 0.0f};
-static float car_type = (float)CAR_MOTOR_TYPE_520;
-static float car_deadzone;
-static float car_line;
-static float car_wheel_diameter;
+static float car_pid[3] = {0.8f, 0.06f, 0.5f};
+static float car_type = (float)CAR_MOTOR_TYPE_310;
+static float car_deadzone = 1600.0f;
+static float car_line = 500.0f;
+static float car_wheel_diameter = 67.0f;
+static float car_reduction_ratio = 30.0f;
 static uint32_t last_telemetry_ms;
 static uint32_t host_baud_rate = ANO_DEFAULT_BAUD_RATE;
 static uint32_t pending_baud_rate;
@@ -82,6 +88,15 @@ typedef struct
     uint32_t checksum;
     uint8_t padding[4];
 } ano_baud_record_t;
+
+typedef struct
+{
+    uint16_t magic;
+    uint8_t version;
+    uint8_t reserved;
+    float values[ANO_PARAM_COUNT - 1U];
+    uint32_t checksum;
+} ano_param_record_t;
 
 static void put_u16(uint8_t *d, uint16_t *i, uint16_t v) { d[(*i)++] = (uint8_t)v; d[(*i)++] = (uint8_t)(v >> 8U); }
 static void put_i32(uint8_t *d, uint16_t *i, int32_t v) { memcpy(&d[*i], &v, 4U); *i += 4U; }
@@ -98,6 +113,14 @@ static bool baud_rate_is_valid(uint32_t baud_rate)
 static uint32_t baud_record_checksum(const ano_baud_record_t *record)
 {
     return record->magic ^ ((uint32_t)record->version << 24U) ^ record->baud_rate ^ 0x5A39C71DU;
+}
+
+static uint32_t param_record_checksum(const ano_param_record_t *record)
+{
+    const uint8_t *data = (const uint8_t *)record;
+    uint32_t checksum = 0x6D2B79F5U;
+    for (uint16_t i = 0U; i < sizeof(*record) - sizeof(record->checksum); i++) checksum = (checksum << 5U) ^ (checksum >> 27U) ^ data[i];
+    return checksum;
 }
 
 static uint32_t load_baud_rate(void)
@@ -139,14 +162,14 @@ static void start_tx(void)
     if (!tx_active && tx_count != 0U) { tx_active = 1U; if (HAL_UART_Transmit_IT(&huart1, tx_queue[tx_head], tx_length[tx_head]) != HAL_OK) tx_active = 0U; }
 }
 
-static void send_frame(uint8_t id, const uint8_t *data, uint16_t length)
+static void send_frame_to(uint8_t destination, uint8_t id, const uint8_t *data, uint16_t length)
 {
     uint8_t sum = 0U, add = 0U; uint16_t index = 0U; uint32_t primask;
     if (length > ANO_DATA_MAX) return;
     primask = __get_PRIMASK(); __disable_irq();
     if (tx_count >= ANO_TX_QUEUE_DEPTH) { __set_PRIMASK(primask); return; }
     uint8_t *frame = tx_queue[tx_tail];
-    frame[index++] = ANO_HEAD; frame[index++] = ANO_DEVICE_ADDRESS; frame[index++] = ANO_HOST_ADDRESS; frame[index++] = id; frame[index++] = (uint8_t)length; frame[index++] = (uint8_t)(length >> 8U);
+    frame[index++] = ANO_HEAD; frame[index++] = ANO_DEVICE_ADDRESS; frame[index++] = destination; frame[index++] = id; frame[index++] = (uint8_t)length; frame[index++] = (uint8_t)(length >> 8U);
     if (length != 0U)
     {
         memcpy(&frame[index], data, length);
@@ -156,13 +179,18 @@ static void send_frame(uint8_t id, const uint8_t *data, uint16_t length)
     frame[index++] = sum; frame[index++] = add; tx_length[tx_tail] = (uint8_t)index; tx_tail = (tx_tail + 1U) % ANO_TX_QUEUE_DEPTH; tx_count++; start_tx(); __set_PRIMASK(primask);
 }
 
+static void send_frame(uint8_t id, const uint8_t *data, uint16_t length)
+{
+    send_frame_to(ANO_HOST_ADDRESS, id, data, length);
+}
+
 static float *parameter(uint16_t id)
 {
     static float *const values[ANO_PARAM_COUNT] = {
         &car_pid[0], &car_pid[1], &car_pid[2],
         &yaw_pid.Kp, &yaw_pid.Ki, &yaw_pid.Kd,
         &pitch_pid.Kp, &pitch_pid.Ki, &pitch_pid.Kd,
-        &car_type, &car_deadzone, &car_line, &car_wheel_diameter, NULL
+        &car_type, &car_deadzone, &car_line, &car_wheel_diameter, &car_reduction_ratio, NULL
     };
     return id < ANO_PARAM_COUNT ? values[id] : NULL;
 }
@@ -212,11 +240,59 @@ static bool write_car_parameter(uint16_t parameter_id, float value)
         accepted = Car_Motor_Set_Wheel_Diameter(value);
         if (accepted) *target = value;
     }
+    else if (parameter_id == CAR_REDUCTION_RATIO && value > 0.0f && value <= 65535.0f && value == floorf(value))
+    {
+        accepted = Car_Motor_Set_Reduction_Ratio((uint16_t)value);
+        if (accepted) *target = value;
+    }
 
     return accepted;
 }
 
-static void send_check(uint8_t id, uint8_t sum, uint8_t add) { uint8_t d[3] = {id, sum, add}; send_frame(ANO_ID_CHECK, d, sizeof(d)); }
+static bool save_parameters(void)
+{
+    ano_param_record_t record = {0};
+    ano_param_record_t verify = {0};
+
+    record.magic = ANO_PARAM_RECORD_MAGIC;
+    record.version = ANO_PARAM_RECORD_VERSION;
+    for (uint16_t id = 0U; id < ANO_PARAM_COUNT - 1U; id++)
+    {
+        float *value = parameter(id);
+        if (value == NULL || !isfinite(*value)) return false;
+        record.values[id] = *value;
+    }
+    record.checksum = param_record_checksum(&record);
+    return AT24C02_Write(ANO_PARAM_RECORD_ADDRESS, (const uint8_t *)&record, sizeof(record)) &&
+           AT24C02_Read(ANO_PARAM_RECORD_ADDRESS, (uint8_t *)&verify, sizeof(verify)) &&
+           memcmp(&record, &verify, sizeof(record)) == 0;
+}
+
+static void load_parameters(void)
+{
+    ano_param_record_t record = {0};
+    if (!AT24C02_Read(ANO_PARAM_RECORD_ADDRESS, (uint8_t *)&record, sizeof(record)) ||
+        record.magic != ANO_PARAM_RECORD_MAGIC || record.version != ANO_PARAM_RECORD_VERSION ||
+        record.checksum != param_record_checksum(&record))
+    {
+        return;
+    }
+
+    for (uint16_t id = 0U; id < ANO_PARAM_COUNT - 1U; id++)
+    {
+        float value = record.values[id];
+        float *target = parameter(id);
+        if (target == NULL || !isfinite(value)) continue;
+        if (id <= CAR_KD || id >= CAR_TYPE) (void)write_car_parameter(id, value);
+        else if (value >= -1000.0f && value <= 1000.0f) *target = value;
+    }
+}
+
+static void send_check(uint8_t destination, uint8_t id, uint8_t sum, uint8_t add)
+{
+    uint8_t d[3] = {id, sum, add};
+    send_frame_to(destination, ANO_ID_CHECK, d, sizeof(d));
+}
 static void send_param(uint16_t id)
 {
     uint8_t d[6]; uint16_t i = 0U; float *v = parameter(id);
@@ -238,13 +314,13 @@ static void send_param_info(uint16_t id)
         "四驱Kp", "四驱Ki", "四驱Kd",
         "YAW轴Kp", "YAW轴Ki", "YAW轴Kd",
         "PITCH轴Kp", "PITCH轴Ki", "PITCH轴Kd",
-        "四驱型号", "四驱死区", "四驱循迹", "车轮直径", "上位机波特率"
+        "四驱型号", "四驱死区", "四驱相位线", "车轮直径", "四驱减速比", "上位机波特率"
     };
     static const char *const infos[ANO_PARAM_COUNT] = {
         "四驱速度环比例系数", "四驱速度环积分系数", "四驱速度环微分系数",
         "航向轴PID比例系数", "航向轴PID积分系数", "航向轴PID微分系数",
         "俯仰轴PID比例系数", "俯仰轴PID积分系数", "俯仰轴PID微分系数",
-        "四驱电机型号", "四驱控制死区", "四驱循迹参数", "车轮直径，单位毫米", "匿名上位机波特率"
+        "四驱电机型号", "四驱控制死区", "四驱编码器相位线", "车轮直径，单位毫米", "四驱减速比", "匿名上位机波特率"
     };
     uint8_t d[ANO_DATA_MAX] = {0}; uint16_t i = 0U;
     if (id >= ANO_PARAM_COUNT) return;
@@ -277,6 +353,21 @@ static void handle_command_query(const uint8_t *d, uint16_t n)
     if (d[0] == 0U) send_command_count();
     else if (d[0] == 1U) send_command_info(get_u16(&d[1]));
 }
+
+static bool apply_car_config(void)
+{
+    car_motor_config_t config = {
+        .type = (car_motor_type_t)(uint8_t)car_type,
+        .deadzone = (uint16_t)car_deadzone,
+        .line = (uint16_t)car_line,
+        .reduction_ratio = (uint16_t)car_reduction_ratio,
+        .wheel_diameter_mm = car_wheel_diameter,
+        .pid_kp = car_pid[0],
+        .pid_ki = car_pid[1],
+        .pid_kd = car_pid[2]
+    };
+    return Car_Motor_Apply_Config(&config);
+}
 static void send_telemetry(void)
 {
     const car_motor_telemetry_t *car = Car_Motor_Get_Telemetry(); uint8_t d[ANO_DATA_MAX]; uint16_t i = 0U;
@@ -287,38 +378,52 @@ static void send_telemetry(void)
     send_frame(ANO_ID_TELEMETRY, d, i);
 }
 
-static void command(const uint8_t *d, uint16_t n)
+static bool command(const uint8_t *d, uint16_t n)
 {
-    if (n == 3U && d[0] == 0x03U && d[1] == 0x03U && d[2] == 0x00U) (void)Car_Motor_Set_Speed(0, 0, 0, 0);
-    else if (n == 3U && d[0] == 0x02U && d[1] == 0x12U && d[2] == 0xFFU) { ZDT_Stepper_stop(zdt_stepper_motors[0], 0U); ZDT_Stepper_stop(zdt_stepper_motors[1], 0U); }
-    else if (n == 3U && d[0] == 0x03U && d[1] == ANO_COMMAND_CAR_READ_FLASH && d[2] == 0x00U) (void)Car_Motor_Read_Flash();
-    else if (n == 3U && d[0] == 0x03U && d[1] == ANO_COMMAND_CAR_FACTORY_RESET && d[2] == 0x00U) (void)Car_Motor_Factory_Reset();
-    else if (n == 9U && d[0] == 1U) (void)Car_Motor_Set_Speed(get_i16(&d[1]), get_i16(&d[3]), get_i16(&d[5]), get_i16(&d[7]));
-    else if (n == 9U && d[0] == 2U) (void)Car_Motor_Set_PWM(get_i16(&d[1]), get_i16(&d[3]), get_i16(&d[5]), get_i16(&d[7]));
-    else if (n == 1U && d[0] == 3U) (void)Car_Motor_Set_Speed(0, 0, 0, 0);
-    else if (n == 7U && d[0] == 0x10U && d[1] < 2U) { float s = get_float(&d[3]); if (s >= 0.0f && s <= 1000.0f) ZDT_Stepper_Set_Speed(zdt_stepper_motors[d[1]], d[2] ? ZDT_STEPPER_CCW : ZDT_STEPPER_CW, s, 0U, 0U); }
-    else if (n == 12U && d[0] == 0x11U && d[1] < 2U) { float s = get_float(&d[3]), p = get_float(&d[7]); if (s >= 0.0f && s <= 1000.0f && p >= 0.0f && p <= 3600.0f) ZDT_Stepper_Set_position(zdt_stepper_motors[d[1]], d[2] ? ZDT_STEPPER_CCW : ZDT_STEPPER_CW, s, p, d[11] ? ZDT_STEPPER_ABS_POS_MODE : ZDT_STEPPER_REL_POS_MODE, 0U); }
-    else if (n == 2U && d[0] == 0x12U) { if (d[1] == 0xFFU) { ZDT_Stepper_stop(zdt_stepper_motors[0], 0U); ZDT_Stepper_stop(zdt_stepper_motors[1], 0U); } else if (d[1] < 2U) ZDT_Stepper_stop(zdt_stepper_motors[d[1]], 0U); }
-    else if (n == 1U && d[0] == ANO_COMMAND_CAR_READ_FLASH) (void)Car_Motor_Read_Flash();
-    else if (n == 1U && d[0] == ANO_COMMAND_CAR_FACTORY_RESET) (void)Car_Motor_Factory_Reset();
+    if (n == 3U && d[0] == 0x03U && d[1] == 0x03U && d[2] == 0x00U) return Car_Motor_Set_Speed(0, 0, 0, 0);
+    if (n == 3U && d[0] == 0x02U && d[1] == 0x12U && d[2] == 0xFFU) { ZDT_Stepper_stop(zdt_stepper_motors[0], 0U); ZDT_Stepper_stop(zdt_stepper_motors[1], 0U); return true; }
+    if (n == 3U && d[0] == 0x03U && d[1] == ANO_COMMAND_CAR_READ_FLASH && d[2] == 0x00U) return Car_Motor_Read_Flash();
+    if (n == 3U && d[0] == 0x03U && d[1] == ANO_COMMAND_CAR_FACTORY_RESET && d[2] == 0x00U) return Car_Motor_Factory_Reset();
+    if (n == 3U && d[0] == 0x03U && d[1] == ANO_COMMAND_CAR_APPLY_CONFIG && d[2] == 0x00U) return apply_car_config();
+    if (n == 9U && d[0] == 1U) return Car_Motor_Set_Speed(get_i16(&d[1]), get_i16(&d[3]), get_i16(&d[5]), get_i16(&d[7]));
+    if (n == 9U && d[0] == 2U) return Car_Motor_Set_PWM(get_i16(&d[1]), get_i16(&d[3]), get_i16(&d[5]), get_i16(&d[7]));
+    if (n == 1U && d[0] == 3U) return Car_Motor_Set_Speed(0, 0, 0, 0);
+    if (n == 7U && d[0] == 0x10U && d[1] < 2U) { float s = get_float(&d[3]); if (s >= 0.0f && s <= 1000.0f) { ZDT_Stepper_Set_Speed(zdt_stepper_motors[d[1]], d[2] ? ZDT_STEPPER_CCW : ZDT_STEPPER_CW, s, 0U, 0U); return true; } }
+    if (n == 12U && d[0] == 0x11U && d[1] < 2U) { float s = get_float(&d[3]), p = get_float(&d[7]); if (s >= 0.0f && s <= 1000.0f && p >= 0.0f && p <= 3600.0f) { ZDT_Stepper_Set_position(zdt_stepper_motors[d[1]], d[2] ? ZDT_STEPPER_CCW : ZDT_STEPPER_CW, s, p, d[11] ? ZDT_STEPPER_ABS_POS_MODE : ZDT_STEPPER_REL_POS_MODE, 0U); return true; } }
+    if (n == 2U && d[0] == 0x12U) { if (d[1] == 0xFFU) { ZDT_Stepper_stop(zdt_stepper_motors[0], 0U); ZDT_Stepper_stop(zdt_stepper_motors[1], 0U); return true; } if (d[1] < 2U) { ZDT_Stepper_stop(zdt_stepper_motors[d[1]], 0U); return true; } }
+    if (n == 1U && d[0] == ANO_COMMAND_CAR_READ_FLASH) return Car_Motor_Read_Flash();
+    if (n == 1U && d[0] == ANO_COMMAND_CAR_FACTORY_RESET) return Car_Motor_Factory_Reset();
+    if (n == 1U && d[0] == ANO_COMMAND_CAR_APPLY_CONFIG) return apply_car_config();
+    return false;
 }
 
-static void handle(uint8_t id, const uint8_t *d, uint16_t n, uint8_t sum, uint8_t add)
+static void handle(uint8_t source, uint8_t id, const uint8_t *d, uint16_t n, uint8_t sum, uint8_t add)
 {
-    if (id == ANO_ID_PARAM_COMMAND && n >= 3U) { uint16_t v = get_u16(&d[1]); if (d[0] == 0U) send_device_info(); else if (d[0] == 1U) { uint8_t count[3] = {1U, ANO_PARAM_COUNT, 0U}; send_frame(ANO_ID_PARAM_COMMAND, count, 3U); } else if (d[0] == 2U) send_param(v); else if (d[0] == 3U) send_param_info(v); }
+    if (id == ANO_ID_PARAM_COMMAND && n == 3U) {
+        uint16_t v = get_u16(&d[1]);
+        if (d[0] == 0U) send_device_info();
+        else if (d[0] == 1U) { uint8_t count[3] = {1U, ANO_PARAM_COUNT, 0U}; send_frame(ANO_ID_PARAM_COMMAND, count, 3U); }
+        else if (d[0] == 2U) send_param(v);
+        else if (d[0] == 3U) send_param_info(v);
+        else if (d[0] == 0x10U && v == 0x00ABU && save_parameters()) send_check(source, id, sum, add);
+    }
     else if (id == ANO_ID_PARAM_VALUE && n == 6U) {
+        bool accepted = false;
         uint16_t parameter_id = get_u16(d); float value = get_float(&d[2]); float *v = parameter(parameter_id);
         if (parameter_id == HOST_BAUD && isfinite(value) && value == (float)(uint32_t)value &&
             baud_rate_is_valid((uint32_t)value) && save_baud_rate((uint32_t)value)) {
             pending_baud_rate = (uint32_t)value;
             baud_switch_at_ms = HAL_GetTick() + ANO_BAUD_SWITCH_DELAY_MS;
+            accepted = true;
         } else if (parameter_id <= CAR_KD || (parameter_id >= CAR_TYPE && parameter_id < HOST_BAUD)) {
-            (void)write_car_parameter(parameter_id, value);
+            accepted = write_car_parameter(parameter_id, value);
         } else if (v != NULL && isfinite(value) && value >= -1000.0f && value <= 1000.0f) {
             *v = value;
+            accepted = true;
         }
+        if (accepted) send_check(source, id, sum, add);
     }
-    else if (id == ANO_ID_COMMAND) { command(d, n); send_check(id, sum, add); }
+    else if (id == ANO_ID_COMMAND && command(d, n)) send_check(source, id, sum, add);
     else if (id == ANO_ID_COMMAND_QUERY) handle_command_query(d, n);
     else return;
 }
@@ -340,7 +445,7 @@ static void feed(uint8_t b)
             uint8_t header[6] = {ANO_HEAD, parser.source, parser.destination, parser.id, (uint8_t)parser.length, (uint8_t)(parser.length >> 8U)};
             for (uint8_t i = 0U; i < sizeof(header); i++) { rolling += header[i]; add += rolling; }
             for (uint16_t i = 0U; i < parser.length; i++) { rolling += parser.data[i]; add += rolling; }
-            if (b == add) handle(parser.id, parser.data, parser.length, parser.checksum, b);
+            if (b == add) handle(parser.source, parser.id, parser.data, parser.length, parser.checksum, b);
         }
         parser.state = 0U;
         break;
@@ -351,6 +456,7 @@ void ANO_Host_Init(void)
 {
     pid_kp = 3.0f; pid_ki = 1.0f; pid_kd = 0.0f; pid_tau = 0.05f; pid_lim_min = -4.0f; pid_lim_max = 4.0f; pid_lim_min_int = -5.0f; pid_lim_max_int = 5.0f; sample_time_s = 0.01f;
     Stepper_PID_Parameters_Init(&yaw_pid); Stepper_PID_Parameters_Init(&pitch_pid);
+    load_parameters();
     host_baud_rate = load_baud_rate();
     if (host_baud_rate != huart1.Init.BaudRate) apply_baud_rate(host_baud_rate);
     else HAL_UART_Receive_IT(&huart1, &rx_byte, 1U);
