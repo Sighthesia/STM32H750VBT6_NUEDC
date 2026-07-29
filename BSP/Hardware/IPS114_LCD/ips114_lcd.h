@@ -20,5 +20,7 @@ void IPS114_LCD_DrawPoint(uint16_t x, uint16_t y, uint16_t color);
 void IPS114_LCD_DrawLine(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, uint16_t color);
 void IPS114_LCD_DrawString(uint16_t x, uint16_t y, const char *text, uint16_t color, uint16_t background);
 void IPS114_LCD_ShowSelfTest(void);
+void IPS114_LCD_WritePixels(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1,
+                            const uint8_t *data, uint16_t length);
 
 #endif /* IPS114_LCD_H */

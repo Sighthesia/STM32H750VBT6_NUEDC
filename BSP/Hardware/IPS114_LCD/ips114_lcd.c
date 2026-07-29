@@ -10,7 +10,7 @@
 #define IPS114_LCD_BL_PORT GPIOD
 #define IPS114_LCD_BL_PIN GPIO_PIN_10
 
-#define IPS114_LCD_X_OFFSET 52U
+#define IPS114_LCD_X_OFFSET 53U
 #define IPS114_LCD_Y_OFFSET 40U
 #define IPS114_LCD_SPI_TIMEOUT 100U
 
@@ -159,7 +159,7 @@ void IPS114_LCD_Init(void)
     IPS114_LCD_WriteCommand(0x11U);
     HAL_Delay(120U);
     IPS114_LCD_WriteCommand(0x36U);
-    value = 0x00U;
+    value = 0xC0U;
     IPS114_LCD_WriteData(&value, 1U);
     IPS114_LCD_WriteCommand(0x3AU);
     value = 0x05U;
@@ -234,6 +234,20 @@ void IPS114_LCD_DrawPoint(uint16_t x, uint16_t y, uint16_t color)
     HAL_GPIO_WritePin(IPS114_LCD_CS_PORT, IPS114_LCD_CS_PIN, GPIO_PIN_RESET);
     IPS114_LCD_SetWindow(x, y, x, y);
     IPS114_LCD_WriteColor(color);
+    HAL_GPIO_WritePin(IPS114_LCD_CS_PORT, IPS114_LCD_CS_PIN, GPIO_PIN_SET);
+}
+
+void IPS114_LCD_WritePixels(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1,
+                            const uint8_t *data, uint16_t length)
+{
+    if (data == NULL || x0 > x1 || y0 > y1 || x1 >= IPS114_LCD_WIDTH || y1 >= IPS114_LCD_HEIGHT)
+    {
+        return;
+    }
+
+    HAL_GPIO_WritePin(IPS114_LCD_CS_PORT, IPS114_LCD_CS_PIN, GPIO_PIN_RESET);
+    IPS114_LCD_SetWindow(x0, y0, x1, y1);
+    IPS114_LCD_WriteData(data, length);
     HAL_GPIO_WritePin(IPS114_LCD_CS_PORT, IPS114_LCD_CS_PIN, GPIO_PIN_SET);
 }
 
