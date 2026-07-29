@@ -2,6 +2,7 @@
 #define JY61P_H
 
 #include <stdint.h>
+#include <stdbool.h>
 
 typedef struct
 {
@@ -41,6 +42,7 @@ typedef struct
 
 void JY61P_Init(void);
 void JY61P_Process(void);
+void JY61P_Set_Axis_Inverted(bool invert_x, bool invert_y, bool invert_z);
 const jy61p_sample_t *JY61P_Get_Sample(void);
 const jy61p_status_t *JY61P_Get_Status(void);
 

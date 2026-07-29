@@ -15,6 +15,19 @@
 static jy61p_sample_t sample;
 static jy61p_status_t status;
 static uint32_t last_poll_ms;
+static uint8_t inverted_axes;
+
+static int16_t invert_i16(int16_t value)
+{
+    return value == INT16_MIN ? INT16_MAX : (int16_t)-value;
+}
+
+static void apply_axis_inversion(jy61p_raw_vector_t *vector)
+{
+    if ((inverted_axes & 0x01U) != 0U) vector->x = invert_i16(vector->x);
+    if ((inverted_axes & 0x02U) != 0U) vector->y = invert_i16(vector->y);
+    if ((inverted_axes & 0x04U) != 0U) vector->z = invert_i16(vector->z);
+}
 
 static int16_t decode_i16(const uint8_t *data)
 {
@@ -59,6 +72,10 @@ static uint8_t read_sample(jy61p_sample_t *next)
     next->quaternion.x = decode_i16(&quaternion_data[2]);
     next->quaternion.y = decode_i16(&quaternion_data[4]);
     next->quaternion.z = decode_i16(&quaternion_data[6]);
+    apply_axis_inversion(&next->acceleration);
+    apply_axis_inversion(&next->angular_velocity);
+    apply_axis_inversion(&next->magnetic_field);
+    apply_axis_inversion(&next->angle);
     return 1U;
 }
 
@@ -109,6 +126,13 @@ void JY61P_Process(void)
 const jy61p_sample_t *JY61P_Get_Sample(void)
 {
     return &sample;
+}
+
+void JY61P_Set_Axis_Inverted(bool invert_x, bool invert_y, bool invert_z)
+{
+    inverted_axes = (invert_x ? 0x01U : 0U) |
+                    (invert_y ? 0x02U : 0U) |
+                    (invert_z ? 0x04U : 0U);
 }
 
 const jy61p_status_t *JY61P_Get_Status(void)
