@@ -12,11 +12,34 @@ typedef enum
     CAR_MOTOR_TYPE_TT
 } car_motor_type_t;
 
+typedef enum
+{
+    CAR_MOTOR_COMMAND_NONE,
+    CAR_MOTOR_COMMAND_QUEUED,
+    CAR_MOTOR_COMMAND_TRANSMITTED,
+    CAR_MOTOR_COMMAND_DRIVER_FRAME,
+    CAR_MOTOR_COMMAND_FAILED
+} car_motor_command_status_t;
+
+typedef enum
+{
+    CAR_MOTOR_DRIVER_FRAME_NONE,
+    CAR_MOTOR_DRIVER_FRAME_TELEMETRY,
+    CAR_MOTOR_DRIVER_FRAME_VOLTAGE
+} car_motor_driver_frame_t;
+
+#define CAR_MOTOR_LAST_COMMAND_LENGTH 23U
+
 typedef struct
 {
     int32_t total_encoder[4];
     int32_t encoder_delta_10ms[4];
     float speed[4];
+    char last_command[CAR_MOTOR_LAST_COMMAND_LENGTH];
+    float voltage;
+    uint8_t command_status;
+    uint8_t last_driver_frame;
+    uint8_t voltage_valid;
 } car_motor_telemetry_t;
 
 typedef struct
@@ -45,6 +68,7 @@ bool Car_Motor_Set_Wheel_Diameter(float diameter_mm);
 bool Car_Motor_Set_PID(float kp, float ki, float kd);
 bool Car_Motor_Apply_Config(const car_motor_config_t *config);
 bool Car_Motor_Factory_Reset(void);
+bool Car_Motor_Restore_Defaults(void);
 bool Car_Motor_Set_Speed(int16_t m1, int16_t m2, int16_t m3, int16_t m4);
 bool Car_Motor_Set_PWM(int16_t m1, int16_t m2, int16_t m3, int16_t m4);
 bool Car_Motor_Set_Upload(bool total_encoder, bool encoder_delta_10ms, bool speed);

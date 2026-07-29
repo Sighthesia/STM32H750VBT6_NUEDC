@@ -67,7 +67,8 @@ static const ano_command_desc_t commands[] = {
     {{0x03U, ANO_COMMAND_CAR_APPLY_CONFIG, 0x00U}, "下发四驱配置", "按类型、死区、相位线、减速比、轮径和PID下发当前配置"},
     {{0x03U, ANO_COMMAND_CAR_DEBUG_ENTER, 0x00U}, "进入M1M2调试", "四路PWM置零后允许M1和M2调试"},
     {{0x03U, ANO_COMMAND_CAR_DEBUG_START, 0x00U}, "启动M1M2调试", "按调试参数仅输出M1和M2，M3和M4为零"},
-    {{0x03U, ANO_COMMAND_CAR_DEBUG_STOP, 0x00U}, "停止M1M2调试", "四路PWM置零并退出M1和M2调试模式"}
+    {{0x03U, ANO_COMMAND_CAR_DEBUG_STOP, 0x00U}, "停止M1M2调试", "四路PWM置零并退出M1和M2调试模式"},
+    {{0x03U, ANO_COMMAND_CAR_RESTORE_DEFAULTS, 0x00U}, "完整恢复默认", "清除本机配置并恢复电机驱动默认设置"}
 };
 
 static uint8_t rx_byte;
@@ -405,20 +406,9 @@ static bool apply_car_config(void)
 
 static bool restore_defaults(void)
 {
-    const car_motor_config_t defaults = {
-        .type = CAR_MOTOR_TYPE_310,
-        .deadzone = 1600U,
-        .line = 500U,
-        .reduction_ratio = 30U,
-        .wheel_diameter_mm = 67.0f,
-        .pid_kp = 0.8f,
-        .pid_ki = 0.06f,
-        .pid_kd = 0.5f
-    };
-
     storage_operation = 3U;
     if (!storage_ready || !W25Qxx_EraseSector(ANO_STORAGE_ADDRESS) ||
-        !Car_Motor_Apply_Config(&defaults))
+        !Car_Motor_Restore_Defaults())
     {
         return false;
     }
@@ -477,6 +467,11 @@ static void send_telemetry(void)
     for (uint8_t n = 0U; n < 4U; n++) put_i32(d, &i, car->encoder_delta_10ms[n]);
     for (uint8_t n = 0U; n < 4U; n++) put_float(d, &i, car->speed[n]);
     for (uint8_t n = 0U; n < 2U; n++) { put_float(d, &i, zdt_stepper_motors[n]->data.current_position); put_float(d, &i, zdt_stepper_motors[n]->data.current_speed); d[i++] = zdt_stepper_motors[n]->data.motor_status_flags; }
+    d[i++] = car->command_status;
+    d[i++] = car->last_driver_frame;
+    d[i++] = car->voltage_valid;
+    memcpy(&d[i], car->last_command, sizeof(car->last_command)); i += sizeof(car->last_command);
+    put_float(d, &i, car->voltage);
     send_frame(ANO_ID_TELEMETRY, d, i);
 }
 
@@ -502,6 +497,7 @@ static bool command(const uint8_t *d, uint16_t n)
     if (n == 3U && d[0] == 0x03U && d[1] == ANO_COMMAND_CAR_DEBUG_ENTER && d[2] == 0x00U) return enter_car_debug();
     if (n == 3U && d[0] == 0x03U && d[1] == ANO_COMMAND_CAR_DEBUG_START && d[2] == 0x00U) return start_car_debug();
     if (n == 3U && d[0] == 0x03U && d[1] == ANO_COMMAND_CAR_DEBUG_STOP && d[2] == 0x00U) return stop_car_debug();
+    if (n == 3U && d[0] == 0x03U && d[1] == ANO_COMMAND_CAR_RESTORE_DEFAULTS && d[2] == 0x00U) return restore_defaults();
     if (n == 9U && d[0] == 1U && !car_debug_active) return Car_Motor_Set_Speed(get_i16(&d[1]), get_i16(&d[3]), get_i16(&d[5]), get_i16(&d[7]));
     if (n == 9U && d[0] == 2U && !car_debug_active) return Car_Motor_Set_PWM(get_i16(&d[1]), get_i16(&d[3]), get_i16(&d[5]), get_i16(&d[7]));
     if (n == 1U && d[0] == 3U) return car_debug_active ? stop_car_debug() : Car_Motor_Set_Speed(0, 0, 0, 0);
@@ -514,6 +510,7 @@ static bool command(const uint8_t *d, uint16_t n)
     if (n == 1U && d[0] == ANO_COMMAND_CAR_DEBUG_ENTER) return enter_car_debug();
     if (n == 1U && d[0] == ANO_COMMAND_CAR_DEBUG_START) return start_car_debug();
     if (n == 1U && d[0] == ANO_COMMAND_CAR_DEBUG_STOP) return stop_car_debug();
+    if (n == 1U && d[0] == ANO_COMMAND_CAR_RESTORE_DEFAULTS) return restore_defaults();
     return false;
 }
 
