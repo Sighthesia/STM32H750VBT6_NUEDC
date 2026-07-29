@@ -9,6 +9,7 @@ Load the relevant project skill before specialized work:
 | Skill | Use when |
 | --- | --- |
 | [arm-cortex-expert](.agents/skills/arm-cortex-expert/SKILL.md) | STM32/Cortex-M firmware or driver work |
+| [ano-v8-host](.agents/skills/ano-v8-host/SKILL.md) | ANO V8 匿名上位机协议、参数/命令发现、遥测或波特率持久化 |
 | [embedded-systems](.agents/skills/embedded-systems/SKILL.md) | MCU, interrupt, DMA, timing, RTOS, or power work |
 | [embedded-debug](.agents/skills/embedded-debug/SKILL.md) | Hard faults, crashes, register dumps, or stack traces |
 | [memory-audit](.agents/skills/memory-audit/SKILL.md) | Stack, heap, allocation, or memory-risk analysis |
