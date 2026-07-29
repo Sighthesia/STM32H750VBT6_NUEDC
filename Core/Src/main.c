@@ -27,6 +27,7 @@
 #include "App_Config.h"
 #include "ZDT_Stepper.h"
 #include "Car_Motor_USART.h"
+#include "ANO_Host.h"
 
 /* USER CODE END Includes */
 
@@ -113,6 +114,7 @@ static void App_Peripheral_Init(void)
 {
   MX_GPIO_Init();
   MX_DMA_Init();
+  MX_USART1_UART_Init();
   MX_USART3_UART_Init();
   MX_UART5_Init();
   MX_USART2_UART_Init();
@@ -125,6 +127,7 @@ static void App_Peripheral_Init(void)
 #if APP_ENABLE_CAR_MOTOR
   Car_Motor_Init();
 #endif
+  ANO_Host_Init();
 }
 
 static void App_Process(void)
@@ -132,6 +135,7 @@ static void App_Process(void)
 #if APP_ENABLE_CAR_MOTOR
   Car_Motor_Process();
 #endif
+  ANO_Host_Process();
 }
 
 /**

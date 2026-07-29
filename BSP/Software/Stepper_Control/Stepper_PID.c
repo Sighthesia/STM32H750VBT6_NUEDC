@@ -14,6 +14,15 @@
 #include "Stepper_PID.h"
 #include <math.h> // 用于 fabsf 函数
 
+_Bool menu_stepper_tracking_enable;
+_Bool menu_uart_data_receive_enable;
+_Bool menu_pid_params_update_enable;
+_Bool menu_pid_calculation_debug;
+_Bool menu_stepper_command_debug;
+_Bool menu_pid_params_debug;
+static float pid_laser_threshold;
+static uint32_t pid_laser_duration_ms;
+
 /* --------------------------------- 此处修改: PID参数变量定义与初始化 -------------------------------- */
 float pid_kp = 0.0f;
 float pid_ki = 0.0f;

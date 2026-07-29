@@ -50,6 +50,10 @@ target_link_directories(${CMAKE_PROJECT_NAME} PRIVATE
 file(GLOB_RECURSE BSP_SOURCES CONFIGURE_DEPENDS
     "BSP/Hardware/ZDT_Step_Motor/*.c"
     "BSP/Hardware/Car_Motor_USART/*.c"
+    "BSP/Hardware/IPS114_LCD/*.c"
+    "BSP/Hardware/ANO_Host/*.c"
+    "BSP/Software/PID/*.c"
+    "BSP/Software/Stepper_Control/Stepper_PID.c"
 )
 
 # 自动收集BSP目录下的所有头文件目录

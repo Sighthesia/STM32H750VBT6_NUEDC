@@ -3,6 +3,7 @@
 #include "App_Config.h"
 #include "usart.h"
 #include "ZDT_Stepper.h"
+#include "ANO_Host.h"
 
 #include <stdio.h>
 #include <stdarg.h>
@@ -208,6 +209,7 @@ void Car_Motor_UART_Error_Callback(void)
 
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 {
+    if (huart->Instance == USART1) { ANO_Host_UART_RxCplt_Callback(); return; }
 #if APP_ENABLE_CAR_MOTOR
     if (huart->Instance == USART3)
     {
@@ -230,6 +232,7 @@ void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t size)
 
 void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart)
 {
+    if (huart->Instance == USART1) { ANO_Host_UART_TxCplt_Callback(); return; }
 #if APP_ENABLE_CAR_MOTOR
     if (huart->Instance == USART3)
     {
@@ -246,6 +249,7 @@ void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart)
 
 void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart)
 {
+    if (huart->Instance == USART1) { ANO_Host_UART_Error_Callback(); return; }
 #if APP_ENABLE_CAR_MOTOR
     if (huart->Instance == USART3)
     {
