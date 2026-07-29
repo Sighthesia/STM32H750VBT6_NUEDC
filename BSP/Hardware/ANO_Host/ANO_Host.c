@@ -235,10 +235,10 @@ static void send_device_info(void)
 static void send_param_info(uint16_t id)
 {
     static const char *const names[ANO_PARAM_COUNT] = {
-        "car_kp", "car_ki", "car_kd",
-        "yaw_kp", "yaw_ki", "yaw_kd",
-        "pitch_kp", "pitch_ki", "pitch_kd",
-        "car_type", "car_deadzone", "car_line", "wheel_diameter", "host_baud"
+        "四驱Kp", "四驱Ki", "四驱Kd",
+        "YAW轴Kp", "YAW轴Ki", "YAW轴Kd",
+        "PITCH轴Kp", "PITCH轴Ki", "PITCH轴Kd",
+        "四驱型号", "四驱死区", "四驱循迹", "车轮直径", "上位机波特率"
     };
     static const char *const infos[ANO_PARAM_COUNT] = {
         "四驱速度环比例系数", "四驱速度环积分系数", "四驱速度环微分系数",
