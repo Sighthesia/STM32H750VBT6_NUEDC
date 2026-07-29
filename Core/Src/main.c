@@ -320,6 +320,11 @@ void PID_Laser_Process(void)
 }
 /* USER CODE END 0 */
 
+static void App_Peripheral_Init(void);
+static void App_Menu_Init(void);
+static void App_Control_Init(void);
+static void App_Process(void);
+
 /**
  * @brief  The application entry point.
  * @retval int
@@ -350,7 +355,25 @@ int main(void)
 
   /* USER CODE END SysInit */
 
-  /* Initialize all configured peripherals */
+  App_Peripheral_Init();
+  App_Menu_Init();
+  App_Control_Init();
+
+  /* Infinite loop */
+  /* USER CODE BEGIN WHILE */
+
+  while (1)
+  {
+    App_Process();
+    /* USER CODE END WHILE */
+
+    /* USER CODE BEGIN 3 */
+  }
+  /* USER CODE END 3 */
+}
+
+static void App_Peripheral_Init(void)
+{
   MX_GPIO_Init();
   MX_DMA_Init();
   MX_USART1_UART_Init();
@@ -361,184 +384,138 @@ int main(void)
   MX_SPI1_Init();
   MX_UART5_Init();
   MX_USART2_UART_Init();
-  /* USER CODE BEGIN 2 */
-  // 串口接收初始化
-  lwrb_init(&uart3_rx_buffer, uart3_rx_buffer_data, sizeof(uart3_rx_buffer_data));
 
+  lwrb_init(&uart3_rx_buffer, uart3_rx_buffer_data, sizeof(uart3_rx_buffer_data));
   UART3_Start_Receive_IT();
 
-  // 使能电机
   ZDT_Stepper_Init();
   ZDT_Stepper_Enable(zdt_stepper_motors[0], 1, ZDT_STEPPER_SYNC_DISABLE);
   ZDT_Stepper_Enable(zdt_stepper_motors[1], 1, ZDT_STEPPER_SYNC_DISABLE);
+}
 
-  /* ----------------------------------- 菜单结构优化 ----------------------------------- */
-  // 初始化OLED显示
+static void App_Menu_Init(void)
+{
   astra_ui_driver_init();
   astra_init_core();
 
-  /* ---------------------------------- 主控制菜单 ---------------------------------- */
-  astra_list_item_t *Control = astra_new_list_item("Control");
-  astra_push_item_to_list(astra_get_root_list(), Control);
+  astra_list_item_t *control = astra_new_list_item("Control");
+  astra_push_item_to_list(astra_get_root_list(), control);
 
-  // 核心功能控制
-  astra_push_item_to_list(Control, astra_new_switch_item("PID Tracking", &menu_stepper_tracking_enable));
-  astra_push_item_to_list(Control, astra_new_switch_item("Auto Rotate", &rotate_detect));
-  astra_push_item_to_list(Control, astra_new_switch_item("Auto Laser", &pid_laser_enable));
-  astra_push_item_to_list(Control, astra_new_switch_item("Manual Laser", &menu_lazer_enable));
+  astra_push_item_to_list(control, astra_new_switch_item("PID Tracking", &menu_stepper_tracking_enable));
+  astra_push_item_to_list(control, astra_new_switch_item("Auto Rotate", &rotate_detect));
+  astra_push_item_to_list(control, astra_new_switch_item("Auto Laser", &pid_laser_enable));
+  astra_push_item_to_list(control, astra_new_switch_item("Manual Laser", &menu_lazer_enable));
+  astra_push_item_to_list(control, astra_new_slider_item("Target X", &yaw_pid_target_slider_val, 1, -100, 100));
+  astra_push_item_to_list(control, astra_new_slider_item("Target Y", &pitch_pid_target_slider_val, 1, -100, 100));
+  astra_push_item_to_list(control, astra_new_slider_item("Laser Precision", &pid_laser_threshold_slider_val, 1, 1, 100));
+  astra_push_item_to_list(control, astra_new_slider_item("Laser Duration", &pid_laser_duration_slider_val, 1, 1, 500));
 
-  // 目标坐标设置
-  astra_push_item_to_list(Control, astra_new_slider_item("Target X", &yaw_pid_target_slider_val, 1, -100, 100));
-  astra_push_item_to_list(Control, astra_new_slider_item("Target Y", &pitch_pid_target_slider_val, 1, -100, 100));
+  astra_list_item_t *parameters = astra_new_list_item("Parameters");
+  astra_push_item_to_list(astra_get_root_list(), parameters);
 
-  // 激光参数
-  astra_push_item_to_list(Control, astra_new_slider_item("Laser Precision", &pid_laser_threshold_slider_val, 1, 1, 100));
-  astra_push_item_to_list(Control, astra_new_slider_item("Laser Duration", &pid_laser_duration_slider_val, 1, 1, 500));
+  astra_list_item_t *pid_tuning = astra_new_list_item("PID Tuning");
+  astra_push_item_to_list(parameters, pid_tuning);
+  astra_push_item_to_list(pid_tuning, astra_new_slider_item("Kp", &pid_kp_slider_val, 1, 0, 100));
+  astra_push_item_to_list(pid_tuning, astra_new_slider_item("Ki", &pid_ki_slider_val, 1, 0, 100));
+  astra_push_item_to_list(pid_tuning, astra_new_slider_item("Kd", &pid_kd_slider_val, 1, 0, 100));
+  astra_push_item_to_list(pid_tuning, astra_new_slider_item("Deadzone", &stepper_deadzone_slider_val, 1, 0, 50));
 
-  /* ---------------------------------- 参数调节菜单 ---------------------------------- */
-  astra_list_item_t *Parameters = astra_new_list_item("Parameters");
-  astra_push_item_to_list(astra_get_root_list(), Parameters);
+  astra_list_item_t *motor_control = astra_new_list_item("Motor Control");
+  astra_push_item_to_list(parameters, motor_control);
+  astra_push_item_to_list(motor_control, astra_new_user_item("Reset All", Stepper_All_Reset, NULL, NULL));
+  astra_push_item_to_list(motor_control, astra_new_user_item("Enable All", Stepper_All_Enable, NULL, NULL));
+  astra_push_item_to_list(motor_control, astra_new_user_item("Disable All", Stepper_All_Disable, NULL, NULL));
 
-  // PID参数调节
-  astra_list_item_t *PID_Tuning = astra_new_list_item("PID Tuning");
-  astra_push_item_to_list(Parameters, PID_Tuning);
+  astra_list_item_t *debug = astra_new_list_item("Debug");
+  astra_push_item_to_list(astra_get_root_list(), debug);
+  astra_push_item_to_list(debug, astra_new_switch_item("Show Coordinates", &debug_coordinate_info));
+  astra_push_item_to_list(debug, astra_new_switch_item("Show Rotation", &debug_rotation_detection));
+  astra_push_item_to_list(debug, astra_new_switch_item("Show Laser", &debug_pid_laser_info));
+  astra_push_item_to_list(debug, astra_new_switch_item("PID Debug", &menu_pid_calculation_debug));
 
-  astra_push_item_to_list(PID_Tuning, astra_new_slider_item("Kp", &pid_kp_slider_val, 1, 0, 100));
-  astra_push_item_to_list(PID_Tuning, astra_new_slider_item("Ki", &pid_ki_slider_val, 1, 0, 100));
-  astra_push_item_to_list(PID_Tuning, astra_new_slider_item("Kd", &pid_kd_slider_val, 1, 0, 100));
-  astra_push_item_to_list(PID_Tuning, astra_new_slider_item("Deadzone", &stepper_deadzone_slider_val, 1, 0, 50));
+  astra_list_item_t *advanced_pid = astra_new_list_item("Advanced PID");
+  astra_push_item_to_list(debug, advanced_pid);
+  astra_push_item_to_list(advanced_pid, astra_new_slider_item("tau", &pid_tau_slider_val, 1, 0, 100));
+  astra_push_item_to_list(advanced_pid, astra_new_slider_item("limMin", &pid_lim_min_slider_val, 1, -100, 0));
+  astra_push_item_to_list(advanced_pid, astra_new_slider_item("limMax", &pid_lim_max_slider_val, 1, 0, 100));
+  astra_push_item_to_list(advanced_pid, astra_new_slider_item("limMinInt", &pid_lim_min_int_slider_val, 1, -50, 0));
+  astra_push_item_to_list(advanced_pid, astra_new_slider_item("limMaxInt", &pid_lim_max_int_slider_val, 1, 0, 50));
+  astra_push_item_to_list(advanced_pid, astra_new_slider_item("SampleTime", &pid_sample_time_slider_val, 1, 1, 100));
+}
 
-  // 电机控制
-  astra_list_item_t *Motor_Control = astra_new_list_item("Motor Control");
-  astra_push_item_to_list(Parameters, Motor_Control);
+static void App_Control_Init(void)
+{
+  menu_uart_data_receive_enable = 1;
+  menu_pid_params_update_enable = 1;
 
-  astra_push_item_to_list(Motor_Control, astra_new_user_item("Reset All", Stepper_All_Reset, NULL, NULL));
-  astra_push_item_to_list(Motor_Control, astra_new_user_item("Enable All", Stepper_All_Enable, NULL, NULL));
-  astra_push_item_to_list(Motor_Control, astra_new_user_item("Disable All", Stepper_All_Disable, NULL, NULL));
-
-  /* ---------------------------------- 调试菜单 ---------------------------------- */
-  astra_list_item_t *Debug = astra_new_list_item("Debug");
-  astra_push_item_to_list(astra_get_root_list(), Debug);
-
-  // 调试开关
-  astra_push_item_to_list(Debug, astra_new_switch_item("Show Coordinates", &debug_coordinate_info));
-  astra_push_item_to_list(Debug, astra_new_switch_item("Show Rotation", &debug_rotation_detection));
-  astra_push_item_to_list(Debug, astra_new_switch_item("Show Laser", &debug_pid_laser_info));
-  astra_push_item_to_list(Debug, astra_new_switch_item("PID Debug", &menu_pid_calculation_debug));
-
-  // 高级PID参数（调试用）
-  astra_list_item_t *Advanced_PID = astra_new_list_item("Advanced PID");
-  astra_push_item_to_list(Debug, Advanced_PID);
-
-  astra_push_item_to_list(Advanced_PID, astra_new_slider_item("tau", &pid_tau_slider_val, 1, 0, 100));
-  astra_push_item_to_list(Advanced_PID, astra_new_slider_item("limMin", &pid_lim_min_slider_val, 1, -100, 0));
-  astra_push_item_to_list(Advanced_PID, astra_new_slider_item("limMax", &pid_lim_max_slider_val, 1, 0, 100));
-  astra_push_item_to_list(Advanced_PID, astra_new_slider_item("limMinInt", &pid_lim_min_int_slider_val, 1, -50, 0));
-  astra_push_item_to_list(Advanced_PID, astra_new_slider_item("limMaxInt", &pid_lim_max_int_slider_val, 1, 0, 50));
-  astra_push_item_to_list(Advanced_PID, astra_new_slider_item("SampleTime", &pid_sample_time_slider_val, 1, 1, 100));
-
-  /* ---------------------------------- 默认设置 ---------------------------------- */
-  // 核心功能默认设置
-  menu_uart_data_receive_enable = 1; // 默认允许接收数据
-  menu_pid_params_update_enable = 1; // 默认允许PID参数更新
-
-  // 调试信息默认关闭（减少干扰）
   debug_coordinate_info = 0;
   debug_rotation_detection = 0;
   debug_pid_laser_info = 0;
   menu_pid_calculation_debug = 0;
 
-  // 同步PID滑块到浮点数
   sync_pid_slider_to_float();
-  Stepper_PID_Parameters_Init(&yaw_pid);   // 同步航向轴PID参数
-  Stepper_PID_Parameters_Init(&pitch_pid); // 同步俯仰轴PID参数
-  // 初始化PID控制器
-  PIDController_Init(&yaw_pid);   // 初始化航向轴PID
-  PIDController_Init(&pitch_pid); // 初始化俯仰轴PID
+  Stepper_PID_Parameters_Init(&yaw_pid);
+  Stepper_PID_Parameters_Init(&pitch_pid);
+  PIDController_Init(&yaw_pid);
+  PIDController_Init(&pitch_pid);
 
   ebtn_APP_Key_INIT();
-
-  HAL_TIM_Base_Start_IT(&htim7); // 10ms 定时器
+  HAL_TIM_Base_Start_IT(&htim7);
 
   char msg[20] = {};
   sprintf(msg, "启动时间: %dms.", get_ticks());
   astra_push_pop_up(msg, 1500);
+}
 
-  /* USER CODE END 2 */
-
-  /* Infinite loop */
-  /* USER CODE BEGIN WHILE */
-
-  while (1)
+static void App_Process(void)
+{
+  if (Encoder_Is_Increase())
   {
-    if (Encoder_Is_Increase())
+    if (in_astra == 1)
     {
-      if (in_astra == 1)
-      {
-        astra_selector_go_next_item();
-      }
+      astra_selector_go_next_item();
     }
-    else if (Encoder_Is_Decrease())
-    {
-      if (in_astra == 1)
-      {
-        astra_selector_go_prev_item();
-      }
-    }
-
-    if (menu_lazer_enable || pid_laser_active)
-    {
-      HAL_GPIO_WritePin(Lazer_GPIO_Port, Lazer_Pin, GPIO_PIN_SET);
-    }
-    else
-    {
-      HAL_GPIO_WritePin(Lazer_GPIO_Port, Lazer_Pin, GPIO_PIN_RESET);
-    }
-
-    // 旋转检测控制逻辑
-    if (rotate_detect && !rotation_active)
-    {
-      // 启动旋转检测时，临时禁用PID跟踪
-      menu_stepper_tracking_enable = 0;
-
-      if (debug_rotation_detection)
-      {
-        printf("[Rotation] 用户启动旋转检测模式\r\n");
-      }
-
-      Start_Rotate_Detection();
-    }
-    else if (!rotate_detect && rotation_active)
-    {
-      // 手动停止旋转检测
-      if (debug_rotation_detection)
-      {
-        printf("[Rotation] 用户手动停止旋转检测\r\n");
-      }
-
-      Stop_Rotate_Detection();
-    }
-
-    // 处理旋转检测过程中的目标发现
-    Process_Rotate_Detection();
-
-    // 处理PID激光控制
-    PID_Laser_Process();
-
-    // 系统状态显示 (定期显示)
-    System_Status_Display();
-
-    oled_clear_buffer();
-
-    astra_ui_widget_core();
-    astra_ui_main_core();
-
-    oled_send_buffer();
-    /* USER CODE END WHILE */
-
-    /* USER CODE BEGIN 3 */
   }
-  /* USER CODE END 3 */
+  else if (Encoder_Is_Decrease())
+  {
+    if (in_astra == 1)
+    {
+      astra_selector_go_prev_item();
+    }
+  }
+
+  HAL_GPIO_WritePin(Lazer_GPIO_Port, Lazer_Pin,
+                   (menu_lazer_enable || pid_laser_active) ? GPIO_PIN_SET : GPIO_PIN_RESET);
+
+  if (rotate_detect && !rotation_active)
+  {
+    menu_stepper_tracking_enable = 0;
+
+    if (debug_rotation_detection)
+    {
+      printf("[Rotation] 用户启动旋转检测模式\r\n");
+    }
+
+    Start_Rotate_Detection();
+  }
+  else if (!rotate_detect && rotation_active)
+  {
+    if (debug_rotation_detection)
+    {
+      printf("[Rotation] 用户手动停止旋转检测\r\n");
+    }
+
+    Stop_Rotate_Detection();
+  }
+
+  Process_Rotate_Detection();
+  PID_Laser_Process();
+  System_Status_Display();
+
+  oled_clear_buffer();
+  astra_ui_widget_core();
+  astra_ui_main_core();
+  oled_send_buffer();
 }
 
 /**
