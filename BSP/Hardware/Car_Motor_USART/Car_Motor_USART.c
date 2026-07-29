@@ -12,15 +12,23 @@
 
 #define CAR_MOTOR_FRAME_MAX_LENGTH 96U
 #define CAR_MOTOR_TX_QUEUE_DEPTH 8U
-#define CAR_MOTOR_VOLTAGE_REQUEST_INTERVAL_MS 1000U
-#define CAR_MOTOR_VOLTAGE_TIMEOUT_MS 3000U
+#define CAR_MOTOR_VOLTAGE_TIMEOUT_MS 500U
+
+typedef enum
+{
+    CAR_MOTOR_RX_MAILBOX_TOTAL_ENCODER,
+    CAR_MOTOR_RX_MAILBOX_ENCODER_DELTA,
+    CAR_MOTOR_RX_MAILBOX_SPEED,
+    CAR_MOTOR_RX_MAILBOX_VOLTAGE,
+    CAR_MOTOR_RX_MAILBOX_COUNT
+} car_motor_rx_mailbox_t;
 
 static uint8_t car_motor_rx_byte;
 static char car_motor_rx_frame[CAR_MOTOR_FRAME_MAX_LENGTH];
 static volatile uint8_t car_motor_rx_length;
 static volatile uint8_t car_motor_rx_active;
-static volatile uint8_t car_motor_frame_ready;
-static char car_motor_pending_frame[CAR_MOTOR_FRAME_MAX_LENGTH];
+static char car_motor_rx_mailbox[CAR_MOTOR_RX_MAILBOX_COUNT][CAR_MOTOR_FRAME_MAX_LENGTH];
+static volatile uint8_t car_motor_rx_mailbox_pending[CAR_MOTOR_RX_MAILBOX_COUNT];
 
 static char car_motor_tx_queue[CAR_MOTOR_TX_QUEUE_DEPTH][CAR_MOTOR_FRAME_MAX_LENGTH];
 static uint8_t car_motor_tx_length[CAR_MOTOR_TX_QUEUE_DEPTH];
@@ -33,6 +41,7 @@ static uint16_t car_motor_next_sequence;
 static uint16_t car_motor_last_sequence;
 static uint32_t car_motor_last_voltage_request_ms;
 static uint32_t car_motor_last_voltage_response_ms;
+static uint8_t car_motor_voltage_measurement_active;
 
 static car_motor_telemetry_t car_motor_telemetry;
 
@@ -157,6 +166,37 @@ static bool Car_Motor_Format_Command(const char *format, ...)
     return length > 0 && (size_t)length < sizeof(command) && Car_Motor_Queue_Command(command, true);
 }
 
+static bool Car_Motor_Start_Voltage_Measurement(const char *stop_command)
+{
+    char commands[3][CAR_MOTOR_FRAME_MAX_LENGTH];
+    uint8_t count = 0U;
+
+    if (car_motor_voltage_measurement_active)
+    {
+        return stop_command == NULL || Car_Motor_Queue_Command(stop_command, true);
+    }
+    if (stop_command != NULL)
+    {
+        strcpy(commands[count++], stop_command);
+    }
+    strcpy(commands[count++], "$upload:0,0,0#");
+    strcpy(commands[count++], "$read_vol#");
+    if (!Car_Motor_Queue_Batch(commands, count))
+    {
+        return false;
+    }
+
+    uint32_t primask = __get_PRIMASK();
+    __disable_irq();
+    car_motor_rx_mailbox_pending[CAR_MOTOR_RX_MAILBOX_VOLTAGE] = 0U;
+    __set_PRIMASK(primask);
+    car_motor_telemetry.voltage_valid = 0U;
+    car_motor_telemetry.encoder_upload_active = 0U;
+    car_motor_voltage_measurement_active = 1U;
+    car_motor_last_voltage_request_ms = HAL_GetTick();
+    return true;
+}
+
 static bool Car_Motor_Parse_Int32x4(const char *values, int32_t output[4])
 {
     long parsed[4];
@@ -173,17 +213,63 @@ static bool Car_Motor_Parse_Int32x4(const char *values, int32_t output[4])
     return true;
 }
 
-static bool Car_Motor_Parse_Floatx4(const char *values, float output[4])
+static bool Car_Motor_Parse_Float(const char *text, const char **end, float *output)
 {
-    float parsed[4];
-    char trailing;
-    if (sscanf(values, "%f,%f,%f,%f%c", &parsed[0], &parsed[1], &parsed[2], &parsed[3], &trailing) != 4)
+    float value = 0.0f;
+    float scale = 0.1f;
+    bool negative = false;
+    bool has_digit = false;
+
+    if (*text == '-')
+    {
+        negative = true;
+        text++;
+    }
+    while (*text >= '0' && *text <= '9')
+    {
+        value = value * 10.0f + (float)(*text++ - '0');
+        has_digit = true;
+    }
+    if (*text == '.')
+    {
+        text++;
+        while (*text >= '0' && *text <= '9')
+        {
+            value += (float)(*text++ - '0') * scale;
+            scale *= 0.1f;
+            has_digit = true;
+        }
+    }
+    if (!has_digit)
     {
         return false;
     }
-
-    memcpy(output, parsed, sizeof(parsed));
+    *output = negative ? -value : value;
+    *end = text;
     return true;
+}
+
+static bool Car_Motor_Parse_Floatx4(const char *values, float output[4])
+{
+    const char *next = values;
+    for (uint8_t i = 0U; i < 4U; i++)
+    {
+        if (!Car_Motor_Parse_Float(next, &next, &output[i]) ||
+            (i < 3U && *next++ != ','))
+        {
+            return false;
+        }
+    }
+    return *next == '\0';
+}
+
+static int8_t Car_Motor_Get_Rx_Mailbox(const char *frame)
+{
+    if (strncmp(frame, "MAll:", 5U) == 0) return CAR_MOTOR_RX_MAILBOX_TOTAL_ENCODER;
+    if (strncmp(frame, "MTEP:", 5U) == 0) return CAR_MOTOR_RX_MAILBOX_ENCODER_DELTA;
+    if (strncmp(frame, "MSPD:", 5U) == 0) return CAR_MOTOR_RX_MAILBOX_SPEED;
+    if (strncmp(frame, "Battery:", 8U) == 0) return CAR_MOTOR_RX_MAILBOX_VOLTAGE;
+    return -1;
 }
 
 static void Car_Motor_Parse_Frame(const char *frame)
@@ -205,11 +291,12 @@ static void Car_Motor_Parse_Frame(const char *frame)
         parsed = Car_Motor_Parse_Floatx4(frame + 5, car_motor_telemetry.speed);
         driver_frame = CAR_MOTOR_DRIVER_FRAME_TELEMETRY;
     }
-    else if (strncmp(frame, "MVol:", 5U) == 0)
+    else if (strncmp(frame, "Battery:", 8U) == 0)
     {
         float voltage;
-        char trailing;
-        if (sscanf(frame + 5, "%f%c", &voltage, &trailing) == 1 && isfinite(voltage) && voltage >= 0.0f)
+        const char *next;
+        if (Car_Motor_Parse_Float(frame + 8, &next, &voltage) && next[0] == 'V' && next[1] == '\0' &&
+            isfinite(voltage) && voltage >= 0.0f)
         {
             car_motor_telemetry.voltage = voltage;
             car_motor_telemetry.voltage_valid = 1U;
@@ -222,13 +309,18 @@ static void Car_Motor_Parse_Frame(const char *frame)
     {
         car_motor_telemetry.last_driver_frame = (uint8_t)driver_frame;
     }
+    else
+    {
+        car_motor_telemetry.rx_parse_error_count++;
+    }
 }
 
 void Car_Motor_Init(void)
 {
     car_motor_rx_length = 0U;
     car_motor_rx_active = 0U;
-    car_motor_frame_ready = 0U;
+    memset(car_motor_rx_mailbox, 0, sizeof(car_motor_rx_mailbox));
+    memset((void *)car_motor_rx_mailbox_pending, 0, sizeof(car_motor_rx_mailbox_pending));
     car_motor_tx_head = 0U;
     car_motor_tx_tail = 0U;
     car_motor_tx_count = 0U;
@@ -237,40 +329,53 @@ void Car_Motor_Init(void)
     car_motor_last_sequence = 0U;
     car_motor_last_voltage_request_ms = 0U;
     car_motor_last_voltage_response_ms = 0U;
+    car_motor_voltage_measurement_active = 0U;
     memset(&car_motor_telemetry, 0, sizeof(car_motor_telemetry));
     HAL_UART_Receive_IT(&huart3, &car_motor_rx_byte, 1U);
+    char commands[3][CAR_MOTOR_FRAME_MAX_LENGTH] = {
+        "$upload:0,0,0#",
+        "$read_flash#",
+        "$read_vol#"
+    };
+    if (Car_Motor_Queue_Batch(commands, 3U))
+    {
+        car_motor_voltage_measurement_active = 1U;
+        car_motor_last_voltage_request_ms = HAL_GetTick();
+    }
 }
 
 void Car_Motor_Process(void)
 {
     char frame[CAR_MOTOR_FRAME_MAX_LENGTH];
-    bool frame_ready;
-    uint32_t primask = __get_PRIMASK();
-    __disable_irq();
-    frame_ready = car_motor_frame_ready != 0U;
-    if (frame_ready)
+    for (uint8_t mailbox = 0U; mailbox < CAR_MOTOR_RX_MAILBOX_COUNT; mailbox++)
     {
-        memcpy(frame, car_motor_pending_frame, sizeof(frame));
-        car_motor_frame_ready = 0U;
+        uint32_t primask = __get_PRIMASK();
+        __disable_irq();
+        if (!car_motor_rx_mailbox_pending[mailbox])
+        {
+            __set_PRIMASK(primask);
+            continue;
+        }
+        memcpy(frame, car_motor_rx_mailbox[mailbox], sizeof(frame));
+        car_motor_rx_mailbox_pending[mailbox] = 0U;
+        __set_PRIMASK(primask);
+        Car_Motor_Parse_Frame(frame);
     }
-    __set_PRIMASK(primask);
-    if (frame_ready) Car_Motor_Parse_Frame(frame);
 
     uint32_t now = HAL_GetTick();
-    if (car_motor_telemetry.voltage_valid && now - car_motor_last_voltage_response_ms >= CAR_MOTOR_VOLTAGE_TIMEOUT_MS)
+    if (car_motor_voltage_measurement_active &&
+        (car_motor_telemetry.voltage_valid || now - car_motor_last_voltage_request_ms >= CAR_MOTOR_VOLTAGE_TIMEOUT_MS) &&
+        Car_Motor_Set_Upload(true, true, true))
     {
-        car_motor_telemetry.voltage_valid = 0U;
-    }
-    if (now - car_motor_last_voltage_request_ms >= CAR_MOTOR_VOLTAGE_REQUEST_INTERVAL_MS &&
-        Car_Motor_Queue_Command("$read_vol#", false))
-    {
-        car_motor_last_voltage_request_ms = now;
+        car_motor_telemetry.encoder_upload_active = 1U;
+        car_motor_voltage_measurement_active = 0U;
     }
 }
 
 void Car_Motor_UART_RxCplt_Callback(void)
 {
     uint8_t data = car_motor_rx_byte;
+    car_motor_telemetry.rx_byte_count++;
     if (data == '$')
     {
         car_motor_rx_active = 1U;
@@ -278,11 +383,22 @@ void Car_Motor_UART_RxCplt_Callback(void)
     }
     else if (car_motor_rx_active && data == '#')
     {
-        if (!car_motor_frame_ready)
+        int8_t mailbox;
+        car_motor_rx_frame[car_motor_rx_length] = '\0';
+        car_motor_telemetry.rx_frame_count++;
+        mailbox = Car_Motor_Get_Rx_Mailbox(car_motor_rx_frame);
+        if (mailbox >= 0)
         {
-            car_motor_rx_frame[car_motor_rx_length] = '\0';
-            memcpy(car_motor_pending_frame, car_motor_rx_frame, car_motor_rx_length + 1U);
-            car_motor_frame_ready = 1U;
+            if (car_motor_rx_mailbox_pending[(uint8_t)mailbox])
+            {
+                car_motor_telemetry.rx_overwrite_count++;
+            }
+            memcpy(car_motor_rx_mailbox[(uint8_t)mailbox], car_motor_rx_frame, car_motor_rx_length + 1U);
+            car_motor_rx_mailbox_pending[(uint8_t)mailbox] = 1U;
+        }
+        else
+        {
+            car_motor_telemetry.rx_unmatched_frame_count++;
         }
         car_motor_rx_active = 0U;
     }
@@ -317,6 +433,7 @@ void Car_Motor_UART_TxCplt_Callback(void)
 
 void Car_Motor_UART_Error_Callback(void)
 {
+    car_motor_telemetry.uart_error_count++;
     car_motor_tx_active = 0U;
     HAL_UART_Receive_IT(&huart3, &car_motor_rx_byte, 1U);
 }
@@ -466,16 +583,30 @@ bool Car_Motor_Restore_Defaults(void)
 
 bool Car_Motor_Set_Speed(int16_t m1, int16_t m2, int16_t m3, int16_t m4)
 {
-    return m1 >= -1000 && m1 <= 1000 && m2 >= -1000 && m2 <= 1000 &&
-           m3 >= -1000 && m3 <= 1000 && m4 >= -1000 && m4 <= 1000 &&
-           Car_Motor_Format_Command("$spd:%d,%d,%d,%d#", m1, m2, m3, m4);
+    if (m1 < -1000 || m1 > 1000 || m2 < -1000 || m2 > 1000 ||
+        m3 < -1000 || m3 > 1000 || m4 < -1000 || m4 > 1000)
+    {
+        return false;
+    }
+    if (m1 == 0 && m2 == 0 && m3 == 0 && m4 == 0)
+    {
+        return Car_Motor_Start_Voltage_Measurement("$spd:0,0,0,0#");
+    }
+    return Car_Motor_Format_Command("$spd:%d,%d,%d,%d#", m1, m2, m3, m4);
 }
 
 bool Car_Motor_Set_PWM(int16_t m1, int16_t m2, int16_t m3, int16_t m4)
 {
-    return m1 >= -3600 && m1 <= 3600 && m2 >= -3600 && m2 <= 3600 &&
-           m3 >= -3600 && m3 <= 3600 && m4 >= -3600 && m4 <= 3600 &&
-           Car_Motor_Format_Command("$pwm:%d,%d,%d,%d#", m1, m2, m3, m4);
+    if (m1 < -3600 || m1 > 3600 || m2 < -3600 || m2 > 3600 ||
+        m3 < -3600 || m3 > 3600 || m4 < -3600 || m4 > 3600)
+    {
+        return false;
+    }
+    if (m1 == 0 && m2 == 0 && m3 == 0 && m4 == 0)
+    {
+        return Car_Motor_Start_Voltage_Measurement("$pwm:0,0,0,0#");
+    }
+    return Car_Motor_Format_Command("$pwm:%d,%d,%d,%d#", m1, m2, m3, m4);
 }
 
 bool Car_Motor_Set_Upload(bool total_encoder, bool encoder_delta_10ms, bool speed)
@@ -490,7 +621,7 @@ bool Car_Motor_Read_Flash(void)
 
 bool Car_Motor_Read_Voltage(void)
 {
-    return Car_Motor_Queue_Command("$read_vol#", true);
+    return Car_Motor_Start_Voltage_Measurement(NULL);
 }
 
 const car_motor_telemetry_t *Car_Motor_Get_Telemetry(void)

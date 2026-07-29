@@ -40,6 +40,13 @@ typedef struct
     uint8_t command_status;
     uint8_t last_driver_frame;
     uint8_t voltage_valid;
+    uint8_t encoder_upload_active;
+    uint32_t rx_byte_count;
+    uint32_t rx_frame_count;
+    uint32_t rx_unmatched_frame_count;
+    uint32_t rx_parse_error_count;
+    uint32_t rx_overwrite_count;
+    uint32_t uart_error_count;
 } car_motor_telemetry_t;
 
 typedef struct

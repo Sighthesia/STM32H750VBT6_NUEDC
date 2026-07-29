@@ -22,6 +22,7 @@
 #include "i2c.h"
 #include "usart.h"
 #include "gpio.h"
+#include "spi.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -30,6 +31,8 @@
 #include "Car_Motor_USART.h"
 #include "ANO_Host.h"
 #include "lcd_driver.h"
+#include "lcd_wegui_driver.h"
+#include "wegui_menu_demo.h"
 #include "g030_i2c_link.h"
 
 /* USER CODE END Includes */
@@ -116,6 +119,7 @@ int main(void)
 static void App_Peripheral_Init(void)
 {
   MX_GPIO_Init();
+  MX_SPI1_Init();
   MX_DMA_Init();
   MX_I2C1_Init();
   MX_I2C2_Init();
@@ -134,6 +138,12 @@ static void App_Peripheral_Init(void)
 #endif
   ANO_Host_Init();
   lcd_driver_init();
+#if WEGUI_PANEL_SELF_TEST
+  wegui_stm32_panel_self_test();
+#else
+  lcd_wegui_init();
+  wegui.menu = &m_main;
+#endif
   G030_I2C_Link_Init();
 }
 
@@ -144,10 +154,16 @@ static void App_Process(void)
 #endif
   ANO_Host_Process();
   G030_I2C_Link_Process();
+#if !WEGUI_PANEL_SELF_TEST
+  wegui_loop_func();
+#endif
 }
 
 void HAL_SYSTICK_Callback(void)
 {
+#if !WEGUI_PANEL_SELF_TEST
+  wegui_1ms_stick();
+#endif
 }
 
 /**

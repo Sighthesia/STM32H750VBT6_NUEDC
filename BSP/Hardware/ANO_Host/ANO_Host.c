@@ -1,6 +1,7 @@
 #include "ANO_Host.h"
 
 #include "Car_Motor_USART.h"
+#include "JY61P.h"
 #include "Stepper_PID.h"
 #include "W25Qxx.h"
 #include "ZDT_Stepper.h"
@@ -14,6 +15,10 @@
 #define ANO_HOST_ADDRESS 0xFEU
 #define ANO_BROADCAST_ADDRESS 0xFFU
 #define ANO_ID_CHECK 0x00U
+#define ANO_ID_SENSOR_BASIC 0x01U
+#define ANO_ID_SENSOR_EXTENDED 0x02U
+#define ANO_ID_ATTITUDE_EULER 0x03U
+#define ANO_ID_ATTITUDE_QUATERNION 0x04U
 #define ANO_ID_COMMAND 0xC0U
 #define ANO_ID_COMMAND_QUERY 0xC1U
 #define ANO_ID_COMMAND_INFO 0xC2U
@@ -25,7 +30,8 @@
 #define ANO_ID_DIAGNOSTIC 0xF5U
 #define ANO_RX_QUEUE_SIZE 128U
 #define ANO_DATA_MAX 96U
-#define ANO_TX_QUEUE_DEPTH 4U
+#define ANO_TX_QUEUE_DEPTH 8U
+#define ANO_IMU_PERIOD_MS 10U
 #define ANO_DEFAULT_BAUD_RATE 460800U
 #define ANO_BAUD_SWITCH_DELAY_MS 50U
 #define ANO_STORAGE_ADDRESS 0U
@@ -90,6 +96,8 @@ static float car_debug_m2_direction;
 static uint8_t car_debug_active;
 static uint32_t last_telemetry_ms;
 static uint32_t last_diagnostic_ms;
+static uint32_t last_imu_ms;
+static uint32_t last_imu_sequence;
 static uint32_t host_baud_rate = ANO_DEFAULT_BAUD_RATE;
 static uint32_t pending_baud_rate;
 static uint32_t baud_switch_at_ms;
@@ -107,6 +115,7 @@ typedef struct
 } ano_storage_record_t;
 
 static void put_u16(uint8_t *d, uint16_t *i, uint16_t v) { d[(*i)++] = (uint8_t)v; d[(*i)++] = (uint8_t)(v >> 8U); }
+static void put_i16(uint8_t *d, uint16_t *i, int16_t v) { put_u16(d, i, (uint16_t)v); }
 static void put_i32(uint8_t *d, uint16_t *i, int32_t v) { memcpy(&d[*i], &v, 4U); *i += 4U; }
 static void put_float(uint8_t *d, uint16_t *i, float v) { memcpy(&d[*i], &v, 4U); *i += 4U; }
 static uint16_t get_u16(const uint8_t *d) { return (uint16_t)d[0] | ((uint16_t)d[1] << 8U); }
@@ -206,8 +215,7 @@ static void load_storage(void)
         float value = record.values[id];
         float *target = parameter(id);
         if (target == NULL || !isfinite(value)) continue;
-        if (id <= CAR_KD || id >= CAR_TYPE) (void)write_car_parameter(id, value);
-        else if (value >= -1000.0f && value <= 1000.0f) *target = value;
+        *target = value;
     }
     host_baud_rate = record.baud_rate;
     storage_operation = 0U;
@@ -229,6 +237,17 @@ static void apply_baud_rate(uint32_t baud_rate)
 static void start_tx(void)
 {
     if (!tx_active && tx_count != 0U) { tx_active = 1U; if (HAL_UART_Transmit_IT(&huart1, tx_queue[tx_head], tx_length[tx_head]) != HAL_OK) tx_active = 0U; }
+}
+
+static bool tx_has_capacity(uint8_t slots)
+{
+    uint32_t primask = __get_PRIMASK();
+    bool available;
+
+    __disable_irq();
+    available = slots <= (uint8_t)(ANO_TX_QUEUE_DEPTH - tx_count);
+    __set_PRIMASK(primask);
+    return available;
 }
 
 static void send_frame_to(uint8_t destination, uint8_t id, const uint8_t *data, uint16_t length)
@@ -463,15 +482,69 @@ static bool start_car_debug(void)
 static void send_telemetry(void)
 {
     const car_motor_telemetry_t *car = Car_Motor_Get_Telemetry(); uint8_t d[ANO_DATA_MAX]; uint16_t i = 0U;
-    for (uint8_t n = 0U; n < 4U; n++) put_i32(d, &i, car->total_encoder[n]);
-    for (uint8_t n = 0U; n < 4U; n++) put_i32(d, &i, car->encoder_delta_10ms[n]);
-    for (uint8_t n = 0U; n < 4U; n++) put_float(d, &i, car->speed[n]);
-    for (uint8_t n = 0U; n < 2U; n++) { put_float(d, &i, zdt_stepper_motors[n]->data.current_position); put_float(d, &i, zdt_stepper_motors[n]->data.current_speed); d[i++] = zdt_stepper_motors[n]->data.motor_status_flags; }
-    d[i++] = car->command_status;
-    d[i++] = car->last_driver_frame;
-    d[i++] = car->voltage_valid;
+    for (uint8_t n = 0U; n < 2U; n++) put_float(d, &i, car->encoder_upload_active ? (float)car->total_encoder[n] : 0.0f);
+    for (uint8_t n = 0U; n < 2U; n++) put_float(d, &i, car->encoder_upload_active ? (float)car->encoder_delta_10ms[n] : 0.0f);
+    for (uint8_t n = 0U; n < 2U; n++) put_float(d, &i, car->encoder_upload_active ? car->speed[n] : 0.0f);
     put_float(d, &i, car->voltage);
+    put_float(d, &i, (float)car->voltage_valid);
     send_frame(ANO_ID_TELEMETRY, d, i);
+}
+
+static int16_t scale_i16(int16_t value, int32_t numerator, int32_t denominator)
+{
+    return (int16_t)(((int32_t)value * numerator) / denominator);
+}
+
+static void send_imu(void)
+{
+    const jy61p_status_t *imu_status = JY61P_Get_Status();
+    const jy61p_sample_t *imu;
+    uint8_t d[14];
+    uint16_t i;
+
+    if (!imu_status->sample_valid || imu_status->sequence == last_imu_sequence ||
+        !tx_has_capacity(4U))
+    {
+        return;
+    }
+    imu = JY61P_Get_Sample();
+
+    i = 0U;
+    put_i16(d, &i, imu->acceleration.x);
+    put_i16(d, &i, imu->acceleration.y);
+    put_i16(d, &i, imu->acceleration.z);
+    put_i16(d, &i, imu->angular_velocity.x);
+    put_i16(d, &i, imu->angular_velocity.y);
+    put_i16(d, &i, imu->angular_velocity.z);
+    d[i++] = 0U;
+    send_frame(ANO_ID_SENSOR_BASIC, d, i);
+
+    i = 0U;
+    put_i16(d, &i, imu->magnetic_field.x);
+    put_i16(d, &i, imu->magnetic_field.y);
+    put_i16(d, &i, imu->magnetic_field.z);
+    put_i32(d, &i, 0);
+    put_i16(d, &i, imu->temperature / 10);
+    d[i++] = 0U;
+    d[i++] = 1U;
+    send_frame(ANO_ID_SENSOR_EXTENDED, d, i);
+
+    i = 0U;
+    put_i16(d, &i, scale_i16(imu->angle.x, 18000, 32768));
+    put_i16(d, &i, scale_i16(imu->angle.y, 18000, 32768));
+    put_i16(d, &i, scale_i16(imu->angle.z, 18000, 32768));
+    d[i++] = 1U;
+    send_frame(ANO_ID_ATTITUDE_EULER, d, i);
+
+    i = 0U;
+    put_i16(d, &i, scale_i16(imu->quaternion.w, 10000, 32768));
+    put_i16(d, &i, scale_i16(imu->quaternion.x, 10000, 32768));
+    put_i16(d, &i, scale_i16(imu->quaternion.y, 10000, 32768));
+    put_i16(d, &i, scale_i16(imu->quaternion.z, 10000, 32768));
+    d[i++] = 1U;
+    send_frame(ANO_ID_ATTITUDE_QUATERNION, d, i);
+
+    last_imu_sequence = imu_status->sequence;
 }
 
 static void send_storage_diagnostic(void)
@@ -588,7 +661,7 @@ void ANO_Host_Init(void)
     if (host_baud_rate != huart1.Init.BaudRate) apply_baud_rate(host_baud_rate);
     else HAL_UART_Receive_IT(&huart1, &rx_byte, 1U);
 }
-void ANO_Host_Process(void) { while (rx_head != rx_tail) { uint8_t b = rx_queue[rx_head]; rx_head = (rx_head + 1U) % ANO_RX_QUEUE_SIZE; feed(b); } if (pending_baud_rate != 0U && (int32_t)(HAL_GetTick() - baud_switch_at_ms) >= 0 && !tx_active && tx_count == 0U) { uint32_t baud_rate = pending_baud_rate; pending_baud_rate = 0U; apply_baud_rate(baud_rate); } if (HAL_GetTick() - last_telemetry_ms >= 100U) { last_telemetry_ms = HAL_GetTick(); send_telemetry(); } if (HAL_GetTick() - last_diagnostic_ms >= 500U) { last_diagnostic_ms = HAL_GetTick(); send_storage_diagnostic(); } }
+void ANO_Host_Process(void) { while (rx_head != rx_tail) { uint8_t b = rx_queue[rx_head]; rx_head = (rx_head + 1U) % ANO_RX_QUEUE_SIZE; feed(b); } if (pending_baud_rate != 0U && (int32_t)(HAL_GetTick() - baud_switch_at_ms) >= 0 && !tx_active && tx_count == 0U) { uint32_t baud_rate = pending_baud_rate; pending_baud_rate = 0U; apply_baud_rate(baud_rate); } if (HAL_GetTick() - last_imu_ms >= ANO_IMU_PERIOD_MS) { last_imu_ms = HAL_GetTick(); send_imu(); } if (HAL_GetTick() - last_telemetry_ms >= 100U) { last_telemetry_ms = HAL_GetTick(); send_telemetry(); } if (HAL_GetTick() - last_diagnostic_ms >= 500U) { last_diagnostic_ms = HAL_GetTick(); send_storage_diagnostic(); } }
 void ANO_Host_UART_RxCplt_Callback(void) { uint8_t next = (rx_tail + 1U) % ANO_RX_QUEUE_SIZE; if (next != rx_head) { rx_queue[rx_tail] = rx_byte; rx_tail = next; } HAL_UART_Receive_IT(&huart1, &rx_byte, 1U); }
 void ANO_Host_UART_TxCplt_Callback(void) { if (tx_active && tx_count) { tx_head = (tx_head + 1U) % ANO_TX_QUEUE_DEPTH; tx_count--; } tx_active = 0U; start_tx(); }
 void ANO_Host_UART_Error_Callback(void) { tx_active = 0U; HAL_UART_Receive_IT(&huart1, &rx_byte, 1U); }

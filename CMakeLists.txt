@@ -46,11 +46,12 @@ target_link_directories(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user defined library search paths
 )
 
-# 仅构建当前启用的电机模块，避免视觉、UI、PID 等遗留模块进入固件。
+# 仅构建当前启用的电机模块和 WeGUI 菜单，避免遗留视觉模块进入固件。
 file(GLOB_RECURSE BSP_SOURCES CONFIGURE_DEPENDS
     "BSP/Hardware/ZDT_Step_Motor/*.c"
     "BSP/Hardware/Car_Motor_USART/*.c"
-    "BSP/Hardware/IPS114_LCD/*.c"
+    "BSP/Hardware/Encoder_EXTI/*.c"
+    "BSP/Hardware/WeGUI/*.c"
     "BSP/Hardware/ANO_Host/*.c"
     "BSP/Hardware/AT24C02/*.c"
     "BSP/Hardware/W25Qxx/*.c"
