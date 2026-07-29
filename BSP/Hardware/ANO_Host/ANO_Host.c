@@ -1,6 +1,7 @@
 #include "ANO_Host.h"
 
 #include "Car_Motor_USART.h"
+#include "AT24C02.h"
 #include "Stepper_PID.h"
 #include "ZDT_Stepper.h"
 #include "usart.h"
@@ -22,6 +23,10 @@
 #define ANO_RX_QUEUE_SIZE 128U
 #define ANO_DATA_MAX 96U
 #define ANO_TX_QUEUE_DEPTH 4U
+#define ANO_DEFAULT_BAUD_RATE 460800U
+#define ANO_BAUD_SWITCH_DELAY_MS 50U
+#define ANO_BAUD_RECORD_MAGIC 0xA7C3U
+#define ANO_BAUD_RECORD_VERSION 1U
 
 enum {
     CAR_KP,
@@ -37,6 +42,7 @@ enum {
     CAR_DEADZONE,
     CAR_LINE,
     CAR_WHEEL_DIAMETER,
+    HOST_BAUD,
     ANO_PARAM_COUNT
 };
 
@@ -53,6 +59,19 @@ static float car_deadzone;
 static float car_line;
 static float car_wheel_diameter;
 static uint32_t last_telemetry_ms;
+static uint32_t host_baud_rate = ANO_DEFAULT_BAUD_RATE;
+static uint32_t pending_baud_rate;
+static uint32_t baud_switch_at_ms;
+
+typedef struct
+{
+    uint16_t magic;
+    uint8_t version;
+    uint8_t reserved;
+    uint32_t baud_rate;
+    uint32_t checksum;
+    uint8_t padding[4];
+} ano_baud_record_t;
 
 static void put_u16(uint8_t *d, uint16_t *i, uint16_t v) { d[(*i)++] = (uint8_t)v; d[(*i)++] = (uint8_t)(v >> 8U); }
 static void put_i32(uint8_t *d, uint16_t *i, int32_t v) { memcpy(&d[*i], &v, 4U); *i += 4U; }
@@ -60,6 +79,50 @@ static void put_float(uint8_t *d, uint16_t *i, float v) { memcpy(&d[*i], &v, 4U)
 static uint16_t get_u16(const uint8_t *d) { return (uint16_t)d[0] | ((uint16_t)d[1] << 8U); }
 static int16_t get_i16(const uint8_t *d) { return (int16_t)get_u16(d); }
 static float get_float(const uint8_t *d) { float v; memcpy(&v, d, 4U); return v; }
+
+static bool baud_rate_is_valid(uint32_t baud_rate)
+{
+    return baud_rate == 115200U || baud_rate == 230400U || baud_rate == 460800U || baud_rate == 921600U;
+}
+
+static uint32_t baud_record_checksum(const ano_baud_record_t *record)
+{
+    return record->magic ^ ((uint32_t)record->version << 24U) ^ record->baud_rate ^ 0x5A39C71DU;
+}
+
+static uint32_t load_baud_rate(void)
+{
+    ano_baud_record_t record = {0};
+    if (AT24C02_Read(0U, (uint8_t *)&record, sizeof(record)) && record.magic == ANO_BAUD_RECORD_MAGIC &&
+        record.version == ANO_BAUD_RECORD_VERSION && record.checksum == baud_record_checksum(&record) && baud_rate_is_valid(record.baud_rate))
+    {
+        return record.baud_rate;
+    }
+    return ANO_DEFAULT_BAUD_RATE;
+}
+
+static bool save_baud_rate(uint32_t baud_rate)
+{
+    ano_baud_record_t record = {0};
+    record.magic = ANO_BAUD_RECORD_MAGIC;
+    record.version = ANO_BAUD_RECORD_VERSION;
+    record.baud_rate = baud_rate;
+    record.checksum = baud_record_checksum(&record);
+    return AT24C02_Write(0U, (const uint8_t *)&record, sizeof(record));
+}
+
+static void apply_baud_rate(uint32_t baud_rate)
+{
+    if (HAL_UART_DeInit(&huart1) != HAL_OK) return;
+    huart1.Init.BaudRate = baud_rate;
+    if (HAL_UART_Init(&huart1) != HAL_OK || HAL_UARTEx_SetTxFifoThreshold(&huart1, UART_TXFIFO_THRESHOLD_1_8) != HAL_OK ||
+        HAL_UARTEx_SetRxFifoThreshold(&huart1, UART_RXFIFO_THRESHOLD_1_8) != HAL_OK || HAL_UARTEx_DisableFifoMode(&huart1) != HAL_OK)
+    {
+        Error_Handler();
+    }
+    host_baud_rate = baud_rate;
+    (void)HAL_UART_Receive_IT(&huart1, &rx_byte, 1U);
+}
 
 static void start_tx(void)
 {
@@ -89,7 +152,7 @@ static float *parameter(uint16_t id)
         &car_pid[0], &car_pid[1], &car_pid[2],
         &yaw_pid.Kp, &yaw_pid.Ki, &yaw_pid.Kd,
         &pitch_pid.Kp, &pitch_pid.Ki, &pitch_pid.Kd,
-        &car_type, &car_deadzone, &car_line, &car_wheel_diameter
+        &car_type, &car_deadzone, &car_line, &car_wheel_diameter, NULL
     };
     return id < ANO_PARAM_COUNT ? values[id] : NULL;
 }
@@ -144,7 +207,13 @@ static bool write_car_parameter(uint16_t parameter_id, float value)
 }
 
 static void send_check(uint8_t id, uint8_t sum, uint8_t add) { uint8_t d[3] = {id, sum, add}; send_frame(ANO_ID_CHECK, d, sizeof(d)); }
-static void send_param(uint16_t id) { uint8_t d[6]; uint16_t i = 0U; float *v = parameter(id); if (v == NULL) return; put_u16(d, &i, id); put_float(d, &i, *v); send_frame(ANO_ID_PARAM_VALUE, d, i); }
+static void send_param(uint16_t id)
+{
+    uint8_t d[6]; uint16_t i = 0U; float *v = parameter(id);
+    if (id == HOST_BAUD) { put_u16(d, &i, id); put_float(d, &i, (float)host_baud_rate); send_frame(ANO_ID_PARAM_VALUE, d, i); return; }
+    if (v == NULL) return;
+    put_u16(d, &i, id); put_float(d, &i, *v); send_frame(ANO_ID_PARAM_VALUE, d, i);
+}
 static void send_device_info(void)
 {
     static const char name[] = "STM32H750_MOTOR";
@@ -159,7 +228,7 @@ static void send_param_info(uint16_t id)
         "car_kp", "car_ki", "car_kd",
         "yaw_kp", "yaw_ki", "yaw_kd",
         "pitch_kp", "pitch_ki", "pitch_kd",
-        "car_type", "car_deadzone", "car_line", "wheel_diameter"
+        "car_type", "car_deadzone", "car_line", "wheel_diameter", "host_baud"
     };
     uint8_t d[23] = {0}; uint16_t i = 0U;
     if (id >= ANO_PARAM_COUNT) return;
@@ -192,7 +261,11 @@ static void handle(uint8_t id, const uint8_t *d, uint16_t n, uint8_t sum, uint8_
     if (id == ANO_ID_PARAM_COMMAND && n >= 3U) { uint16_t v = get_u16(&d[1]); if (d[0] == 0U) send_device_info(); else if (d[0] == 1U) { uint8_t count[3] = {1U, ANO_PARAM_COUNT, 0U}; send_frame(ANO_ID_PARAM_COMMAND, count, 3U); } else if (d[0] == 2U) send_param(v); else if (d[0] == 3U) send_param_info(v); }
     else if (id == ANO_ID_PARAM_VALUE && n == 6U) {
         uint16_t parameter_id = get_u16(d); float value = get_float(&d[2]); float *v = parameter(parameter_id);
-        if (parameter_id <= CAR_KD || parameter_id >= CAR_TYPE) {
+        if (parameter_id == HOST_BAUD && isfinite(value) && value == (float)(uint32_t)value &&
+            baud_rate_is_valid((uint32_t)value) && save_baud_rate((uint32_t)value)) {
+            pending_baud_rate = (uint32_t)value;
+            baud_switch_at_ms = HAL_GetTick() + ANO_BAUD_SWITCH_DELAY_MS;
+        } else if (parameter_id <= CAR_KD || (parameter_id >= CAR_TYPE && parameter_id < HOST_BAUD)) {
             (void)write_car_parameter(parameter_id, value);
         } else if (v != NULL && isfinite(value) && value >= -1000.0f && value <= 1000.0f) {
             *v = value;
@@ -229,9 +302,13 @@ static void feed(uint8_t b)
 void ANO_Host_Init(void)
 {
     pid_kp = 3.0f; pid_ki = 1.0f; pid_kd = 0.0f; pid_tau = 0.05f; pid_lim_min = -4.0f; pid_lim_max = 4.0f; pid_lim_min_int = -5.0f; pid_lim_max_int = 5.0f; sample_time_s = 0.01f;
-    Stepper_PID_Parameters_Init(&yaw_pid); Stepper_PID_Parameters_Init(&pitch_pid); HAL_UART_Receive_IT(&huart1, &rx_byte, 1U);
+    Stepper_PID_Parameters_Init(&yaw_pid); Stepper_PID_Parameters_Init(&pitch_pid);
+    host_baud_rate = load_baud_rate();
+    if (host_baud_rate != huart1.Init.BaudRate) apply_baud_rate(host_baud_rate);
+    else HAL_UART_Receive_IT(&huart1, &rx_byte, 1U);
 }
-void ANO_Host_Process(void) { while (rx_head != rx_tail) { uint8_t b = rx_queue[rx_head]; rx_head = (rx_head + 1U) % ANO_RX_QUEUE_SIZE; feed(b); } if (HAL_GetTick() - last_telemetry_ms >= 100U) { last_telemetry_ms = HAL_GetTick(); send_telemetry(); } }
+void ANO_Host_Process(void) { while (rx_head != rx_tail) { uint8_t b = rx_queue[rx_head]; rx_head = (rx_head + 1U) % ANO_RX_QUEUE_SIZE; feed(b); } if (pending_baud_rate != 0U && (int32_t)(HAL_GetTick() - baud_switch_at_ms) >= 0 && !tx_active && tx_count == 0U) { uint32_t baud_rate = pending_baud_rate; pending_baud_rate = 0U; apply_baud_rate(baud_rate); } if (HAL_GetTick() - last_telemetry_ms >= 100U) { last_telemetry_ms = HAL_GetTick(); send_telemetry(); } }
 void ANO_Host_UART_RxCplt_Callback(void) { uint8_t next = (rx_tail + 1U) % ANO_RX_QUEUE_SIZE; if (next != rx_head) { rx_queue[rx_tail] = rx_byte; rx_tail = next; } HAL_UART_Receive_IT(&huart1, &rx_byte, 1U); }
 void ANO_Host_UART_TxCplt_Callback(void) { if (tx_active && tx_count) { tx_head = (tx_head + 1U) % ANO_TX_QUEUE_DEPTH; tx_count--; } tx_active = 0U; start_tx(); }
 void ANO_Host_UART_Error_Callback(void) { tx_active = 0U; HAL_UART_Receive_IT(&huart1, &rx_byte, 1U); }
+uint32_t ANO_Host_Get_BaudRate(void) { return host_baud_rate; }
