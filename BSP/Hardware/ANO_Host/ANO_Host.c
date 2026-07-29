@@ -470,7 +470,6 @@ static void send_telemetry(void)
     d[i++] = car->command_status;
     d[i++] = car->last_driver_frame;
     d[i++] = car->voltage_valid;
-    memcpy(&d[i], car->last_command, sizeof(car->last_command)); i += sizeof(car->last_command);
     put_float(d, &i, car->voltage);
     send_frame(ANO_ID_TELEMETRY, d, i);
 }
