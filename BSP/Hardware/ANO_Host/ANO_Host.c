@@ -117,6 +117,38 @@ static bool baud_rate_is_valid(uint32_t baud_rate)
     return baud_rate == 115200U || baud_rate == 230400U || baud_rate == 460800U || baud_rate == 921600U;
 }
 
+static void reset_local_defaults(void)
+{
+    car_pid[0] = 0.8f;
+    car_pid[1] = 0.06f;
+    car_pid[2] = 0.5f;
+    car_type = (float)CAR_MOTOR_TYPE_310;
+    car_deadzone = 1600.0f;
+    car_line = 500.0f;
+    car_wheel_diameter = 67.0f;
+    car_reduction_ratio = 30.0f;
+    car_debug_control_mode = 0.0f;
+    car_debug_m1_value = 0.0f;
+    car_debug_m1_direction = 0.0f;
+    car_debug_m2_value = 0.0f;
+    car_debug_m2_direction = 0.0f;
+    car_debug_active = 0U;
+
+    pid_kp = 3.0f;
+    pid_ki = 1.0f;
+    pid_kd = 0.0f;
+    pid_tau = 0.05f;
+    pid_lim_min = -4.0f;
+    pid_lim_max = 4.0f;
+    pid_lim_min_int = -5.0f;
+    pid_lim_max_int = 5.0f;
+    sample_time_s = 0.01f;
+    Stepper_PID_Parameters_Init(&yaw_pid);
+    Stepper_PID_Parameters_Init(&pitch_pid);
+    PIDController_Init(&yaw_pid);
+    PIDController_Init(&pitch_pid);
+}
+
 static uint32_t storage_record_checksum(const ano_storage_record_t *record)
 {
     const uint8_t *data = (const uint8_t *)record;
@@ -371,6 +403,36 @@ static bool apply_car_config(void)
     return Car_Motor_Apply_Config(&config);
 }
 
+static bool restore_defaults(void)
+{
+    const car_motor_config_t defaults = {
+        .type = CAR_MOTOR_TYPE_310,
+        .deadzone = 1600U,
+        .line = 500U,
+        .reduction_ratio = 30U,
+        .wheel_diameter_mm = 67.0f,
+        .pid_kp = 0.8f,
+        .pid_ki = 0.06f,
+        .pid_kd = 0.5f
+    };
+
+    storage_operation = 3U;
+    if (!storage_ready || !W25Qxx_EraseSector(ANO_STORAGE_ADDRESS) ||
+        !Car_Motor_Apply_Config(&defaults))
+    {
+        return false;
+    }
+
+    reset_local_defaults();
+    if (host_baud_rate != ANO_DEFAULT_BAUD_RATE)
+    {
+        pending_baud_rate = ANO_DEFAULT_BAUD_RATE;
+        baud_switch_at_ms = HAL_GetTick() + ANO_BAUD_SWITCH_DELAY_MS;
+    }
+    storage_operation = 0U;
+    return true;
+}
+
 static bool stop_car_debug(void)
 {
     car_debug_active = 0U;
@@ -463,6 +525,7 @@ static void handle(uint8_t source, uint8_t id, const uint8_t *d, uint16_t n, uin
         else if (d[0] == 1U) { uint8_t count[3] = {1U, ANO_PARAM_COUNT, 0U}; send_frame(ANO_ID_PARAM_COMMAND, count, 3U); }
         else if (d[0] == 2U) send_param(v);
         else if (d[0] == 3U) send_param_info(v);
+        else if (d[0] == 0x10U && v == 0x00AAU && restore_defaults()) send_check(source, id, sum, add);
         else if (d[0] == 0x10U && v == 0x00ABU && storage_ready && save_storage(host_baud_rate)) send_check(source, id, sum, add);
     }
     else if (id == ANO_ID_PARAM_VALUE && n == 6U) {
@@ -523,8 +586,7 @@ static void feed(uint8_t b)
 
 void ANO_Host_Init(void)
 {
-    pid_kp = 3.0f; pid_ki = 1.0f; pid_kd = 0.0f; pid_tau = 0.05f; pid_lim_min = -4.0f; pid_lim_max = 4.0f; pid_lim_min_int = -5.0f; pid_lim_max_int = 5.0f; sample_time_s = 0.01f;
-    Stepper_PID_Parameters_Init(&yaw_pid); Stepper_PID_Parameters_Init(&pitch_pid);
+    reset_local_defaults();
     storage_ready = W25Qxx_Init() ? 1U : 0U;
     if (storage_ready) load_storage();
     if (host_baud_rate != huart1.Init.BaudRate) apply_baud_rate(host_baud_rate);
