@@ -46,8 +46,11 @@ target_link_directories(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user defined library search paths
 )
 
-# 自动收集BSP目录下的所有.c文件
-file(GLOB_RECURSE BSP_SOURCES "BSP/**/*.c")
+# 仅构建当前启用的电机模块，避免视觉、UI、PID 等遗留模块进入固件。
+file(GLOB_RECURSE BSP_SOURCES CONFIGURE_DEPENDS
+    "BSP/Hardware/ZDT_Step_Motor/*.c"
+    "BSP/Hardware/Car_Motor_USART/*.c"
+)
 
 # 自动收集BSP目录下的所有头文件目录
 file(GLOB_RECURSE BSP_HEADERS "BSP/**/*.h")
@@ -70,9 +73,7 @@ target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
 )
 
 # Add project symbols (macros)
-target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE
-    # Add user defined symbols
-)
+target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE)
 
 # Add compiler flags for disabling semihosting
 target_compile_options(${CMAKE_PROJECT_NAME} PRIVATE

@@ -230,19 +230,6 @@ ZDTStepperMotor *ZDT_Stepper_Get_Motor(UART_HandleTypeDef *huart, uint8_t motor_
     return NULL;
 }
 
-/**
- * @brief 启动串口DMA接收
- * @param motor 电机对象
- */
-static void ZDT_Stepper_Start_DMA_Receive(ZDTStepperMotor *motor)
-{
-    if (motor && motor->huart && motor->hdma_rx)
-    {
-        HAL_UARTEx_ReceiveToIdle_DMA(motor->huart, motor->rx_buffer, sizeof(motor->rx_buffer));
-        // 移除特定DMA中断的禁用，由用户在应用层自行处理
-    }
-}
-
 // 根据指令标识赋值的函数
 void assign_message_based_on_command(uint8_t command_id, char *message, size_t message_size)
 {
@@ -402,8 +389,7 @@ void receive_motor_status(ZDTStepperMotor *motor, uint8_t *data, uint16_t size)
             motor->data.motor_position_reached = (data[2] & 0x02) >> 1;
             motor->data.motor_stall = (data[2] & 0x04) >> 2;
             motor->data.motor_stall_protection = (data[2] & 0x08) >> 3;
-            snprintf(message + strlen(message), sizeof(message) - strlen(message), "使能 %d, 位置到位 %d, 电机堵转 %d, 堵转保护 %d",
-                     motor->data.motor_enabled, motor->data.motor_position_reached, motor->data.motor_stall, motor->data.motor_stall_protection);
+            snprintf(message + strlen(message), sizeof(message) - strlen(message), "status=0x%02X", motor->data.motor_status_flags);
             break;
 
         default:
@@ -803,13 +789,6 @@ void ZDT_Stepper_set_microstepping(ZDTStepperMotor *motor, uint8_t store_flag, u
 {
     if (!motor)
         return;
-
-    // 确保细分值在合理范围内（例如，0-255）
-    if (microstepping_value > 0xFF)
-    {
-        // 处理超出范围的情况
-        return;
-    }
 
     // 命令格式
     uint8_t command[6];
