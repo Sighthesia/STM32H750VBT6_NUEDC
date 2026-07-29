@@ -30,8 +30,6 @@
 #include "Car_Motor_USART.h"
 #include "ANO_Host.h"
 #include "lcd_driver.h"
-#include "lcd_wegui_driver.h"
-#include "wegui_menu_demo.h"
 #include "g030_i2c_link.h"
 
 /* USER CODE END Includes */
@@ -136,8 +134,6 @@ static void App_Peripheral_Init(void)
 #endif
   ANO_Host_Init();
   lcd_driver_init();
-  lcd_wegui_init();
-  wegui.menu = &m_main;
   G030_I2C_Link_Init();
 }
 
@@ -148,12 +144,10 @@ static void App_Process(void)
 #endif
   ANO_Host_Process();
   G030_I2C_Link_Process();
-  wegui_loop_func();
 }
 
 void HAL_SYSTICK_Callback(void)
 {
-  wegui_1ms_stick();
 }
 
 /**

@@ -51,7 +51,6 @@ file(GLOB_RECURSE BSP_SOURCES CONFIGURE_DEPENDS
     "BSP/Hardware/ZDT_Step_Motor/*.c"
     "BSP/Hardware/Car_Motor_USART/*.c"
     "BSP/Hardware/IPS114_LCD/*.c"
-    "BSP/Hardware/WeGUI/*.c"
     "BSP/Hardware/ANO_Host/*.c"
     "BSP/Hardware/AT24C02/*.c"
     "BSP/Hardware/W25Qxx/*.c"
