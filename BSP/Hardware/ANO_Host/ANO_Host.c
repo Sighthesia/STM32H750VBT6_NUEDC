@@ -36,7 +36,7 @@
 #define ANO_BAUD_SWITCH_DELAY_MS 50U
 #define ANO_STORAGE_ADDRESS 0U
 #define ANO_STORAGE_MAGIC 0x414E4F57UL
-#define ANO_STORAGE_VERSION 1U
+#define ANO_STORAGE_VERSION 2U
 
 enum {
     CAR_KP,
@@ -59,6 +59,8 @@ enum {
     CAR_DEBUG_M1_DIRECTION,
     CAR_DEBUG_M2_VALUE,
     CAR_DEBUG_M2_DIRECTION,
+    CAR_M1_DIRECTION,
+    CAR_M2_DIRECTION,
     ANO_PARAM_COUNT
 };
 
@@ -93,6 +95,8 @@ static float car_debug_m1_value;
 static float car_debug_m1_direction;
 static float car_debug_m2_value;
 static float car_debug_m2_direction;
+static float car_m1_direction;
+static float car_m2_direction = 1.0f;
 static uint8_t car_debug_active;
 static uint32_t last_telemetry_ms;
 static uint32_t last_diagnostic_ms;
@@ -111,8 +115,19 @@ typedef struct
     uint32_t baud_rate;
     uint8_t reserved[3];
     float values[HOST_BAUD];
+    float directions[2];
     uint32_t checksum;
 } ano_storage_record_t;
+
+typedef struct
+{
+    uint32_t magic;
+    uint8_t version;
+    uint32_t baud_rate;
+    uint8_t reserved[3];
+    float values[HOST_BAUD];
+    uint32_t checksum;
+} ano_storage_record_v1_t;
 
 static void put_u16(uint8_t *d, uint16_t *i, uint16_t v) { d[(*i)++] = (uint8_t)v; d[(*i)++] = (uint8_t)(v >> 8U); }
 static void put_i16(uint8_t *d, uint16_t *i, int16_t v) { put_u16(d, i, (uint16_t)v); }
@@ -142,6 +157,10 @@ static void reset_local_defaults(void)
     car_debug_m1_direction = 0.0f;
     car_debug_m2_value = 0.0f;
     car_debug_m2_direction = 0.0f;
+    car_m1_direction = 0.0f;
+    car_m2_direction = 1.0f;
+    (void)Car_Motor_Set_Direction(0U, false);
+    (void)Car_Motor_Set_Direction(1U, true);
     car_debug_active = 0U;
 
     pid_kp = 3.0f;
@@ -160,6 +179,14 @@ static void reset_local_defaults(void)
 }
 
 static uint32_t storage_record_checksum(const ano_storage_record_t *record)
+{
+    const uint8_t *data = (const uint8_t *)record;
+    uint32_t checksum = 0x6D2B79F5U;
+    for (uint16_t i = 0U; i < sizeof(*record) - sizeof(record->checksum); i++) checksum = (checksum << 5U) ^ (checksum >> 27U) ^ data[i];
+    return checksum;
+}
+
+static uint32_t storage_record_v1_checksum(const ano_storage_record_v1_t *record)
 {
     const uint8_t *data = (const uint8_t *)record;
     uint32_t checksum = 0x6D2B79F5U;
@@ -188,6 +215,8 @@ static bool save_storage(uint32_t baud_rate)
         }
         record.values[id] = *value;
     }
+    record.directions[0] = car_m1_direction;
+    record.directions[1] = car_m2_direction;
     record.checksum = storage_record_checksum(&record);
     if (!W25Qxx_EraseSector(ANO_STORAGE_ADDRESS) ||
         !W25Qxx_Write(ANO_STORAGE_ADDRESS, (const uint8_t *)&record, sizeof(record)) ||
@@ -205,19 +234,41 @@ static void load_storage(void)
     ano_storage_record_t record = {0};
     storage_operation = 2U;
     if (!W25Qxx_Read(ANO_STORAGE_ADDRESS, (uint8_t *)&record, sizeof(record)) ||
-        record.magic != ANO_STORAGE_MAGIC || record.version != ANO_STORAGE_VERSION ||
-        record.checksum != storage_record_checksum(&record) || !baud_rate_is_valid(record.baud_rate))
+        record.magic != ANO_STORAGE_MAGIC || !baud_rate_is_valid(record.baud_rate))
     {
         return;
     }
-    for (uint16_t id = 0U; id < HOST_BAUD; id++)
+    if (record.version == ANO_STORAGE_VERSION && record.checksum == storage_record_checksum(&record))
     {
-        float value = record.values[id];
-        float *target = parameter(id);
-        if (target == NULL || !isfinite(value)) continue;
-        *target = value;
+        for (uint16_t id = 0U; id < HOST_BAUD; id++)
+        {
+            float value = record.values[id];
+            float *target = parameter(id);
+            if (target == NULL || !isfinite(value)) continue;
+            *target = value;
+        }
+        if (record.directions[0] == 0.0f || record.directions[0] == 1.0f) car_m1_direction = record.directions[0];
+        if (record.directions[1] == 0.0f || record.directions[1] == 1.0f) car_m2_direction = record.directions[1];
+    }
+    else
+    {
+        ano_storage_record_v1_t legacy = {0};
+        if (record.version != 1U || !W25Qxx_Read(ANO_STORAGE_ADDRESS, (uint8_t *)&legacy, sizeof(legacy)) ||
+            legacy.checksum != storage_record_v1_checksum(&legacy))
+        {
+            return;
+        }
+        for (uint16_t id = 0U; id < HOST_BAUD; id++)
+        {
+            float value = legacy.values[id];
+            float *target = parameter(id);
+            if (target == NULL || !isfinite(value)) continue;
+            *target = value;
+        }
     }
     host_baud_rate = record.baud_rate;
+    (void)Car_Motor_Set_Direction(0U, car_m1_direction != 0.0f);
+    (void)Car_Motor_Set_Direction(1U, car_m2_direction != 0.0f);
     storage_operation = 0U;
 }
 
@@ -280,7 +331,7 @@ static float *parameter(uint16_t id)
         &pitch_pid.Kp, &pitch_pid.Ki, &pitch_pid.Kd,
         &car_type, &car_deadzone, &car_line, &car_wheel_diameter, &car_reduction_ratio, NULL,
         &car_debug_control_mode, &car_debug_m1_value, &car_debug_m1_direction,
-        &car_debug_m2_value, &car_debug_m2_direction
+        &car_debug_m2_value, &car_debug_m2_direction, &car_m1_direction, &car_m2_direction
     };
     return id < ANO_PARAM_COUNT ? values[id] : NULL;
 }
@@ -335,6 +386,12 @@ static bool write_car_parameter(uint16_t parameter_id, float value)
         accepted = Car_Motor_Set_Reduction_Ratio((uint16_t)value);
         if (accepted) *target = value;
     }
+    else if ((parameter_id == CAR_M1_DIRECTION || parameter_id == CAR_M2_DIRECTION) &&
+             (value == 0.0f || value == 1.0f))
+    {
+        accepted = Car_Motor_Set_Direction((uint8_t)(parameter_id - CAR_M1_DIRECTION), value != 0.0f);
+        if (accepted) *target = value;
+    }
 
     return accepted;
 }
@@ -366,7 +423,7 @@ static void send_param_info(uint16_t id)
         "YAW轴Kp", "YAW轴Ki", "YAW轴Kd",
         "PITCH轴Kp", "PITCH轴Ki", "PITCH轴Kd",
         "四驱型号", "四驱死区", "四驱相位线", "车轮直径", "四驱减速比", "上位机波特率",
-        "M1M2控制模式", "M1调试数值", "M1调试方向", "M2调试数值", "M2调试方向"
+        "M1M2控制模式", "M1调试数值", "M1调试方向", "M2调试数值", "M2调试方向", "M1方向", "M2方向"
     };
     static const char *const infos[ANO_PARAM_COUNT] = {
         "四驱速度环比例系数", "四驱速度环积分系数", "四驱速度环微分系数",
@@ -374,7 +431,7 @@ static void send_param_info(uint16_t id)
         "俯仰轴PID比例系数", "俯仰轴PID积分系数", "俯仰轴PID微分系数",
         "四驱电机型号", "四驱控制死区", "四驱编码器相位线", "车轮直径，单位毫米", "四驱减速比", "匿名上位机波特率",
         "0为速度模式，1为PWM模式", "速度范围0至1000，PWM范围0至3600", "0为正转，1为反转",
-        "速度范围0至1000，PWM范围0至3600", "0为正转，1为反转"
+        "速度范围0至1000，PWM范围0至3600", "0为正转，1为反转", "0为正向，1为反向，作用于速度和PWM", "0为正向，1为反向，作用于速度和PWM"
     };
     uint8_t d[ANO_DATA_MAX] = {0}; uint16_t i = 0U;
     if (id >= ANO_PARAM_COUNT) return;
@@ -618,6 +675,9 @@ static void handle(uint8_t source, uint8_t id, const uint8_t *d, uint16_t n, uin
                    isfinite(value) && (value == 0.0f || value == 1.0f)) {
             *v = value;
             accepted = true;
+        } else if ((parameter_id == CAR_M1_DIRECTION || parameter_id == CAR_M2_DIRECTION) &&
+                   isfinite(value) && (value == 0.0f || value == 1.0f)) {
+            accepted = write_car_parameter(parameter_id, value);
         } else if (v != NULL && isfinite(value) && value >= -1000.0f && value <= 1000.0f) {
             *v = value;
             accepted = true;

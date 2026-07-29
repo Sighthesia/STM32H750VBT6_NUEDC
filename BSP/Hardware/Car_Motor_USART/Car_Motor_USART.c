@@ -1,4 +1,5 @@
 #include "Car_Motor_USART.h"
+#include "Tracking_Link.h"
 
 #include "App_Config.h"
 #include "usart.h"
@@ -45,6 +46,7 @@ static uint32_t car_motor_last_voltage_request_ms;
 static uint32_t car_motor_last_voltage_response_ms;
 static uint8_t car_motor_voltage_measurement_active;
 static uint8_t car_motor_output_stopped;
+static uint8_t car_motor_reversed[2];
 
 static car_motor_telemetry_t car_motor_telemetry;
 
@@ -454,6 +456,7 @@ void Car_Motor_UART_Error_Callback(void)
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 {
     if (huart->Instance == USART1) { ANO_Host_UART_RxCplt_Callback(); return; }
+    if (huart->Instance == USART2) { Tracking_Link_UART_RxCplt_Callback(); return; }
 #if APP_ENABLE_CAR_MOTOR
     if (huart->Instance == USART3)
     {
@@ -494,6 +497,7 @@ void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart)
 void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart)
 {
     if (huart->Instance == USART1) { ANO_Host_UART_Error_Callback(); return; }
+    if (huart->Instance == USART2) { Tracking_Link_UART_Error_Callback(); return; }
 #if APP_ENABLE_CAR_MOTOR
     if (huart->Instance == USART3)
     {
@@ -607,6 +611,8 @@ bool Car_Motor_Set_Speed(int16_t m1, int16_t m2, int16_t m3, int16_t m4)
         if (queued) car_motor_output_stopped = 1U;
         return queued;
     }
+    if (car_motor_reversed[0]) m1 = (int16_t)-m1;
+    if (car_motor_reversed[1]) m2 = (int16_t)-m2;
     bool queued = Car_Motor_Format_Command("$spd:%d,%d,%d,%d#", m1, m2, m3, m4);
     if (queued) car_motor_output_stopped = 0U;
     return queued;
@@ -625,9 +631,21 @@ bool Car_Motor_Set_PWM(int16_t m1, int16_t m2, int16_t m3, int16_t m4)
         if (queued) car_motor_output_stopped = 1U;
         return queued;
     }
+    if (car_motor_reversed[0]) m1 = (int16_t)-m1;
+    if (car_motor_reversed[1]) m2 = (int16_t)-m2;
     bool queued = Car_Motor_Format_Command("$pwm:%d,%d,%d,%d#", m1, m2, m3, m4);
     if (queued) car_motor_output_stopped = 0U;
     return queued;
+}
+
+bool Car_Motor_Set_Direction(uint8_t motor_index, bool reversed)
+{
+    if (motor_index >= sizeof(car_motor_reversed))
+    {
+        return false;
+    }
+    car_motor_reversed[motor_index] = reversed ? 1U : 0U;
+    return true;
 }
 
 bool Car_Motor_Set_Upload(bool total_encoder, bool encoder_delta_10ms, bool speed)

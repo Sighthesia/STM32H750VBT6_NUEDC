@@ -78,6 +78,7 @@ bool Car_Motor_Factory_Reset(void);
 bool Car_Motor_Restore_Defaults(void);
 bool Car_Motor_Set_Speed(int16_t m1, int16_t m2, int16_t m3, int16_t m4);
 bool Car_Motor_Set_PWM(int16_t m1, int16_t m2, int16_t m3, int16_t m4);
+bool Car_Motor_Set_Direction(uint8_t motor_index, bool reversed);
 bool Car_Motor_Set_Upload(bool total_encoder, bool encoder_delta_10ms, bool speed);
 bool Car_Motor_Read_Flash(void);
 bool Car_Motor_Read_Voltage(void);
