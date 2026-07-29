@@ -12,6 +12,7 @@
 #define CAR_CONTROL_PERIOD_S             0.01f
 #define CAR_CONTROL_IMU_TIMEOUT_MS       50U
 #define CAR_CONTROL_GYRO_SCALE_DPS       (2000.0f / 32768.0f)
+#define CAR_CONTROL_ANGLE_SCALE_DEG       (180.0f / 32768.0f)
 
 typedef struct
 {
@@ -22,6 +23,7 @@ typedef struct
 } car_ladrc_t;
 
 static car_attitude_control_config_t config;
+static car_attitude_control_debug_t debug;
 static PIDController heading_pid;
 static PIDController rate_pid;
 static car_ladrc_t rate_ladrc;
@@ -31,12 +33,34 @@ static uint8_t enabled;
 static uint8_t stopped;
 static uint8_t heading_pid_initialized;
 static uint8_t rate_pid_initialized;
+static car_attitude_step_mode_t step_mode;
+static uint8_t step_return_phase;
+static uint32_t step_phase_started_ms;
+static float step_start_heading;
+
+static void clear_debug_output(void)
+{
+    uint32_t status = debug.status & (CAR_ATTITUDE_STATUS_ENABLED |
+                                     CAR_ATTITUDE_STATUS_IMU_VALID |
+                                     CAR_ATTITUDE_STATUS_TRACKING_ONLINE |
+                                     CAR_ATTITUDE_STATUS_STEP_ACTIVE |
+                                     CAR_ATTITUDE_STATUS_ANGLE_STEP);
+    memset(&debug, 0, sizeof(debug));
+    debug.status = status;
+}
 
 static float clampf(float value, float minimum, float maximum)
 {
     if (value > maximum) return maximum;
     if (value < minimum) return minimum;
     return value;
+}
+
+static float wrap_angle(float angle)
+{
+    while (angle > 180.0f) angle -= 360.0f;
+    while (angle < -180.0f) angle += 360.0f;
+    return angle;
 }
 
 static void reset_controllers(void)
@@ -96,6 +120,11 @@ static float update_ladrc(float target_rate, float measured_rate)
     rate_ladrc.z2 += CAR_CONTROL_PERIOD_S * observer * observer * error;
     rate_ladrc.previous_output =
         (config.ladrc_controller_bandwidth * (target_rate - rate_ladrc.z1) - rate_ladrc.z2) / gain;
+    if (rate_ladrc.previous_output > config.max_differential ||
+        rate_ladrc.previous_output < -config.max_differential)
+    {
+        debug.status |= CAR_ATTITUDE_STATUS_DIFFERENTIAL_LIMITED;
+    }
     rate_ladrc.previous_output = clampf(rate_ladrc.previous_output,
                                        -config.max_differential, config.max_differential);
     return rate_ladrc.previous_output;
@@ -119,6 +148,9 @@ void Car_Attitude_Control_Reset_Defaults(void)
     config.invert_x = 0.0f;
     config.invert_y = 0.0f;
     config.invert_z = 0.0f;
+    config.step_rate_amplitude = 90.0f;
+    config.step_angle_amplitude = 45.0f;
+    config.step_hold_ms = 2000.0f;
     configure_pid();
     JY61P_Set_Axis_Inverted(false, false, false);
     reset_controllers();
@@ -131,6 +163,8 @@ bool Car_Attitude_Control_Apply_Config(const car_attitude_control_config_t *next
         !isfinite(next->rate_kp) || !isfinite(next->rate_ki) || !isfinite(next->rate_kd) ||
         !isfinite(next->ladrc_observer_bandwidth) || !isfinite(next->ladrc_controller_bandwidth) ||
         !isfinite(next->ladrc_plant_gain) || !isfinite(next->max_rate) || !isfinite(next->max_differential) ||
+        !isfinite(next->step_rate_amplitude) || !isfinite(next->step_angle_amplitude) ||
+        !isfinite(next->step_hold_ms) ||
         (next->mode != 0.0f && next->mode != 1.0f) || next->base_speed < 0.0f || next->base_speed > 1000.0f ||
         next->heading_kp < 0.0f || next->heading_ki < 0.0f || next->heading_kd < 0.0f ||
         next->rate_kp < 0.0f || next->rate_ki < 0.0f || next->rate_kd < 0.0f ||
@@ -139,7 +173,11 @@ bool Car_Attitude_Control_Apply_Config(const car_attitude_control_config_t *next
         next->max_differential <= 0.0f || next->max_differential > 1000.0f ||
         (next->invert_x != 0.0f && next->invert_x != 1.0f) ||
         (next->invert_y != 0.0f && next->invert_y != 1.0f) ||
-        (next->invert_z != 0.0f && next->invert_z != 1.0f))
+        (next->invert_z != 0.0f && next->invert_z != 1.0f) ||
+        next->step_rate_amplitude < -2000.0f || next->step_rate_amplitude > 2000.0f ||
+        next->step_angle_amplitude < -180.0f || next->step_angle_amplitude > 180.0f ||
+        next->step_hold_ms < 100.0f || next->step_hold_ms > 30000.0f ||
+        next->step_hold_ms != floorf(next->step_hold_ms))
     {
         return false;
     }
@@ -159,17 +197,58 @@ void Car_Attitude_Control_Init(void)
     stopped = 0U;
     last_sequence = 0U;
     last_sample_ms = HAL_GetTick();
+    step_mode = CAR_ATTITUDE_STEP_NONE;
+    memset(&debug, 0, sizeof(debug));
     Car_Attitude_Control_Reset_Defaults();
     stop_output();
 }
 
 bool Car_Attitude_Control_Set_Enabled(bool state)
 {
+    step_mode = CAR_ATTITUDE_STEP_NONE;
     enabled = state ? 1U : 0U;
     stopped = 0U;
     reset_controllers();
+    debug.status = enabled ? CAR_ATTITUDE_STATUS_ENABLED : 0U;
+    clear_debug_output();
     if (!enabled) stop_output();
     return true;
+}
+
+bool Car_Attitude_Control_Start_Step(car_attitude_step_mode_t mode)
+{
+    const jy61p_status_t *imu_status = JY61P_Get_Status();
+
+    if ((mode != CAR_ATTITUDE_STEP_RATE && mode != CAR_ATTITUDE_STEP_ANGLE) ||
+        !imu_status->sample_valid || !imu_status->available)
+    {
+        return false;
+    }
+    step_mode = mode;
+    step_return_phase = 0U;
+    step_phase_started_ms = HAL_GetTick();
+    step_start_heading = (float)JY61P_Get_Sample()->angle.z * CAR_CONTROL_ANGLE_SCALE_DEG;
+    last_sequence = imu_status->sequence;
+    last_sample_ms = step_phase_started_ms;
+    enabled = 1U;
+    stopped = 0U;
+    reset_controllers();
+    debug.status = CAR_ATTITUDE_STATUS_ENABLED | CAR_ATTITUDE_STATUS_STEP_ACTIVE;
+    if (mode == CAR_ATTITUDE_STEP_ANGLE) debug.status |= CAR_ATTITUDE_STATUS_ANGLE_STEP;
+    clear_debug_output();
+    stop_output();
+    return true;
+}
+
+void Car_Attitude_Control_Cancel_Step(void)
+{
+    step_mode = CAR_ATTITUDE_STEP_NONE;
+    enabled = 0U;
+    stopped = 0U;
+    reset_controllers();
+    debug.status = 0U;
+    clear_debug_output();
+    stop_output();
 }
 
 bool Car_Attitude_Control_Is_Enabled(void)
@@ -182,6 +261,11 @@ car_attitude_control_config_t *Car_Attitude_Control_Get_Config(void)
     return &config;
 }
 
+const car_attitude_control_debug_t *Car_Attitude_Control_Get_Debug(void)
+{
+    return &debug;
+}
+
 void Car_Attitude_Control_Process(void)
 {
     const jy61p_status_t *imu_status = JY61P_Get_Status();
@@ -189,8 +273,19 @@ void Car_Attitude_Control_Process(void)
     int16_t tracking_angle_x10;
     bool new_sample = imu_status->sample_valid && imu_status->sequence != last_sequence;
 
+    debug.status = 0U;
+    if (enabled) debug.status |= CAR_ATTITUDE_STATUS_ENABLED;
+    if (imu_status->sample_valid && (uint32_t)(now - last_sample_ms) <= CAR_CONTROL_IMU_TIMEOUT_MS)
+    {
+        debug.status |= CAR_ATTITUDE_STATUS_IMU_VALID;
+    }
+    if (Tracking_Link_Is_Online()) debug.status |= CAR_ATTITUDE_STATUS_TRACKING_ONLINE;
+    if (step_mode != CAR_ATTITUDE_STEP_NONE) debug.status |= CAR_ATTITUDE_STATUS_STEP_ACTIVE;
+    if (step_mode == CAR_ATTITUDE_STEP_ANGLE) debug.status |= CAR_ATTITUDE_STATUS_ANGLE_STEP;
+
     if (!enabled)
     {
+        clear_debug_output();
         stop_output();
         return;
     }
@@ -198,44 +293,129 @@ void Car_Attitude_Control_Process(void)
     {
         last_sequence = imu_status->sequence;
         last_sample_ms = now;
+        debug.status |= CAR_ATTITUDE_STATUS_IMU_VALID;
     }
     else if ((uint32_t)(now - last_sample_ms) > CAR_CONTROL_IMU_TIMEOUT_MS)
     {
-        stop_output();
-        reset_controllers();
+        if (step_mode != CAR_ATTITUDE_STEP_NONE) Car_Attitude_Control_Cancel_Step();
+        else
+        {
+            clear_debug_output();
+            stop_output();
+            reset_controllers();
+        }
         return;
     }
     else
     {
         return;
     }
-    if (!Tracking_Link_Get_Angle(&tracking_angle_x10))
+    if (step_mode == CAR_ATTITUDE_STEP_NONE && !Tracking_Link_Get_Angle(&tracking_angle_x10))
     {
+        clear_debug_output();
         stop_output();
         reset_controllers();
         return;
     }
 
+    clear_debug_output();
     const jy61p_sample_t *imu = JY61P_Get_Sample();
-    const float heading_error = (float)tracking_angle_x10 * 0.1f;
+    const float measured_heading = (float)imu->angle.z * CAR_CONTROL_ANGLE_SCALE_DEG;
     const float measured_rate = (float)imu->angular_velocity.z * CAR_CONTROL_GYRO_SCALE_DPS;
+    float target_heading = 0.0f;
+    float heading_error = step_mode == CAR_ATTITUDE_STEP_NONE ? (float)tracking_angle_x10 * 0.1f : 0.0f;
+
+    if (step_mode != CAR_ATTITUDE_STEP_NONE &&
+        (uint32_t)(now - step_phase_started_ms) >= (uint32_t)config.step_hold_ms)
+    {
+        if (!step_return_phase)
+        {
+            step_return_phase = 1U;
+            step_phase_started_ms = now;
+            reset_controllers();
+        }
+        else
+        {
+            Car_Attitude_Control_Cancel_Step();
+            clear_debug_output();
+            return;
+        }
+    }
+    if (step_mode == CAR_ATTITUDE_STEP_ANGLE)
+    {
+        target_heading = step_return_phase ? 0.0f : config.step_angle_amplitude;
+        const float relative_heading = wrap_angle(measured_heading - step_start_heading);
+        heading_error = wrap_angle(relative_heading - target_heading);
+        debug.tracking_angle = relative_heading;
+    }
+    else
+    {
+        debug.tracking_angle = heading_error;
+    }
+    debug.target_heading = target_heading;
+    debug.measured_rate = measured_rate;
     if (!heading_pid_initialized)
     {
         heading_pid.prevMeasurement = heading_error;
         heading_pid_initialized = 1U;
     }
-    const float target_rate = PIDController_Update(&heading_pid, 0.0f, heading_error);
+    float target_rate = step_mode == CAR_ATTITUDE_STEP_RATE ?
+                        (step_return_phase ? 0.0f : config.step_rate_amplitude) :
+                        PIDController_Update(&heading_pid, 0.0f, heading_error);
+    if (step_mode != CAR_ATTITUDE_STEP_RATE)
+    {
+        debug.heading_p = heading_pid.Kp * -heading_error;
+        debug.heading_i = heading_pid.integrator;
+        debug.heading_d = heading_pid.differentiator;
+    }
+    if (target_rate > config.max_rate || target_rate < -config.max_rate)
+    {
+        debug.status |= CAR_ATTITUDE_STATUS_TARGET_RATE_LIMITED;
+    }
+    target_rate = clampf(target_rate, -config.max_rate, config.max_rate);
+    debug.target_rate = target_rate;
     if (!rate_pid_initialized)
     {
         rate_pid.prevMeasurement = measured_rate;
         rate_pid_initialized = 1U;
     }
-    float differential = config.mode == (float)CAR_ATTITUDE_CONTROL_LADRC ?
-                         update_ladrc(target_rate, measured_rate) :
-                         PIDController_Update(&rate_pid, target_rate, measured_rate);
+    float differential;
+    if (config.mode == (float)CAR_ATTITUDE_CONTROL_LADRC)
+    {
+        differential = update_ladrc(target_rate, measured_rate);
+        debug.ladrc_z1 = rate_ladrc.z1;
+        debug.ladrc_z2 = rate_ladrc.z2;
+        debug.ladrc_output = differential;
+    }
+    else
+    {
+        differential = PIDController_Update(&rate_pid, target_rate, measured_rate);
+        debug.rate_p = rate_pid.Kp * (target_rate - measured_rate);
+        debug.rate_i = rate_pid.integrator;
+        debug.rate_d = rate_pid.differentiator;
+        if (debug.rate_p + debug.rate_i + debug.rate_d > config.max_differential ||
+            debug.rate_p + debug.rate_i + debug.rate_d < -config.max_differential)
+        {
+            debug.status |= CAR_ATTITUDE_STATUS_DIFFERENTIAL_LIMITED;
+        }
+    }
     differential = clampf(differential, -config.max_differential, config.max_differential);
 
-    const int16_t left = (int16_t)clampf(config.base_speed - differential, -1000.0f, 1000.0f);
-    const int16_t right = (int16_t)clampf(config.base_speed + differential, -1000.0f, 1000.0f);
+    const float base_speed = step_mode == CAR_ATTITUDE_STEP_NONE ? config.base_speed : 0.0f;
+    const float left_unclamped = base_speed - differential;
+    const float right_unclamped = base_speed + differential;
+    const int16_t left = (int16_t)clampf(left_unclamped, -1000.0f, 1000.0f);
+    const int16_t right = (int16_t)clampf(right_unclamped, -1000.0f, 1000.0f);
+    if (left_unclamped > 1000.0f || left_unclamped < -1000.0f)
+    {
+        debug.status |= CAR_ATTITUDE_STATUS_LEFT_SPEED_LIMITED;
+    }
+    if (right_unclamped > 1000.0f || right_unclamped < -1000.0f)
+    {
+        debug.status |= CAR_ATTITUDE_STATUS_RIGHT_SPEED_LIMITED;
+    }
+    debug.differential = differential;
+    debug.left_target = (float)left;
+    debug.right_target = (float)right;
     if (Car_Motor_Set_Speed(left, right, 0, 0)) stopped = 0U;
 }
