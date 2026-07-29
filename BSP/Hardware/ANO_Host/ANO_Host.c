@@ -15,6 +15,8 @@
 #define ANO_BROADCAST_ADDRESS 0xFFU
 #define ANO_ID_CHECK 0x00U
 #define ANO_ID_COMMAND 0xC0U
+#define ANO_ID_COMMAND_QUERY 0xC1U
+#define ANO_ID_COMMAND_INFO 0xC2U
 #define ANO_ID_PARAM_COMMAND 0xE0U
 #define ANO_ID_PARAM_VALUE 0xE1U
 #define ANO_ID_PARAM_INFO 0xE2U
@@ -47,6 +49,14 @@ enum {
 };
 
 typedef struct { uint8_t state, source, destination, id, sum, checksum; uint16_t length, index; uint8_t data[ANO_DATA_MAX]; } ano_parser_t;
+typedef struct { uint8_t cid[3]; const char *name; const char *info; } ano_command_desc_t;
+
+static const ano_command_desc_t commands[] = {
+    {{0x03U, 0x03U, 0x00U}, "四驱停止", "将四路电机速度设为零"},
+    {{0x02U, 0x12U, 0xFFU}, "ZDT双轴停止", "立即停止两个ZDT闭环步进电机"},
+    {{0x03U, ANO_COMMAND_CAR_READ_FLASH, 0x00U}, "读取四驱配置", "请求四路电机驱动读取保存的配置"},
+    {{0x03U, ANO_COMMAND_CAR_FACTORY_RESET, 0x00U}, "四驱恢复出厂", "请求四路电机驱动恢复出厂配置"}
+};
 
 static uint8_t rx_byte;
 static volatile uint8_t rx_queue[ANO_RX_QUEUE_SIZE], rx_head, rx_tail;
@@ -230,9 +240,42 @@ static void send_param_info(uint16_t id)
         "pitch_kp", "pitch_ki", "pitch_kd",
         "car_type", "car_deadzone", "car_line", "wheel_diameter", "host_baud"
     };
-    uint8_t d[23] = {0}; uint16_t i = 0U;
+    static const char *const infos[ANO_PARAM_COUNT] = {
+        "四驱速度环比例系数", "四驱速度环积分系数", "四驱速度环微分系数",
+        "航向轴PID比例系数", "航向轴PID积分系数", "航向轴PID微分系数",
+        "俯仰轴PID比例系数", "俯仰轴PID积分系数", "俯仰轴PID微分系数",
+        "四驱电机型号", "四驱控制死区", "四驱循迹参数", "车轮直径，单位毫米", "匿名上位机波特率"
+    };
+    uint8_t d[ANO_DATA_MAX] = {0}; uint16_t i = 0U;
     if (id >= ANO_PARAM_COUNT) return;
-    put_u16(d, &i, id); d[i++] = 8U; strncpy((char *)&d[i], names[id], 20U); send_frame(ANO_ID_PARAM_INFO, d, sizeof(d));
+    put_u16(d, &i, id); d[i++] = 8U; strncpy((char *)&d[i], names[id], 20U); i += 20U;
+    strncpy((char *)&d[i], infos[id], sizeof(d) - i - 1U); i += (uint16_t)strlen((const char *)&d[i]);
+    send_frame(ANO_ID_PARAM_INFO, d, i);
+}
+
+static void send_command_count(void)
+{
+    uint8_t d[3] = {0x00U, (uint8_t)(sizeof(commands) / sizeof(commands[0])), 0U};
+    send_frame(ANO_ID_COMMAND_QUERY, d, sizeof(d));
+}
+
+static void send_command_info(uint16_t command_id)
+{
+    uint8_t d[ANO_DATA_MAX] = {0}; uint16_t i = 0U;
+    if (command_id >= (uint16_t)(sizeof(commands) / sizeof(commands[0]))) return;
+    put_u16(d, &i, command_id);
+    memcpy(&d[i], commands[command_id].cid, sizeof(commands[command_id].cid)); i += sizeof(commands[command_id].cid);
+    i += 8U;
+    strncpy((char *)&d[i], commands[command_id].name, 20U); i += 20U;
+    strncpy((char *)&d[i], commands[command_id].info, sizeof(d) - i - 1U); i += (uint16_t)strlen((const char *)&d[i]);
+    send_frame(ANO_ID_COMMAND_INFO, d, i);
+}
+
+static void handle_command_query(const uint8_t *d, uint16_t n)
+{
+    if (n < 3U) return;
+    if (d[0] == 0U) send_command_count();
+    else if (d[0] == 1U) send_command_info(get_u16(&d[1]));
 }
 static void send_telemetry(void)
 {
@@ -246,7 +289,11 @@ static void send_telemetry(void)
 
 static void command(const uint8_t *d, uint16_t n)
 {
-    if (n == 9U && d[0] == 1U) (void)Car_Motor_Set_Speed(get_i16(&d[1]), get_i16(&d[3]), get_i16(&d[5]), get_i16(&d[7]));
+    if (n == 3U && d[0] == 0x03U && d[1] == 0x03U && d[2] == 0x00U) (void)Car_Motor_Set_Speed(0, 0, 0, 0);
+    else if (n == 3U && d[0] == 0x02U && d[1] == 0x12U && d[2] == 0xFFU) { ZDT_Stepper_stop(zdt_stepper_motors[0], 0U); ZDT_Stepper_stop(zdt_stepper_motors[1], 0U); }
+    else if (n == 3U && d[0] == 0x03U && d[1] == ANO_COMMAND_CAR_READ_FLASH && d[2] == 0x00U) (void)Car_Motor_Read_Flash();
+    else if (n == 3U && d[0] == 0x03U && d[1] == ANO_COMMAND_CAR_FACTORY_RESET && d[2] == 0x00U) (void)Car_Motor_Factory_Reset();
+    else if (n == 9U && d[0] == 1U) (void)Car_Motor_Set_Speed(get_i16(&d[1]), get_i16(&d[3]), get_i16(&d[5]), get_i16(&d[7]));
     else if (n == 9U && d[0] == 2U) (void)Car_Motor_Set_PWM(get_i16(&d[1]), get_i16(&d[3]), get_i16(&d[5]), get_i16(&d[7]));
     else if (n == 1U && d[0] == 3U) (void)Car_Motor_Set_Speed(0, 0, 0, 0);
     else if (n == 7U && d[0] == 0x10U && d[1] < 2U) { float s = get_float(&d[3]); if (s >= 0.0f && s <= 1000.0f) ZDT_Stepper_Set_Speed(zdt_stepper_motors[d[1]], d[2] ? ZDT_STEPPER_CCW : ZDT_STEPPER_CW, s, 0U, 0U); }
@@ -271,8 +318,9 @@ static void handle(uint8_t id, const uint8_t *d, uint16_t n, uint8_t sum, uint8_
             *v = value;
         }
     }
-    else if (id == ANO_ID_COMMAND) command(d, n); else return;
-    send_check(id, sum, add);
+    else if (id == ANO_ID_COMMAND) { command(d, n); send_check(id, sum, add); }
+    else if (id == ANO_ID_COMMAND_QUERY) handle_command_query(d, n);
+    else return;
 }
 
 static void feed(uint8_t b)
