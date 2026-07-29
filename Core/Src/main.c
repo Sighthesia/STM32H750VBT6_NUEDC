@@ -19,6 +19,7 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "dma.h"
+#include "i2c.h"
 #include "usart.h"
 #include "gpio.h"
 
@@ -28,7 +29,10 @@
 #include "ZDT_Stepper.h"
 #include "Car_Motor_USART.h"
 #include "ANO_Host.h"
-#include "ips114_lcd.h"
+#include "lcd_driver.h"
+#include "lcd_wegui_driver.h"
+#include "wegui_menu_demo.h"
+#include "g030_i2c_link.h"
 
 /* USER CODE END Includes */
 
@@ -115,6 +119,7 @@ static void App_Peripheral_Init(void)
 {
   MX_GPIO_Init();
   MX_DMA_Init();
+  MX_I2C2_Init();
   MX_USART1_UART_Init();
   MX_USART3_UART_Init();
   MX_UART5_Init();
@@ -129,8 +134,10 @@ static void App_Peripheral_Init(void)
   Car_Motor_Init();
 #endif
   ANO_Host_Init();
-  IPS114_LCD_Init();
-  IPS114_LCD_ShowSelfTest();
+  lcd_driver_init();
+  lcd_wegui_init();
+  wegui.menu = &m_main;
+  G030_I2C_Link_Init();
 }
 
 static void App_Process(void)
@@ -139,6 +146,13 @@ static void App_Process(void)
   Car_Motor_Process();
 #endif
   ANO_Host_Process();
+  G030_I2C_Link_Process();
+  wegui_loop_func();
+}
+
+void HAL_SYSTICK_Callback(void)
+{
+  wegui_1ms_stick();
 }
 
 /**
