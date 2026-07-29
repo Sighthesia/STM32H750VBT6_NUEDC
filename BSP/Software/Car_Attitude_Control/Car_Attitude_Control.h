@@ -38,6 +38,7 @@ typedef struct
     float step_rate_amplitude;
     float step_angle_amplitude;
     float step_hold_ms;
+    float step_angle_feedback_inverted;
 } car_attitude_control_config_t;
 
 enum

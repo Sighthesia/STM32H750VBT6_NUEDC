@@ -151,6 +151,7 @@ void Car_Attitude_Control_Reset_Defaults(void)
     config.step_rate_amplitude = 90.0f;
     config.step_angle_amplitude = 45.0f;
     config.step_hold_ms = 2000.0f;
+    config.step_angle_feedback_inverted = 1.0f;
     configure_pid();
     JY61P_Set_Axis_Inverted(false, false, false);
     reset_controllers();
@@ -164,7 +165,7 @@ bool Car_Attitude_Control_Apply_Config(const car_attitude_control_config_t *next
         !isfinite(next->ladrc_observer_bandwidth) || !isfinite(next->ladrc_controller_bandwidth) ||
         !isfinite(next->ladrc_plant_gain) || !isfinite(next->max_rate) || !isfinite(next->max_differential) ||
         !isfinite(next->step_rate_amplitude) || !isfinite(next->step_angle_amplitude) ||
-        !isfinite(next->step_hold_ms) ||
+        !isfinite(next->step_hold_ms) || !isfinite(next->step_angle_feedback_inverted) ||
         (next->mode != 0.0f && next->mode != 1.0f) || next->base_speed < 0.0f || next->base_speed > 1000.0f ||
         next->heading_kp < 0.0f || next->heading_ki < 0.0f || next->heading_kd < 0.0f ||
         next->rate_kp < 0.0f || next->rate_ki < 0.0f || next->rate_kd < 0.0f ||
@@ -177,7 +178,8 @@ bool Car_Attitude_Control_Apply_Config(const car_attitude_control_config_t *next
         next->step_rate_amplitude < -2000.0f || next->step_rate_amplitude > 2000.0f ||
         next->step_angle_amplitude < -180.0f || next->step_angle_amplitude > 180.0f ||
         next->step_hold_ms < 100.0f || next->step_hold_ms > 30000.0f ||
-        next->step_hold_ms != floorf(next->step_hold_ms))
+        next->step_hold_ms != floorf(next->step_hold_ms) ||
+        (next->step_angle_feedback_inverted != 0.0f && next->step_angle_feedback_inverted != 1.0f))
     {
         return false;
     }
@@ -344,7 +346,8 @@ void Car_Attitude_Control_Process(void)
     if (step_mode == CAR_ATTITUDE_STEP_ANGLE)
     {
         target_heading = step_return_phase ? 0.0f : config.step_angle_amplitude;
-        const float relative_heading = wrap_angle(measured_heading - step_start_heading);
+        float relative_heading = wrap_angle(measured_heading - step_start_heading);
+        if (config.step_angle_feedback_inverted != 0.0f) relative_heading = -relative_heading;
         heading_error = wrap_angle(relative_heading - target_heading);
         debug.tracking_angle = relative_heading;
     }

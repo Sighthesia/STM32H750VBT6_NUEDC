@@ -39,7 +39,7 @@
 #define ANO_BAUD_SWITCH_DELAY_MS 50U
 #define ANO_STORAGE_ADDRESS 0U
 #define ANO_STORAGE_MAGIC 0x414E4F57UL
-#define ANO_STORAGE_VERSION 4U
+#define ANO_STORAGE_VERSION 5U
 
 enum {
     CAR_KP,
@@ -83,6 +83,7 @@ enum {
     STEP_RATE_AMPLITUDE,
     STEP_ANGLE_AMPLITUDE,
     STEP_HOLD_MS,
+    STEP_ANGLE_FEEDBACK_INVERTED,
     ANO_PARAM_COUNT
 };
 
@@ -166,6 +167,21 @@ typedef struct
     float invert_y;
     float invert_z;
 } ano_attitude_config_v3_t;
+
+typedef struct
+{
+    uint32_t magic;
+    uint8_t version;
+    uint32_t baud_rate;
+    uint8_t reserved[3];
+    float values[HOST_BAUD];
+    float directions[2];
+    ano_attitude_config_v3_t attitude;
+    float step_rate_amplitude;
+    float step_angle_amplitude;
+    float step_hold_ms;
+    uint32_t checksum;
+} ano_storage_record_v4_t;
 
 typedef struct
 {
@@ -282,6 +298,14 @@ static uint32_t storage_record_v3_checksum(const ano_storage_record_v3_t *record
     return checksum;
 }
 
+static uint32_t storage_record_v4_checksum(const ano_storage_record_v4_t *record)
+{
+    const uint8_t *data = (const uint8_t *)record;
+    uint32_t checksum = 0x6D2B79F5U;
+    for (uint16_t i = 0U; i < sizeof(*record) - sizeof(record->checksum); i++) checksum = (checksum << 5U) ^ (checksum >> 27U) ^ data[i];
+    return checksum;
+}
+
 static float *parameter(uint16_t id);
 static bool write_car_parameter(uint16_t parameter_id, float value);
 
@@ -338,6 +362,28 @@ static void load_storage(void)
         }
         if (record.directions[0] == 0.0f || record.directions[0] == 1.0f) car_m1_direction = record.directions[0];
         if (record.directions[1] == 0.0f || record.directions[1] == 1.0f) car_m2_direction = record.directions[1];
+    }
+    else if (record.version == 4U)
+    {
+        ano_storage_record_v4_t legacy = {0};
+        car_attitude_control_config_t attitude = *Car_Attitude_Control_Get_Config();
+        if (!W25Qxx_Read(ANO_STORAGE_ADDRESS, (uint8_t *)&legacy, sizeof(legacy)) ||
+            legacy.checksum != storage_record_v4_checksum(&legacy))
+        {
+            return;
+        }
+        for (uint16_t id = 0U; id < HOST_BAUD; id++)
+        {
+            float *target = parameter(id);
+            if (target != NULL && isfinite(legacy.values[id])) *target = legacy.values[id];
+        }
+        if (legacy.directions[0] == 0.0f || legacy.directions[0] == 1.0f) car_m1_direction = legacy.directions[0];
+        if (legacy.directions[1] == 0.0f || legacy.directions[1] == 1.0f) car_m2_direction = legacy.directions[1];
+        memcpy(&attitude, &legacy.attitude, sizeof(legacy.attitude));
+        attitude.step_rate_amplitude = legacy.step_rate_amplitude;
+        attitude.step_angle_amplitude = legacy.step_angle_amplitude;
+        attitude.step_hold_ms = legacy.step_hold_ms;
+        (void)Car_Attitude_Control_Apply_Config(&attitude);
     }
     else if (record.version == 3U)
     {
@@ -463,9 +509,9 @@ static float *parameter(uint16_t id)
         &car_debug_m2_value, &car_debug_m2_direction, &car_m1_direction, &car_m2_direction,
         NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
         NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
-        NULL, NULL, NULL
+        NULL, NULL, NULL, NULL
     };
-    if (id >= ATTITUDE_MODE && id <= STEP_HOLD_MS)
+    if (id >= ATTITUDE_MODE && id <= STEP_ANGLE_FEEDBACK_INVERTED)
     {
         float *const attitude_values[] = {
             &attitude->mode, &attitude->base_speed,
@@ -475,7 +521,7 @@ static float *parameter(uint16_t id)
             &attitude->ladrc_plant_gain, &attitude->max_rate, &attitude->max_differential,
             &attitude->invert_x, &attitude->invert_y, &attitude->invert_z,
             &attitude->step_rate_amplitude, &attitude->step_angle_amplitude,
-            &attitude->step_hold_ms
+            &attitude->step_hold_ms, &attitude->step_angle_feedback_inverted
         };
         return attitude_values[id - ATTITUDE_MODE];
     }
@@ -508,6 +554,7 @@ static bool write_attitude_parameter(uint16_t parameter_id, float value)
     case STEP_RATE_AMPLITUDE: next.step_rate_amplitude = value; break;
     case STEP_ANGLE_AMPLITUDE: next.step_angle_amplitude = value; break;
     case STEP_HOLD_MS: next.step_hold_ms = value; break;
+    case STEP_ANGLE_FEEDBACK_INVERTED: next.step_angle_feedback_inverted = value; break;
     default: return false;
     }
     return Car_Attitude_Control_Apply_Config(&next);
@@ -603,7 +650,7 @@ static void send_param_info(uint16_t id)
         "M1M2控制模式", "M1调试数值", "M1调试方向", "M2调试数值", "M2调试方向", "M1方向", "M2方向",
         "双环控制模式", "基础轮速", "航向Kp", "航向Ki", "航向Kd", "角速度Kp", "角速度Ki", "角速度Kd",
         "LADRC观测带宽", "LADRC控制带宽", "LADRC对象增益", "最大角速度", "最大差速", "IMU X轴倒置", "IMU Y轴倒置", "IMU Z轴倒置",
-        "角速度阶跃幅度", "航向角阶跃幅度", "阶跃保持时间"
+        "角速度阶跃幅度", "航向角阶跃幅度", "阶跃保持时间", "航向角反馈倒置"
     };
     static const char *const infos[ANO_PARAM_COUNT] = {
         "四驱速度环比例系数", "四驱速度环积分系数", "四驱速度环微分系数",
@@ -615,7 +662,7 @@ static void send_param_info(uint16_t id)
         "0为PID，1为LADRC", "M1和M2共同前进速度", "航向外环比例", "航向外环积分", "航向外环微分",
         "角速度内环比例", "角速度内环积分", "角速度内环微分", "线性扩张状态观测器带宽", "角速度控制器带宽",
         "被控对象输入增益，必须大于零", "航向外环目标角速度限幅", "左右轮速度差限幅", "0正常，1倒置", "0正常，1倒置", "0正常，1倒置",
-        "角速度阶跃幅度，单位度每秒", "相对Z轴航向阶跃幅度，单位度", "正阶跃和回零各自保持毫秒数"
+        "角速度阶跃幅度，单位度每秒", "相对Z轴航向阶跃幅度，单位度", "正阶跃和回零各自保持毫秒数", "0原方向，1倒置，仅作用于航向角阶跃"
     };
     uint8_t d[ANO_DATA_MAX] = {0}; uint16_t i = 0U;
     if (id >= ANO_PARAM_COUNT) return;
@@ -912,7 +959,7 @@ static void handle(uint8_t source, uint8_t id, const uint8_t *d, uint16_t n, uin
         } else if ((parameter_id == CAR_M1_DIRECTION || parameter_id == CAR_M2_DIRECTION) &&
                    isfinite(value) && (value == 0.0f || value == 1.0f)) {
             accepted = write_car_parameter(parameter_id, value);
-        } else if (parameter_id >= ATTITUDE_MODE && parameter_id <= STEP_HOLD_MS) {
+        } else if (parameter_id >= ATTITUDE_MODE && parameter_id <= STEP_ANGLE_FEEDBACK_INVERTED) {
             accepted = write_attitude_parameter(parameter_id, value);
         } else if (v != NULL && isfinite(value) && value >= -1000.0f && value <= 1000.0f) {
             *v = value;
