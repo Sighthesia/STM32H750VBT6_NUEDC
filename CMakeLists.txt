@@ -53,6 +53,7 @@ file(GLOB_RECURSE BSP_SOURCES CONFIGURE_DEPENDS
     "BSP/Hardware/Encoder_EXTI/*.c"
     "BSP/Hardware/WeGUI/*.c"
     "BSP/Hardware/ANO_Host/*.c"
+    "BSP/Hardware/JY61P/*.c"
     "BSP/Hardware/AT24C02/*.c"
     "BSP/Hardware/W25Qxx/*.c"
     "BSP/Software/PID/*.c"
