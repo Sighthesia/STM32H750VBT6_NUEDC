@@ -21,6 +21,7 @@ limitations under the License.
 
 extern menu_t m_main;
 //-------------------m_main主菜单------------------------
+extern menu_t m_App_CarStatus;
 extern menu_t m_wDemo;
 extern menu_t m_App_MusicPlayer;
 extern menu_t m_AppGame;
@@ -78,4 +79,3 @@ extern uint32_t demo_timer;
 extern uint16_t demo_value;
 extern uint8_t demo_bool;
 #endif
-

@@ -14,6 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 #include "lcd_wegui_menu_mlist.h"
+#include "Car_Motor_USART.h"
+
+#include <stdio.h>
 
 mList_par_t mList_par;
 
@@ -169,15 +172,28 @@ void wegui_show_mList(uint16_t farmes)
 															temp_y,
 															str);
 		*/
-		#if (LCD_COLOUR_BIT == 1)
-			lcd_draw_utf8_string	(SCREEN_WIDTH - 1 - lcd_get_utf8_string_xlen("OLED") - 2,
-															temp_y,
-															"OLED");//LOGO
-		#else
-			lcd_draw_utf8_string	(SCREEN_WIDTH - 1 - lcd_get_utf8_string_xlen("RGB") - 2,
-															temp_y,
-															"RGB");//LOGO
-		#endif
+			if (wegui.menu->fatherMenu == 0x00)
+			{
+				const car_motor_telemetry_t *telemetry = Car_Motor_Get_Telemetry();
+				char voltage[16];
+				if (telemetry->voltage_valid)
+				{
+					snprintf(voltage, sizeof(voltage), "BAT %.2fV", (double)telemetry->voltage);
+				}
+				else
+				{
+					snprintf(voltage, sizeof(voltage), "BAT --.--V");
+				}
+				lcd_draw_utf8_string(SCREEN_WIDTH - 1 - lcd_get_utf8_string_xlen(voltage) - 2, temp_y, voltage);
+			}
+			else
+			{
+				#if (LCD_COLOUR_BIT == 1)
+					lcd_draw_utf8_string(SCREEN_WIDTH - 1 - lcd_get_utf8_string_xlen("OLED") - 2, temp_y, "OLED");
+				#else
+					lcd_draw_utf8_string(SCREEN_WIDTH - 1 - lcd_get_utf8_string_xlen("RGB") - 2, temp_y, "RGB");
+				#endif
+			}
 
 
 	}

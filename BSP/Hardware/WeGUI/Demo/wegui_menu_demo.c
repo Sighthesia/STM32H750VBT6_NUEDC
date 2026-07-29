@@ -23,6 +23,9 @@ limitations under the License.
 * Misc Contiols -> 填入"--no-multibyte-chars"
 *************************************************/
 #include "wegui_menu_demo.h"
+#include "Car_Motor_USART.h"
+
+#include <stdio.h>
 
 uint8_t demo_bool=1;
 uint16_t demo_value=0;
@@ -31,6 +34,30 @@ int16_t slider_demo_value=-5;
 char demo_string_1[7] = "";
 char demo_string_2[7] = "";
 char demo_string_3[3] = "--";
+
+static uint8_t Car_Status_Refresh(uint8_t ui_farmes, uint16_t time_count)
+{
+	const car_motor_telemetry_t *telemetry = Car_Motor_Get_Telemetry();
+	char line[24];
+
+	(void)ui_farmes;
+	(void)time_count;
+	while (lcd_is_busy() != 0);
+	lcd_clear_gram();
+	lcd_set_driver_mode(write_1);
+	lcd_draw_utf8_string(0, 0, "CAR STATUS");
+	if (telemetry->voltage_valid) {
+		snprintf(line, sizeof(line), "BAT  %5.2f V", (double)telemetry->voltage);
+	} else {
+		snprintf(line, sizeof(line), "BAT  --.-- V");
+	}
+	lcd_draw_utf8_string(0, lcd_driver.newline_high, line);
+	snprintf(line, sizeof(line), "M1   %6.2f", (double)(telemetry->encoder_upload_active ? telemetry->speed[0] : 0.0f));
+	lcd_draw_utf8_string(0, lcd_driver.newline_high * 2U, line);
+	snprintf(line, sizeof(line), "M2   %6.2f", (double)(telemetry->encoder_upload_active ? telemetry->speed[1] : 0.0f));
+	lcd_draw_utf8_string(0, lcd_driver.newline_high * 3U, line);
+	return 1U;
+}
 
 //------------------------------------------蜂鸣器音乐播放器--------------------------------------------
 void MusicPlayer_App_Begin()//进入APP执行一次
@@ -394,7 +421,7 @@ void Set_language_English()
 menu_t m_main =
 {
 	.fatherMenu=0x00,//父菜单
-	.subMenu=&m_wDemo,//(首个)子菜单
+	.subMenu=&m_App_CarStatus,//(首个)子菜单
 	.nextMenu=0x00,//同级下一个菜单
 	.titel=
 	{
@@ -413,6 +440,31 @@ menu_t m_main =
 		.loop_fun=0x00, //菜单功能 持续执行
 		.quit_fun=0x00, //菜单退出 执行一次
 	},
+};
+
+menu_t m_App_CarStatus =
+{
+	.fatherMenu=&m_main,
+	.subMenu=0x00,
+	.nextMenu=&m_App_Setting,
+	.titel=
+	{
+		.str_zh_CN="实时状态",
+		.str_en_US="STATUS",
+	},
+	.discribe=
+	{
+		.str_zh_CN="电压与M1/M2速度",
+		.str_en_US="Battery and motor speed",
+	},
+	.menuType=mPorgram,
+	.menuPar.mPorgram_Par=
+	{
+		.begin_fun=0x00,
+		.loop_fun=0x00,
+		.quit_fun=0x00,
+		.refresh_fun=Car_Status_Refresh
+	}
 };
 
 menu_t m_wDemo =
@@ -518,7 +570,7 @@ menu_t m_App_Setting =
 {
 	.fatherMenu=&m_main,//父菜单
 	.subMenu=&m_Setting_Display,//(首个)子菜单
-	.nextMenu=&m_App_6,//同级下一个菜单
+	.nextMenu=0x00,//同级下一个菜单
 	.titel=
 	{
 		.str_zh_CN="设置",//中文标题
@@ -526,8 +578,8 @@ menu_t m_App_Setting =
 	},
 	.discribe=
 	{
-		.str_zh_CN="5.设置",//中文描述
-	  .str_en_US="5.Setting",//英文描述
+		.str_zh_CN="设备设置",//中文描述
+		.str_en_US="Device settings",//英文描述
 	},
 	.menuType=mList,//菜单类型
 	.menuPar.mList_Par =
@@ -937,7 +989,7 @@ menu_t m_Setting_UI =
 {
 	.fatherMenu=&m_App_Setting,//父菜单
 	.subMenu=&m_Setting_UI_colour,//(首个)子菜单
-	.nextMenu=&m_Setting_Language,//同级下一个菜单
+	.nextMenu=&m_Setting_Developer,//同级下一个菜单
 	.titel=
 	{
 		.str_zh_CN="UI&主题",//中文标题

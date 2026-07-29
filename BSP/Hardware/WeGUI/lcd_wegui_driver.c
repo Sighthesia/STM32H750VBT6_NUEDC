@@ -548,7 +548,7 @@ void lcd_wegui_init()
 	#endif
 
 	wegui.menu = 0x00;//开机初始菜单menu
-	wegui.setting.language = zh_CN; //默认语言设置 en_US  zh_CN
+	wegui.setting.language = en_US;
 
 	wegui.setting.screen_fps_ms = fps_2_ms(1000);//屏幕帧率设置(建议两者一致) 建议60~100
 	wegui.setting.ui_fps_ms = fps_2_ms(60);//UI帧率设置(建议两者一致) 建议60~100
