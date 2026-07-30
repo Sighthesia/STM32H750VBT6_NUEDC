@@ -5,17 +5,17 @@
 #include <math.h>
 #include <string.h>
 
-#define WHEELTEC_BAUD_RATE       921600U
-#define WHEELTEC_FRAME_HEAD      0xFCU
-#define WHEELTEC_FRAME_END       0xFDU
-#define WHEELTEC_TYPE_IMU        0x40U
-#define WHEELTEC_TYPE_AHRS       0x41U
+#define WHEELTEC_BAUD_RATE 115200U
+#define WHEELTEC_FRAME_HEAD 0xFCU
+#define WHEELTEC_FRAME_END 0xFDU
+#define WHEELTEC_TYPE_IMU 0x40U
+#define WHEELTEC_TYPE_AHRS 0x41U
 #define WHEELTEC_IMU_PAYLOAD_LEN 0x38U
 #define WHEELTEC_AHRS_PAYLOAD_LEN 0x30U
-#define WHEELTEC_IMU_FRAME_SIZE  64U
+#define WHEELTEC_IMU_FRAME_SIZE 64U
 #define WHEELTEC_AHRS_FRAME_SIZE 56U
-#define WHEELTEC_MAX_FRAME_SIZE  WHEELTEC_IMU_FRAME_SIZE
-#define WHEELTEC_TIMEOUT_MS      250U
+#define WHEELTEC_MAX_FRAME_SIZE WHEELTEC_IMU_FRAME_SIZE
+#define WHEELTEC_TIMEOUT_MS 250U
 
 static uint8_t rx_byte;
 static uint8_t rx_frame[WHEELTEC_MAX_FRAME_SIZE];
@@ -144,7 +144,8 @@ static void WheelTec_Consume_Byte(uint8_t value)
         {
             invalid_frame_count++;
             rx_index = value == WHEELTEC_FRAME_HEAD ? 1U : 0U;
-            if (rx_index != 0U) rx_frame[0] = value;
+            if (rx_index != 0U)
+                rx_frame[0] = value;
             expected_length = 0U;
             return;
         }
@@ -153,8 +154,10 @@ static void WheelTec_Consume_Byte(uint8_t value)
     {
         if (rx_frame[expected_length - 1U] == WHEELTEC_FRAME_END)
         {
-            if (rx_frame[1] == WHEELTEC_TYPE_IMU) WheelTec_Parse_IMU();
-            else WheelTec_Parse_AHRS();
+            if (rx_frame[1] == WHEELTEC_TYPE_IMU)
+                WheelTec_Parse_IMU();
+            else
+                WheelTec_Parse_AHRS();
         }
         else
         {
@@ -188,27 +191,32 @@ void WheelTec_Init(void)
 
 bool WheelTec_Get_IMU(wheeltec_imu_data_t *data)
 {
-    if (data == NULL || imu_valid == 0U) return false;
+    if (data == NULL || imu_valid == 0U)
+        return false;
     uint32_t primask = __get_PRIMASK();
     __disable_irq();
     *data = imu_data;
-    if (primask == 0U) __enable_irq();
+    if (primask == 0U)
+        __enable_irq();
     return true;
 }
 
 bool WheelTec_Get_AHRS(wheeltec_ahrs_data_t *data)
 {
-    if (data == NULL || ahrs_valid == 0U) return false;
+    if (data == NULL || ahrs_valid == 0U)
+        return false;
     uint32_t primask = __get_PRIMASK();
     __disable_irq();
     *data = ahrs_data;
-    if (primask == 0U) __enable_irq();
+    if (primask == 0U)
+        __enable_irq();
     return true;
 }
 
 void WheelTec_Get_Status(wheeltec_status_t *status)
 {
-    if (status == NULL) return;
+    if (status == NULL)
+        return;
     uint32_t primask = __get_PRIMASK();
     __disable_irq();
     status->imu_valid = imu_valid;
@@ -219,7 +227,8 @@ void WheelTec_Get_Status(wheeltec_status_t *status)
     status->uart_error_count = uart_error_count;
     uint32_t imu_ms = last_imu_ms;
     uint32_t ahrs_ms = last_ahrs_ms;
-    if (primask == 0U) __enable_irq();
+    if (primask == 0U)
+        __enable_irq();
     uint32_t now = HAL_GetTick();
     status->online = imu_ms != 0U && ahrs_ms != 0U &&
                      (uint32_t)(now - imu_ms) <= WHEELTEC_TIMEOUT_MS &&
