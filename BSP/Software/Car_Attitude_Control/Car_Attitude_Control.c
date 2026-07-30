@@ -13,6 +13,13 @@
 #define CAR_CONTROL_IMU_TIMEOUT_MS       50U
 #define CAR_CONTROL_GYRO_SCALE_DPS       (2000.0f / 32768.0f)
 #define CAR_CONTROL_ANGLE_SCALE_DEG       (180.0f / 32768.0f)
+#define CAR_CONTROL_LINE_PERIOD_S         0.01f
+#define CAR_CONTROL_LINE_D_FILTER         0.35f
+#define CAR_CONTROL_CURVE_SPEED_REDUCTION 0.55f
+#define CAR_CONTROL_MIN_SPEED_SCALE       0.35f
+#define CAR_CONTROL_SEARCH_RATE_SCALE     0.50f
+#define CAR_CONTROL_SEARCH_SPEED_SCALE    0.35f
+#define CAR_CONTROL_LOST_STOP_MS          300U
 
 typedef struct
 {
@@ -29,6 +36,16 @@ static PIDController rate_pid;
 static car_ladrc_t rate_ladrc;
 static uint32_t last_sequence;
 static uint32_t last_sample_ms;
+static uint8_t last_tracking_sequence;
+static uint8_t tracking_sequence_valid;
+static float line_error_previous;
+static float line_derivative_filtered;
+static float tracking_target_rate;
+static float tracking_base_speed;
+static int8_t last_line_sign;
+static uint32_t line_lost_started_ms;
+static uint8_t line_lost_active;
+static uint8_t line_stop_latched;
 static uint8_t enabled;
 static uint8_t stopped;
 static uint8_t heading_pid_initialized;
@@ -44,7 +61,9 @@ static void clear_debug_output(void)
                                      CAR_ATTITUDE_STATUS_IMU_VALID |
                                      CAR_ATTITUDE_STATUS_TRACKING_ONLINE |
                                      CAR_ATTITUDE_STATUS_STEP_ACTIVE |
-                                     CAR_ATTITUDE_STATUS_ANGLE_STEP);
+                                     CAR_ATTITUDE_STATUS_ANGLE_STEP |
+                                     CAR_ATTITUDE_STATUS_LINE_SEARCH |
+                                     CAR_ATTITUDE_STATUS_PATTERN_INVALID);
     memset(&debug, 0, sizeof(debug));
     debug.status = status;
 }
@@ -70,6 +89,19 @@ static void reset_controllers(void)
     memset(&rate_ladrc, 0, sizeof(rate_ladrc));
     heading_pid_initialized = 0U;
     rate_pid_initialized = 0U;
+}
+
+static void reset_tracking_state(void)
+{
+    tracking_sequence_valid = 0U;
+    line_error_previous = 0.0f;
+    line_derivative_filtered = 0.0f;
+    tracking_target_rate = 0.0f;
+    tracking_base_speed = 0.0f;
+    last_line_sign = -1;
+    line_lost_started_ms = 0U;
+    line_lost_active = 0U;
+    line_stop_latched = 0U;
 }
 
 static void configure_pid(void)
@@ -136,7 +168,7 @@ void Car_Attitude_Control_Reset_Defaults(void)
     config.base_speed = 150.0f;
     config.heading_kp = 3.0f;
     config.heading_ki = 0.0f;
-    config.heading_kd = 0.0f;
+    config.heading_kd = 0.05f;
     config.rate_kp = 1.2f;
     config.rate_ki = 0.2f;
     config.rate_kd = 0.0f;
@@ -155,6 +187,7 @@ void Car_Attitude_Control_Reset_Defaults(void)
     configure_pid();
     JY61P_Set_Axis_Inverted(false, false, false);
     reset_controllers();
+    reset_tracking_state();
 }
 
 bool Car_Attitude_Control_Apply_Config(const car_attitude_control_config_t *next)
@@ -190,6 +223,7 @@ bool Car_Attitude_Control_Apply_Config(const car_attitude_control_config_t *next
                             config.invert_y != 0.0f,
                             config.invert_z != 0.0f);
     reset_controllers();
+    reset_tracking_state();
     return true;
 }
 
@@ -200,6 +234,8 @@ void Car_Attitude_Control_Init(void)
     last_sequence = 0U;
     last_sample_ms = HAL_GetTick();
     step_mode = CAR_ATTITUDE_STEP_NONE;
+    last_line_sign = -1;
+    reset_tracking_state();
     memset(&debug, 0, sizeof(debug));
     Car_Attitude_Control_Reset_Defaults();
     stop_output();
@@ -211,10 +247,86 @@ bool Car_Attitude_Control_Set_Enabled(bool state)
     enabled = state ? 1U : 0U;
     stopped = 0U;
     reset_controllers();
+    reset_tracking_state();
     debug.status = enabled ? CAR_ATTITUDE_STATUS_ENABLED : 0U;
     clear_debug_output();
     if (!enabled) stop_output();
     return true;
+}
+
+static bool update_tracking_target(uint32_t now)
+{
+    tracking_link_sample_t sample;
+    bool first_sample;
+
+    if (!Tracking_Link_Get_Sample(&sample)) return false;
+    debug.status |= CAR_ATTITUDE_STATUS_TRACKING_ONLINE;
+    first_sample = tracking_sequence_valid == 0U;
+
+    if (sample.pattern == TRACKING_PATTERN_LINE)
+    {
+        if (!first_sample && sample.sequence == last_tracking_sequence) return true;
+        last_tracking_sequence = sample.sequence;
+        tracking_sequence_valid = 1U;
+        const float error = (float)sample.offset_x1000 * 0.001f;
+        const float derivative = first_sample || line_lost_active != 0U ? 0.0f :
+                                 (error - line_error_previous) / CAR_CONTROL_LINE_PERIOD_S;
+        const float magnitude = fabsf(error);
+
+        if (line_lost_active != 0U)
+        {
+            line_derivative_filtered = 0.0f;
+            rate_pid_initialized = 0U;
+            PIDController_Init(&rate_pid);
+        }
+        line_lost_active = 0U;
+        line_stop_latched = 0U;
+        if (magnitude > 0.02f) last_line_sign = error < 0.0f ? -1 : 1;
+        line_derivative_filtered += CAR_CONTROL_LINE_D_FILTER *
+                                    (derivative - line_derivative_filtered);
+        line_error_previous = error;
+        tracking_target_rate = -(config.heading_kp * error * 30.0f +
+                                 config.heading_kd * line_derivative_filtered * 30.0f);
+        tracking_target_rate = clampf(tracking_target_rate, -config.max_rate, config.max_rate);
+        tracking_base_speed = config.base_speed * clampf(
+            1.0f - CAR_CONTROL_CURVE_SPEED_REDUCTION * magnitude -
+            0.20f * fabsf(tracking_target_rate) / config.max_rate,
+            CAR_CONTROL_MIN_SPEED_SCALE, 1.0f);
+        debug.tracking_angle = (float)sample.angle_x10 * 0.1f;
+        debug.line_offset = error;
+        debug.heading_p = -config.heading_kp * error * 30.0f;
+        debug.heading_i = 0.0f;
+        debug.heading_d = -config.heading_kd * line_derivative_filtered * 30.0f;
+        return true;
+    }
+
+    if (sample.pattern == TRACKING_PATTERN_LOST)
+    {
+        last_tracking_sequence = sample.sequence;
+        tracking_sequence_valid = 1U;
+        if (line_stop_latched != 0U) return false;
+        if (line_lost_active == 0U)
+        {
+            line_lost_active = 1U;
+            line_lost_started_ms = now;
+            line_derivative_filtered = 0.0f;
+            PIDController_Init(&rate_pid);
+            rate_pid_initialized = 0U;
+        }
+        if ((uint32_t)(now - line_lost_started_ms) <= CAR_CONTROL_LOST_STOP_MS)
+        {
+            tracking_target_rate = -(float)last_line_sign * config.max_rate * CAR_CONTROL_SEARCH_RATE_SCALE;
+            tracking_base_speed = config.base_speed * CAR_CONTROL_SEARCH_SPEED_SCALE;
+            debug.status |= CAR_ATTITUDE_STATUS_LINE_SEARCH;
+            return true;
+        }
+        line_stop_latched = 1U;
+        return false;
+    }
+
+    debug.status |= CAR_ATTITUDE_STATUS_PATTERN_INVALID;
+    line_stop_latched = 1U;
+    return false;
 }
 
 bool Car_Attitude_Control_Start_Step(car_attitude_step_mode_t mode)
@@ -272,7 +384,6 @@ void Car_Attitude_Control_Process(void)
 {
     const jy61p_status_t *imu_status = JY61P_Get_Status();
     uint32_t now = HAL_GetTick();
-    int16_t tracking_angle_x10;
     bool new_sample = imu_status->sample_valid && imu_status->sequence != last_sequence;
 
     debug.status = 0U;
@@ -312,20 +423,18 @@ void Car_Attitude_Control_Process(void)
     {
         return;
     }
-    if (step_mode == CAR_ATTITUDE_STEP_NONE && !Tracking_Link_Get_Angle(&tracking_angle_x10))
+    clear_debug_output();
+    if (step_mode == CAR_ATTITUDE_STEP_NONE && !update_tracking_target(now))
     {
-        clear_debug_output();
         stop_output();
         reset_controllers();
         return;
     }
-
-    clear_debug_output();
     const jy61p_sample_t *imu = JY61P_Get_Sample();
     const float measured_heading = (float)imu->angle.z * CAR_CONTROL_ANGLE_SCALE_DEG;
     const float measured_rate = (float)imu->angular_velocity.z * CAR_CONTROL_GYRO_SCALE_DPS;
     float target_heading = 0.0f;
-    float heading_error = step_mode == CAR_ATTITUDE_STEP_NONE ? (float)tracking_angle_x10 * 0.1f : 0.0f;
+    float heading_error = 0.0f;
 
     if (step_mode != CAR_ATTITUDE_STEP_NONE &&
         (uint32_t)(now - step_phase_started_ms) >= (uint32_t)config.step_hold_ms)
@@ -351,7 +460,7 @@ void Car_Attitude_Control_Process(void)
         heading_error = wrap_angle(relative_heading - target_heading);
         debug.tracking_angle = relative_heading;
     }
-    else
+    else if (step_mode != CAR_ATTITUDE_STEP_NONE)
     {
         debug.tracking_angle = heading_error;
     }
@@ -362,11 +471,18 @@ void Car_Attitude_Control_Process(void)
         heading_pid.prevMeasurement = heading_error;
         heading_pid_initialized = 1U;
     }
-    float target_rate = step_mode == CAR_ATTITUDE_STEP_RATE ?
-                        (step_return_phase ? 0.0f : config.step_rate_amplitude) :
-                        PIDController_Update(&heading_pid, 0.0f, heading_error);
-    if (step_mode != CAR_ATTITUDE_STEP_RATE)
+    float target_rate;
+    if (step_mode == CAR_ATTITUDE_STEP_NONE)
     {
+        target_rate = tracking_target_rate;
+    }
+    else if (step_mode == CAR_ATTITUDE_STEP_RATE)
+    {
+        target_rate = step_return_phase ? 0.0f : config.step_rate_amplitude;
+    }
+    else
+    {
+        target_rate = PIDController_Update(&heading_pid, 0.0f, heading_error);
         debug.heading_p = heading_pid.Kp * -heading_error;
         debug.heading_i = heading_pid.integrator;
         debug.heading_d = heading_pid.differentiator;
@@ -404,7 +520,8 @@ void Car_Attitude_Control_Process(void)
     }
     differential = clampf(differential, -config.max_differential, config.max_differential);
 
-    const float base_speed = step_mode == CAR_ATTITUDE_STEP_NONE ? config.base_speed : 0.0f;
+    const float base_speed = step_mode == CAR_ATTITUDE_STEP_NONE ? tracking_base_speed : 0.0f;
+    debug.commanded_base_speed = base_speed;
     const float left_unclamped = base_speed - differential;
     const float right_unclamped = base_speed + differential;
     const int16_t left = (int16_t)clampf(left_unclamped, -1000.0f, 1000.0f);

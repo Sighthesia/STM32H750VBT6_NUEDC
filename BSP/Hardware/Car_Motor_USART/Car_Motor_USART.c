@@ -40,6 +40,14 @@ static volatile uint8_t car_motor_tx_tail;
 static volatile uint8_t car_motor_tx_count;
 static volatile uint8_t car_motor_tx_active;
 static uint16_t car_motor_tx_sequence[CAR_MOTOR_TX_QUEUE_DEPTH];
+static uint8_t car_motor_tx_active_is_speed;
+static char car_motor_tx_active_speed[CAR_MOTOR_FRAME_MAX_LENGTH];
+static uint8_t car_motor_tx_active_speed_length;
+static uint16_t car_motor_tx_active_speed_sequence;
+static char car_motor_speed_pending[CAR_MOTOR_FRAME_MAX_LENGTH];
+static uint8_t car_motor_speed_pending_length;
+static uint16_t car_motor_speed_pending_sequence;
+static uint8_t car_motor_speed_pending_valid;
 static uint16_t car_motor_next_sequence;
 static uint16_t car_motor_last_sequence;
 static uint32_t car_motor_last_voltage_request_ms;
@@ -75,6 +83,7 @@ static void Car_Motor_Start_Next_Transmit(void)
 {
     while (!car_motor_tx_active && car_motor_tx_count != 0U)
     {
+        car_motor_tx_active_is_speed = 0U;
         car_motor_tx_active = 1U;
         if (HAL_UART_Transmit_IT(&huart3,
                                  (uint8_t *)car_motor_tx_queue[car_motor_tx_head],
@@ -88,6 +97,48 @@ static void Car_Motor_Start_Next_Transmit(void)
         car_motor_tx_count--;
         car_motor_tx_active = 0U;
     }
+
+    if (!car_motor_tx_active && car_motor_speed_pending_valid)
+    {
+        /* 闭环速度命令只保留最新值，避免 UART 发送滞后导致历史差速继续执行。 */
+        memcpy(car_motor_tx_active_speed, car_motor_speed_pending,
+               car_motor_speed_pending_length);
+        car_motor_tx_active_speed_length = car_motor_speed_pending_length;
+        car_motor_tx_active_speed_sequence = car_motor_speed_pending_sequence;
+        car_motor_speed_pending_valid = 0U;
+        car_motor_tx_active_is_speed = 1U;
+        car_motor_tx_active = 1U;
+        if (HAL_UART_Transmit_IT(&huart3,
+                                 (uint8_t *)car_motor_tx_active_speed,
+                                 car_motor_tx_active_speed_length) == HAL_OK)
+        {
+            return;
+        }
+
+        Car_Motor_Set_Command_Status(car_motor_tx_active_speed_sequence, CAR_MOTOR_COMMAND_FAILED);
+        car_motor_tx_active = 0U;
+    }
+}
+
+static bool Car_Motor_Queue_Latest_Speed(const char *command)
+{
+    size_t length = strlen(command);
+    if (length == 0U || length >= CAR_MOTOR_FRAME_MAX_LENGTH)
+    {
+        Car_Motor_Record_Command(command, CAR_MOTOR_COMMAND_FAILED, 0U);
+        return false;
+    }
+
+    uint32_t primask = __get_PRIMASK();
+    __disable_irq();
+    memcpy(car_motor_speed_pending, command, length);
+    car_motor_speed_pending_length = (uint8_t)length;
+    car_motor_speed_pending_sequence = ++car_motor_next_sequence;
+    car_motor_speed_pending_valid = 1U;
+    Car_Motor_Record_Command(command, CAR_MOTOR_COMMAND_QUEUED, car_motor_speed_pending_sequence);
+    Car_Motor_Start_Next_Transmit();
+    __set_PRIMASK(primask);
+    return true;
 }
 
 static bool Car_Motor_Queue_Command(const char *command, bool record_command)
@@ -330,6 +381,12 @@ void Car_Motor_Init(void)
     car_motor_tx_tail = 0U;
     car_motor_tx_count = 0U;
     car_motor_tx_active = 0U;
+    car_motor_tx_active_is_speed = 0U;
+    car_motor_tx_active_speed_length = 0U;
+    car_motor_tx_active_speed_sequence = 0U;
+    car_motor_speed_pending_length = 0U;
+    car_motor_speed_pending_sequence = 0U;
+    car_motor_speed_pending_valid = 0U;
     car_motor_next_sequence = 0U;
     car_motor_last_sequence = 0U;
     car_motor_last_voltage_request_ms = 0U;
@@ -439,9 +496,16 @@ void Car_Motor_UART_TxCplt_Callback(void)
         return;
     }
 
-    Car_Motor_Set_Command_Status(car_motor_tx_sequence[car_motor_tx_head], CAR_MOTOR_COMMAND_TRANSMITTED);
-    car_motor_tx_head = (uint8_t)((car_motor_tx_head + 1U) % CAR_MOTOR_TX_QUEUE_DEPTH);
-    car_motor_tx_count--;
+    if (car_motor_tx_active_is_speed)
+    {
+        Car_Motor_Set_Command_Status(car_motor_tx_active_speed_sequence, CAR_MOTOR_COMMAND_TRANSMITTED);
+    }
+    else
+    {
+        Car_Motor_Set_Command_Status(car_motor_tx_sequence[car_motor_tx_head], CAR_MOTOR_COMMAND_TRANSMITTED);
+        car_motor_tx_head = (uint8_t)((car_motor_tx_head + 1U) % CAR_MOTOR_TX_QUEUE_DEPTH);
+        car_motor_tx_count--;
+    }
     car_motor_tx_active = 0U;
     Car_Motor_Start_Next_Transmit();
 }
@@ -607,13 +671,17 @@ bool Car_Motor_Set_Speed(int16_t m1, int16_t m2, int16_t m3, int16_t m4)
     }
     if (m1 == 0 && m2 == 0 && m3 == 0 && m4 == 0)
     {
-        bool queued = Car_Motor_Start_Voltage_Measurement("$spd:0,0,0,0#");
+        /* 零速覆盖尚未发送的闭环差速，使取消控制立即生效。 */
+        bool queued = Car_Motor_Queue_Latest_Speed("$spd:0,0,0,0#");
         if (queued) car_motor_output_stopped = 1U;
         return queued;
     }
     if (car_motor_reversed[0]) m1 = (int16_t)-m1;
     if (car_motor_reversed[1]) m2 = (int16_t)-m2;
-    bool queued = Car_Motor_Format_Command("$spd:%d,%d,%d,%d#", m1, m2, m3, m4);
+    char command[CAR_MOTOR_FRAME_MAX_LENGTH];
+    int length = snprintf(command, sizeof(command), "$spd:%d,%d,%d,%d#", m1, m2, m3, m4);
+    bool queued = length > 0 && (size_t)length < sizeof(command) &&
+                  Car_Motor_Queue_Latest_Speed(command);
     if (queued) car_motor_output_stopped = 0U;
     return queued;
 }

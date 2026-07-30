@@ -51,13 +51,17 @@ enum
     CAR_ATTITUDE_STATUS_LEFT_SPEED_LIMITED = 1U << 5,
     CAR_ATTITUDE_STATUS_RIGHT_SPEED_LIMITED = 1U << 6,
     CAR_ATTITUDE_STATUS_STEP_ACTIVE = 1U << 7,
-    CAR_ATTITUDE_STATUS_ANGLE_STEP = 1U << 8
+    CAR_ATTITUDE_STATUS_ANGLE_STEP = 1U << 8,
+    CAR_ATTITUDE_STATUS_LINE_SEARCH = 1U << 9,
+    CAR_ATTITUDE_STATUS_PATTERN_INVALID = 1U << 10
 };
 
 typedef struct
 {
     float target_heading;
     float tracking_angle;
+    float line_offset;
+    float commanded_base_speed;
     float target_rate;
     float measured_rate;
     float heading_p;
