@@ -41,6 +41,7 @@
 #include "App_Role.h"
 #include "Board_Link.h"
 #include "Gray_Sensor.h"
+#include "Car_Lap_Task.h"
 
 /* USER CODE END Includes */
 
@@ -141,6 +142,7 @@ static void App_Peripheral_Init(void)
 #if APP_ENABLE_CAR_MOTOR
     Car_Motor_Init();
     Car_Attitude_Control_Init();
+    Car_Lap_Task_Init();
 #endif
     Gray_Sensor_Init();
     JY61P_Init();
@@ -171,6 +173,7 @@ static void App_Process(void)
   {
 #if APP_ENABLE_CAR_MOTOR
     Car_Motor_Process();
+    Car_Lap_Task_Process();
     Car_Attitude_Control_Process();
 #endif
     JY61P_Process();
@@ -185,6 +188,7 @@ static void App_Process(void)
 
 void HAL_SYSTICK_Callback(void)
 {
+  Gray_Sensor_Process();
 #if !WEGUI_PANEL_SELF_TEST
   wegui_1ms_stick();
 #endif

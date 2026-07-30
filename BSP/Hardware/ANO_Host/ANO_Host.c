@@ -2,6 +2,7 @@
 
 #include "Car_Motor_USART.h"
 #include "Car_Attitude_Control.h"
+#include "Car_Lap_Task.h"
 #include "JY61P.h"
 #include "Stepper_PID.h"
 #include "Tracking_Link.h"
@@ -34,6 +35,8 @@
 #define ANO_ID_TRACKING_DIAGNOSTIC 0xF4U
 #define ANO_ID_DIAGNOSTIC 0xF5U
 #define ANO_ID_STEPPER_FF_DIAGNOSTIC 0xF6U
+#define ANO_ID_ARM_DEBUG_DIAGNOSTIC 0xF7U
+#define ANO_ID_CAR_LAP_STATUS 0xF8U
 #define ANO_RX_QUEUE_SIZE 128U
 #define ANO_DATA_MAX 96U
 #define ANO_TX_QUEUE_DEPTH 8U
@@ -42,7 +45,9 @@
 #define ANO_BAUD_SWITCH_DELAY_MS 50U
 #define ANO_STORAGE_ADDRESS 0U
 #define ANO_STORAGE_MAGIC 0x414E4F57UL
-#define ANO_STORAGE_VERSION 6U
+#define ANO_STORAGE_VERSION 7U
+#define ARM_DEBUG_POSITION_PERIOD_MS 20U
+#define ARM_DEBUG_POSITION_STALE_MS 100U
 
 enum {
     CAR_KP,
@@ -94,6 +99,16 @@ enum {
     STEPPER_FF_DEADZONE,
     STEPPER_FF_OUTPUT_LIMIT,
     BOARD_ROLE,
+    ARM_LIMIT_MIN,
+    ARM_LIMIT_MAX,
+    ARM_DEBUG_SPEED,
+    ARM_TARGET_POSITION,
+    ARM_DEBUG_DIRECTION,
+    ARM_DEBUG_ACCEL,
+    ARM_DRIVER_MICROSTEP,
+    ARM_DEBUG_TIMEOUT_MS,
+    ARM_HOME_MODE,
+    CAR_LAP_STOP_DELAY_MS,
     ANO_PARAM_COUNT
 };
 
@@ -114,7 +129,20 @@ static const ano_command_desc_t commands[] = {
     {{0x03U, ANO_COMMAND_ATTITUDE_DISABLE, 0x00U}, "停止陀螺仪控制", "停止双环控制并将M1和M2速度置零"},
     {{0x03U, ANO_COMMAND_RATE_STEP_TEST, 0x00U}, "角速度阶跃测试", "按配置幅度执行角速度正阶跃和回零响应"},
     {{0x03U, ANO_COMMAND_ANGLE_STEP_TEST, 0x00U}, "航向角阶跃测试", "按配置幅度执行相对航向角正阶跃和回零响应"},
-    {{0x03U, ANO_COMMAND_STEPPER_FF_CALIBRATE, 0x00U}, "前馈零偏校准", "保持小车静止并重新采集一秒IMU加速度零偏"}
+    {{0x03U, ANO_COMMAND_STEPPER_FF_CALIBRATE, 0x00U}, "前馈零偏校准", "保持小车静止并重新采集一秒IMU加速度零偏"},
+    {{0x03U, ANO_COMMAND_CAR_LAP_START, 0x00U}, "启动一圈停车", "启用循迹并计时，返回A点十字后按补偿停车"},
+    {{0x03U, ANO_COMMAND_CAR_LAP_STOP, 0x00U}, "停止一圈任务", "立即停止循迹并冻结当前圈时"},
+    {{0x03U, ANO_COMMAND_CAR_LAP_CLEAR, 0x00U}, "清除一圈记录", "清除已完成或已停止的一圈状态和圈时"},
+    {{0x03U, ANO_COMMAND_ARM_DEBUG_ENTER, 0x00U}, "进入臂杆调试", "停止闭环输出并开放受限的臂杆调试命令"},
+    {{0x03U, ANO_COMMAND_ARM_DEBUG_EXIT, 0x00U}, "退出臂杆调试", "立即停止电机并退出臂杆调试模式"},
+    {{0x03U, ANO_COMMAND_ARM_HOME, 0x00U}, "臂杆电机回零", "按回零模式触发驱动器回零，完成后需确认零点"},
+    {{0x03U, ANO_COMMAND_ARM_ZERO_CONFIRM, 0x00U}, "确认臂杆零点", "当前位置确认在机械零点后清零，驱动应答成功后开放运动"},
+    {{0x03U, ANO_COMMAND_ARM_RUN_SPEED, 0x00U}, "臂杆速度转动", "按方向和速度转动，达到限位或超时自动停止"},
+    {{0x03U, ANO_COMMAND_ARM_MOVE_ABSOLUTE, 0x00U}, "臂杆绝对定位", "移动到目标绝对角度，越过软件限位时拒绝"},
+    {{0x03U, ANO_COMMAND_ARM_STOP, 0x00U}, "臂杆电机停止", "立即停止臂杆步进电机，重复执行安全"},
+    {{0x03U, ANO_COMMAND_ARM_ENABLE, 0x00U}, "臂杆电机使能", "使能臂杆步进电机驱动"},
+    {{0x03U, ANO_COMMAND_ARM_DISABLE, 0x00U}, "臂杆电机失能", "先停止再关闭臂杆步进电机驱动"},
+    {{0x03U, ANO_COMMAND_ARM_APPLY_DRIVER, 0x00U}, "应用驱动配置", "将当前细分配置写入步进电机驱动器"}
 };
 
 static uint8_t rx_byte;
@@ -147,6 +175,54 @@ static uint32_t baud_switch_at_ms;
 static uint8_t storage_ready;
 static uint8_t storage_operation;
 static float board_role;
+static float arm_limit_min;
+static float arm_limit_max;
+static float arm_debug_speed = 10.0f;
+static float arm_target_position;
+static float arm_debug_direction;
+static float arm_debug_accel;
+static float arm_driver_microstep = 16.0f;
+static float arm_debug_timeout_ms = 500.0f;
+static float arm_home_mode;
+static float car_lap_stop_delay_ms;
+static uint8_t arm_debug_active;
+static uint8_t arm_zero_valid;
+static uint8_t arm_motion_active;
+static uint8_t arm_zero_confirm_pending;
+static uint8_t arm_home_active;
+static uint8_t arm_limit_configured;
+static uint8_t arm_motion_positive;
+static uint8_t arm_speed_motion;
+static uint32_t arm_motion_deadline_ms;
+static uint32_t arm_last_position_request_ms;
+static uint32_t arm_zero_confirm_issued_ms;
+
+typedef struct
+{
+    float limit_min;
+    float limit_max;
+    float speed;
+    float target_position;
+    float direction;
+    float acceleration;
+    float microstepping;
+    float timeout_ms;
+    float home_mode;
+} ano_arm_debug_config_t;
+
+typedef struct
+{
+    uint32_t magic;
+    uint8_t version;
+    uint32_t baud_rate;
+    uint8_t reserved[3];
+    float values[HOST_BAUD];
+    float directions[2];
+    car_attitude_control_config_t attitude;
+    stepper_feedforward_config_t feedforward;
+    ano_arm_debug_config_t arm_debug;
+    uint32_t checksum;
+} ano_storage_record_t;
 
 typedef struct
 {
@@ -159,7 +235,7 @@ typedef struct
     car_attitude_control_config_t attitude;
     stepper_feedforward_config_t feedforward;
     uint32_t checksum;
-} ano_storage_record_t;
+} ano_storage_record_v6_t;
 
 typedef struct
 {
@@ -275,6 +351,25 @@ static void reset_local_defaults(void)
     (void)Car_Motor_Set_Direction(0U, false);
     (void)Car_Motor_Set_Direction(1U, true);
     car_debug_active = 0U;
+    arm_limit_min = 0.0f;
+    arm_limit_max = 0.0f;
+    arm_debug_speed = 10.0f;
+    arm_target_position = 0.0f;
+    arm_debug_direction = 0.0f;
+    arm_debug_accel = 0.0f;
+    arm_driver_microstep = 16.0f;
+    arm_debug_timeout_ms = 500.0f;
+    arm_home_mode = 0.0f;
+    car_lap_stop_delay_ms = 0.0f;
+    (void)Car_Lap_Task_Set_Stop_Delay(0U);
+    arm_debug_active = 0U;
+    arm_zero_valid = 0U;
+    arm_motion_active = 0U;
+    arm_zero_confirm_pending = 0U;
+    arm_home_active = 0U;
+    arm_limit_configured = 0U;
+    arm_motion_positive = 0U;
+    arm_speed_motion = 0U;
     Car_Attitude_Control_Reset_Defaults();
     Stepper_Feedforward_Reset_Defaults();
 
@@ -341,8 +436,17 @@ static uint32_t storage_record_v5_checksum(const ano_storage_record_v5_t *record
     return checksum;
 }
 
+static uint32_t storage_record_v6_checksum(const ano_storage_record_v6_t *record)
+{
+    const uint8_t *data = (const uint8_t *)record;
+    uint32_t checksum = 0x6D2B79F5U;
+    for (uint16_t i = 0U; i < sizeof(*record) - sizeof(record->checksum); i++) checksum = (checksum << 5U) ^ (checksum >> 27U) ^ data[i];
+    return checksum;
+}
+
 static float *parameter(uint16_t id);
 static bool write_car_parameter(uint16_t parameter_id, float value);
+static bool stop_arm_debug(bool exit_debug);
 
 static bool save_storage(uint32_t baud_rate)
 {
@@ -366,6 +470,15 @@ static bool save_storage(uint32_t baud_rate)
     record.directions[1] = car_m2_direction;
     record.attitude = *Car_Attitude_Control_Get_Config();
     record.feedforward = *Stepper_Feedforward_Get_Config();
+    record.arm_debug.limit_min = arm_limit_min;
+    record.arm_debug.limit_max = arm_limit_max;
+    record.arm_debug.speed = arm_debug_speed;
+    record.arm_debug.target_position = arm_target_position;
+    record.arm_debug.direction = arm_debug_direction;
+    record.arm_debug.acceleration = arm_debug_accel;
+    record.arm_debug.microstepping = arm_driver_microstep;
+    record.arm_debug.timeout_ms = arm_debug_timeout_ms;
+    record.arm_debug.home_mode = arm_home_mode;
     record.checksum = storage_record_checksum(&record);
     if (!W25Qxx_EraseSector(ANO_STORAGE_ADDRESS) ||
         !W25Qxx_Write(ANO_STORAGE_ADDRESS, (const uint8_t *)&record, sizeof(record)) ||
@@ -398,6 +511,38 @@ static void load_storage(void)
         }
         if (record.directions[0] == 0.0f || record.directions[0] == 1.0f) car_m1_direction = record.directions[0];
         if (record.directions[1] == 0.0f || record.directions[1] == 1.0f) car_m2_direction = record.directions[1];
+        if (isfinite(record.arm_debug.limit_min) && isfinite(record.arm_debug.limit_max) &&
+            record.arm_debug.limit_min < record.arm_debug.limit_max)
+        {
+            arm_limit_min = record.arm_debug.limit_min;
+            arm_limit_max = record.arm_debug.limit_max;
+            arm_limit_configured = 0x03U;
+        }
+        if (isfinite(record.arm_debug.speed) && record.arm_debug.speed > 0.0f && record.arm_debug.speed <= 1000.0f) arm_debug_speed = record.arm_debug.speed;
+        if (isfinite(record.arm_debug.target_position)) arm_target_position = record.arm_debug.target_position;
+        if (record.arm_debug.direction == 0.0f || record.arm_debug.direction == 1.0f) arm_debug_direction = record.arm_debug.direction;
+        if (isfinite(record.arm_debug.acceleration) && record.arm_debug.acceleration >= 0.0f && record.arm_debug.acceleration <= 255.0f && record.arm_debug.acceleration == floorf(record.arm_debug.acceleration)) arm_debug_accel = record.arm_debug.acceleration;
+        if (isfinite(record.arm_debug.microstepping) && record.arm_debug.microstepping >= 1.0f && record.arm_debug.microstepping <= 255.0f && record.arm_debug.microstepping == floorf(record.arm_debug.microstepping)) arm_driver_microstep = record.arm_debug.microstepping;
+        if (isfinite(record.arm_debug.timeout_ms) && record.arm_debug.timeout_ms >= 100.0f && record.arm_debug.timeout_ms <= 5000.0f && record.arm_debug.timeout_ms == floorf(record.arm_debug.timeout_ms)) arm_debug_timeout_ms = record.arm_debug.timeout_ms;
+        if (isfinite(record.arm_debug.home_mode) && record.arm_debug.home_mode >= 0.0f && record.arm_debug.home_mode <= 4.0f && record.arm_debug.home_mode == floorf(record.arm_debug.home_mode)) arm_home_mode = record.arm_debug.home_mode;
+    }
+    else if (record.version == 6U)
+    {
+        ano_storage_record_v6_t legacy = {0};
+        if (!W25Qxx_Read(ANO_STORAGE_ADDRESS, (uint8_t *)&legacy, sizeof(legacy)) ||
+            legacy.checksum != storage_record_v6_checksum(&legacy))
+        {
+            return;
+        }
+        for (uint16_t id = 0U; id < HOST_BAUD; id++)
+        {
+            float *target = parameter(id);
+            if (target != NULL && isfinite(legacy.values[id])) *target = legacy.values[id];
+        }
+        if (legacy.directions[0] == 0.0f || legacy.directions[0] == 1.0f) car_m1_direction = legacy.directions[0];
+        if (legacy.directions[1] == 0.0f || legacy.directions[1] == 1.0f) car_m2_direction = legacy.directions[1];
+        (void)Car_Attitude_Control_Apply_Config(&legacy.attitude);
+        (void)Stepper_Feedforward_Apply_Config(&legacy.feedforward);
     }
     else if (record.version == 5U)
     {
@@ -565,7 +710,10 @@ static float *parameter(uint16_t id)
         NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
         NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
         NULL, NULL, NULL, NULL,
-        NULL, NULL, NULL, NULL, NULL, NULL, &board_role
+        NULL, NULL, NULL, NULL, NULL, NULL, &board_role,
+        &arm_limit_min, &arm_limit_max, &arm_debug_speed, &arm_target_position,
+        &arm_debug_direction, &arm_debug_accel, &arm_driver_microstep,
+        &arm_debug_timeout_ms, &arm_home_mode, &car_lap_stop_delay_ms
     };
     if (id >= ATTITUDE_MODE && id <= STEP_ANGLE_FEEDBACK_INVERTED)
     {
@@ -609,6 +757,53 @@ static bool write_feedforward_parameter(uint16_t parameter_id, float value)
     default: return false;
     }
     return Stepper_Feedforward_Apply_Config(&next);
+}
+
+static bool write_arm_parameter(uint16_t parameter_id, float value)
+{
+    float *target = parameter(parameter_id);
+
+    if (target == NULL || !isfinite(value) || arm_motion_active) return false;
+    switch (parameter_id)
+    {
+    case ARM_LIMIT_MIN:
+        if (value < -3600.0f || value > 3600.0f ||
+            ((arm_limit_configured & 0x02U) != 0U && value >= arm_limit_max)) return false;
+        arm_limit_configured |= 0x01U;
+        arm_zero_valid = 0U;
+        break;
+    case ARM_LIMIT_MAX:
+        if (value < -3600.0f || value > 3600.0f ||
+            ((arm_limit_configured & 0x01U) != 0U && value <= arm_limit_min)) return false;
+        arm_limit_configured |= 0x02U;
+        arm_zero_valid = 0U;
+        break;
+    case ARM_DEBUG_SPEED:
+        if (value <= 0.0f || value > 1000.0f) return false;
+        break;
+    case ARM_TARGET_POSITION:
+        if (value < -3600.0f || value > 3600.0f) return false;
+        break;
+    case ARM_DEBUG_DIRECTION:
+        if (value != 0.0f && value != 1.0f) return false;
+        break;
+    case ARM_DEBUG_ACCEL:
+        if (value < 0.0f || value > 255.0f || value != floorf(value)) return false;
+        break;
+    case ARM_DRIVER_MICROSTEP:
+        if (value < 1.0f || value > 255.0f || value != floorf(value)) return false;
+        break;
+    case ARM_DEBUG_TIMEOUT_MS:
+        if (value < 100.0f || value > 5000.0f || value != floorf(value)) return false;
+        break;
+    case ARM_HOME_MODE:
+        if (value < 0.0f || value > 4.0f || value != floorf(value)) return false;
+        break;
+    default:
+        return false;
+    }
+    *target = value;
+    return true;
 }
 
 static bool write_attitude_parameter(uint16_t parameter_id, float value)
@@ -736,7 +931,9 @@ static void send_param_info(uint16_t id)
         "双环控制模式", "基础轮速", "航向Kp", "航向Ki", "航向Kd", "角速度Kp", "角速度Ki", "角速度Kd",
         "LADRC观测带宽", "LADRC控制带宽", "LADRC对象增益", "最大角速度", "最大差速", "IMU X轴倒置", "IMU Y轴倒置", "IMU Z轴倒置",
         "角速度阶跃幅度", "航向角阶跃幅度", "阶跃保持时间", "航向角反馈倒置",
-        "滚球前馈使能", "前后X轴增益", "左右Y轴增益", "前馈滤波常数", "前馈加速度死区", "前馈转速限幅", "控制板角色"
+        "滚球前馈使能", "前后X轴增益", "左右Y轴增益", "前馈滤波常数", "前馈加速度死区", "前馈转速限幅", "控制板角色",
+        "臂杆最小角度", "臂杆最大角度", "臂杆调试速度", "臂杆目标位置", "臂杆调试方向",
+        "臂杆加速度", "驱动细分", "调试超时时间", "驱动回零模式", "一圈停车补偿"
     };
     static const char *const infos[ANO_PARAM_COUNT] = {
         "四驱速度环比例系数", "四驱速度环积分系数", "四驱速度环微分系数",
@@ -750,7 +947,11 @@ static void send_param_info(uint16_t id)
         "被控对象输入增益，必须大于零", "航向外环目标角速度限幅", "左右轮速度差限幅", "0正常，1倒置", "0正常，1倒置", "0正常，1倒置",
         "角速度阶跃幅度，单位度每秒", "相对Z轴航向阶跃幅度，单位度", "正阶跃和回零各自保持毫秒数", "0原方向，1倒置，仅作用于航向角阶跃",
         "0关闭，1启用；启用后先静止校准", "JY61P X轴到Pitch转速增益，可为负", "JY61P Y轴到Yaw转速增益，可为负",
-        "一阶低通时间常数，单位秒", "滤波加速度死区，单位g", "单轴前馈最大转速，单位RPM", "0小车控制板，1臂杆电机板；保存后重启生效"
+        "一阶低通时间常数，单位秒", "滤波加速度死区，单位g", "单轴前馈最大转速，单位RPM", "0小车控制板，1臂杆电机板；保存后重启生效",
+        "机械零点负向软件限位，单位度；修改后须重新确认零点", "机械零点正向软件限位，单位度；修改后须重新确认零点",
+        "速度和定位命令使用的转速，单位RPM", "绝对定位目标角度，必须位于上下限内", "0顺时针，1逆时针",
+        "驱动器加速度档位，0至255", "驱动器细分值，1至255，应用配置后生效", "运动看门狗超时，100至5000毫秒", "驱动器回零模式，0至4",
+        "检测到A点十字后继续行驶时间，单位毫秒，范围0至2000"
     };
     uint8_t d[ANO_DATA_MAX] = {0}; uint16_t i = 0U;
     if (id >= ANO_PARAM_COUNT) return;
@@ -804,7 +1005,11 @@ static bool restore_defaults(void)
     storage_operation = 3U;
     if (App_Role_Get() == APP_ROLE_CAR)
     {
-        (void)Car_Attitude_Control_Set_Enabled(false);
+        (void)Car_Lap_Task_Stop();
+    }
+    else
+    {
+        (void)stop_arm_debug(true);
     }
     if (!storage_ready || !W25Qxx_EraseSector(ANO_STORAGE_ADDRESS) ||
         (App_Role_Get() == APP_ROLE_CAR && !Car_Motor_Restore_Defaults()))
@@ -830,7 +1035,7 @@ static bool stop_car_debug(void)
 
 static bool enter_car_debug(void)
 {
-    (void)Car_Attitude_Control_Set_Enabled(false);
+    (void)Car_Lap_Task_Stop();
     if (!Car_Motor_Set_PWM(0, 0, 0, 0))
     {
         return false;
@@ -862,9 +1067,207 @@ static bool start_car_debug(void)
 
 static bool start_attitude_step(car_attitude_step_mode_t mode)
 {
+    (void)Car_Lap_Task_Stop();
     if (!Car_Attitude_Control_Start_Step(mode)) return false;
     car_debug_active = 0U;
     return true;
+}
+
+static bool arm_limits_valid(void)
+{
+    return arm_limit_configured == 0x03U && isfinite(arm_limit_min) &&
+           isfinite(arm_limit_max) && arm_limit_min < arm_limit_max;
+}
+
+static bool stop_arm_debug(bool exit_debug)
+{
+    if (zdt_stepper_motors[0] == NULL) return false;
+    ZDT_Stepper_stop(zdt_stepper_motors[0], ZDT_STEPPER_SYNC_DISABLE);
+    arm_motion_active = 0U;
+    arm_speed_motion = 0U;
+    arm_home_active = 0U;
+    if (exit_debug) arm_debug_active = 0U;
+    return true;
+}
+
+static bool enter_arm_debug(void)
+{
+    if (zdt_stepper_motors[0] == NULL) return false;
+    menu_stepper_tracking_enable = 0;
+    (void)stop_arm_debug(false);
+    arm_debug_active = 1U;
+    ZDT_Stepper_Read_current_position(zdt_stepper_motors[0]);
+    arm_last_position_request_ms = HAL_GetTick();
+    return true;
+}
+
+static bool start_arm_home(void)
+{
+    if (!arm_debug_active || arm_motion_active || arm_home_active || !arm_limits_valid() || zdt_stepper_motors[0] == NULL) return false;
+    arm_zero_valid = 0U;
+    arm_zero_confirm_pending = 0U;
+    arm_home_active = 1U;
+    ZDT_Stepper_trigger_zero_return(zdt_stepper_motors[0], (uint8_t)arm_home_mode, ZDT_STEPPER_SYNC_DISABLE);
+    arm_zero_confirm_issued_ms = HAL_GetTick();
+    return true;
+}
+
+static bool confirm_arm_zero(void)
+{
+    ZDTStepperMotor *motor = zdt_stepper_motors[0];
+
+    if (!arm_debug_active || !arm_home_active || !arm_limits_valid() || motor == NULL ||
+        motor->data.last_command != 0x9AU || motor->data.last_command_status != 0x02U ||
+        (int32_t)(motor->data.last_command_ms - arm_zero_confirm_issued_ms) < 0)
+    {
+        return false;
+    }
+    ZDT_Stepper_clear_current_position(motor);
+    arm_zero_confirm_pending = 1U;
+    arm_zero_confirm_issued_ms = HAL_GetTick();
+    return true;
+}
+
+static bool start_arm_speed(void)
+{
+    ZDTStepperMotor *motor = zdt_stepper_motors[0];
+    uint32_t now = HAL_GetTick();
+    bool toward_positive = arm_debug_direction != 0.0f;
+    float stopping_margin = arm_debug_speed * 0.006f * (float)(ARM_DEBUG_POSITION_PERIOD_MS * 2U);
+
+    if (!arm_debug_active || !arm_zero_valid || !arm_limits_valid() || motor == NULL ||
+        motor->data.current_position_ms == 0U ||
+        now - motor->data.current_position_ms > ARM_DEBUG_POSITION_STALE_MS ||
+        (toward_positive ? motor->data.current_position + stopping_margin >= arm_limit_max :
+                           motor->data.current_position - stopping_margin <= arm_limit_min))
+    {
+        return false;
+    }
+    ZDT_Stepper_Set_Speed(motor, toward_positive ? ZDT_STEPPER_CCW : ZDT_STEPPER_CW,
+                          arm_debug_speed, (uint8_t)arm_debug_accel, ZDT_STEPPER_SYNC_DISABLE);
+    arm_motion_active = 1U;
+    arm_motion_positive = toward_positive ? 1U : 0U;
+    arm_speed_motion = 1U;
+    arm_motion_deadline_ms = now + (uint32_t)arm_debug_timeout_ms;
+    return true;
+}
+
+static bool start_arm_absolute(void)
+{
+    ZDTStepperMotor *motor = zdt_stepper_motors[0];
+    uint32_t now = HAL_GetTick();
+    uint8_t direction;
+
+    if (!arm_debug_active || !arm_zero_valid || !arm_limits_valid() || motor == NULL ||
+        motor->data.current_position_ms == 0U || now - motor->data.current_position_ms > ARM_DEBUG_POSITION_STALE_MS ||
+        arm_target_position < arm_limit_min || arm_target_position > arm_limit_max)
+    {
+        return false;
+    }
+    arm_motion_positive = arm_target_position >= motor->data.current_position ? 1U : 0U;
+    direction = arm_target_position >= 0.0f ? ZDT_STEPPER_CCW : ZDT_STEPPER_CW;
+    ZDT_Stepper_Set_position_accel(motor, direction, arm_debug_speed, (uint8_t)arm_debug_accel,
+                                   fabsf(arm_target_position), ZDT_STEPPER_ABS_POS_MODE,
+                                   ZDT_STEPPER_SYNC_DISABLE);
+    arm_motion_active = 1U;
+    arm_speed_motion = 0U;
+    arm_motion_deadline_ms = now + (uint32_t)arm_debug_timeout_ms;
+    return true;
+}
+
+static bool apply_arm_driver_config(void)
+{
+    if (!arm_debug_active || arm_motion_active || zdt_stepper_motors[0] == NULL) return false;
+    ZDT_Stepper_set_microstepping(zdt_stepper_motors[0], ZDT_STEPPER_STORE,
+                                  (uint8_t)arm_driver_microstep);
+    arm_zero_valid = 0U;
+    return true;
+}
+
+static bool handle_arm_command(uint8_t command_id)
+{
+    switch (command_id)
+    {
+    case ANO_COMMAND_STEPPER_FF_CALIBRATE: Stepper_Feedforward_Reset_Bias(); return true;
+    case ANO_COMMAND_ARM_DEBUG_ENTER: return enter_arm_debug();
+    case ANO_COMMAND_ARM_DEBUG_EXIT: return stop_arm_debug(true);
+    case ANO_COMMAND_ARM_HOME: return start_arm_home();
+    case ANO_COMMAND_ARM_ZERO_CONFIRM: return confirm_arm_zero();
+    case ANO_COMMAND_ARM_RUN_SPEED: return start_arm_speed();
+    case ANO_COMMAND_ARM_MOVE_ABSOLUTE: return start_arm_absolute();
+    case ANO_COMMAND_ARM_STOP: return stop_arm_debug(false);
+    case ANO_COMMAND_ARM_ENABLE:
+        if (!arm_debug_active || zdt_stepper_motors[0] == NULL) return false;
+        ZDT_Stepper_Enable(zdt_stepper_motors[0], ZDT_STEPPER_ENABLE, ZDT_STEPPER_SYNC_DISABLE);
+        return true;
+    case ANO_COMMAND_ARM_DISABLE:
+        if (!arm_debug_active || zdt_stepper_motors[0] == NULL) return false;
+        (void)stop_arm_debug(false);
+        ZDT_Stepper_Enable(zdt_stepper_motors[0], ZDT_STEPPER_DISABLE, ZDT_STEPPER_SYNC_DISABLE);
+        return true;
+    case ANO_COMMAND_ARM_APPLY_DRIVER: return apply_arm_driver_config();
+    default: return false;
+    }
+}
+
+static void process_arm_debug(void)
+{
+    ZDTStepperMotor *motor = zdt_stepper_motors[0];
+    uint32_t now = HAL_GetTick();
+
+    if (motor == NULL) return;
+    if (arm_zero_confirm_pending && motor->data.last_command == 0x0AU &&
+        motor->data.last_command_status == 0x02U &&
+        (int32_t)(motor->data.last_command_ms - arm_zero_confirm_issued_ms) >= 0)
+    {
+        arm_zero_confirm_pending = 0U;
+        arm_zero_valid = 1U;
+        arm_home_active = 0U;
+        motor->data.current_position = 0.0f;
+        motor->data.current_position_ms = now;
+    }
+    if (arm_home_active)
+    {
+        if ((int32_t)(now - (arm_zero_confirm_issued_ms + (uint32_t)arm_debug_timeout_ms)) >= 0)
+        {
+            (void)stop_arm_debug(true);
+        }
+        return;
+    }
+    if (!arm_motion_active) return;
+    if (now - arm_last_position_request_ms >= ARM_DEBUG_POSITION_PERIOD_MS)
+    {
+        arm_last_position_request_ms = now;
+        ZDT_Stepper_Read_current_position(motor);
+    }
+    float stopping_margin = arm_speed_motion ? arm_debug_speed * 0.006f * (float)(ARM_DEBUG_POSITION_PERIOD_MS * 2U) : 0.0f;
+    bool limit_reached = arm_motion_positive != 0U ?
+                         motor->data.current_position + stopping_margin >= arm_limit_max :
+                         motor->data.current_position - stopping_margin <= arm_limit_min;
+    if ((int32_t)(now - arm_motion_deadline_ms) >= 0 ||
+        motor->data.current_position_ms == 0U || now - motor->data.current_position_ms > ARM_DEBUG_POSITION_STALE_MS ||
+        limit_reached)
+    {
+        (void)stop_arm_debug(true);
+    }
+}
+
+static void send_arm_debug_diagnostic(void)
+{
+    ZDTStepperMotor *motor = zdt_stepper_motors[0];
+    uint8_t d[32];
+    uint16_t i = 0U;
+
+    if (motor == NULL || !tx_has_capacity(1U)) return;
+    put_float(d, &i, motor->data.current_position);
+    put_float(d, &i, motor->data.current_speed);
+    put_float(d, &i, (float)arm_debug_active);
+    put_float(d, &i, (float)arm_zero_valid);
+    put_float(d, &i, (float)arm_motion_active);
+    put_float(d, &i, (float)motor->data.last_command);
+    put_float(d, &i, (float)motor->data.last_command_status);
+    put_float(d, &i, (float)motor->data.motor_status_flags);
+    send_frame(ANO_ID_ARM_DEBUG_DIAGNOSTIC, d, i);
 }
 
 static void send_telemetry(void)
@@ -932,6 +1335,21 @@ static void send_tracking_diagnostic(void)
     /* Internal tracking angle is left-negative; F4 displays left-positive. */
     put_float(d, &i, direction_valid ? -(float)tracking.angle_x10 * 0.1f : 0.0f);
     send_frame(ANO_ID_TRACKING_DIAGNOSTIC, d, i);
+}
+
+static void send_car_lap_status(void)
+{
+    car_lap_status_t status;
+    uint8_t d[8];
+    uint16_t i = 0U;
+
+    if (!tx_has_capacity(1U)) return;
+    Car_Lap_Task_Get_Status(&status);
+    d[i++] = (uint8_t)status.state;
+    d[i++] = status.gray_state;
+    put_i32(d, &i, (int32_t)status.elapsed_ms);
+    put_u16(d, &i, (uint16_t)status.stop_delay_ms);
+    send_frame(ANO_ID_CAR_LAP_STATUS, d, i);
 }
 
 static int16_t scale_i16(int16_t value, int32_t numerator, int32_t denominator)
@@ -1025,17 +1443,17 @@ static void send_stepper_feedforward_diagnostic(void)
 
 static bool command(const uint8_t *d, uint16_t n)
 {
+    if (App_Role_Get() == APP_ROLE_ARM)
+    {
+        if (n == 3U && d[0] == 0x02U && d[1] == 0x12U && d[2] == 0xFFU) return stop_arm_debug(false);
+        if (n == 2U && d[0] == 0x12U && (d[1] == 0xFFU || d[1] == 0U)) return stop_arm_debug(false);
+        if (n == 3U && d[0] == 0x03U && d[2] == 0x00U) return handle_arm_command(d[1]);
+        if (n == 1U) return handle_arm_command(d[0]);
+        return false;
+    }
     if (App_Role_Get() == APP_ROLE_CAR && n != 0U &&
         (d[0] == 0x10U || d[0] == 0x11U || d[0] == 0x12U || (n == 3U && d[0] == 0x02U))) return false;
-    if (App_Role_Get() == APP_ROLE_ARM && n != 0U &&
-        ((n == 9U && (d[0] == 1U || d[0] == 2U)) || (n == 1U && d[0] == 3U) ||
-         (n == 3U && d[0] == 0x03U) || d[0] == ANO_COMMAND_CAR_READ_FLASH ||
-         d[0] == ANO_COMMAND_CAR_FACTORY_RESET || d[0] == ANO_COMMAND_CAR_APPLY_CONFIG ||
-         d[0] == ANO_COMMAND_CAR_DEBUG_ENTER || d[0] == ANO_COMMAND_CAR_DEBUG_START ||
-         d[0] == ANO_COMMAND_CAR_DEBUG_STOP || d[0] == ANO_COMMAND_CAR_RESTORE_DEFAULTS ||
-         d[0] == ANO_COMMAND_ATTITUDE_ENABLE || d[0] == ANO_COMMAND_ATTITUDE_DISABLE ||
-         d[0] == ANO_COMMAND_RATE_STEP_TEST || d[0] == ANO_COMMAND_ANGLE_STEP_TEST)) return false;
-    if (n == 3U && d[0] == 0x03U && d[1] == 0x03U && d[2] == 0x00U) { (void)Car_Attitude_Control_Set_Enabled(false); return car_debug_active ? stop_car_debug() : Car_Motor_Set_Speed(0, 0, 0, 0); }
+    if (n == 3U && d[0] == 0x03U && d[1] == 0x03U && d[2] == 0x00U) { (void)Car_Lap_Task_Stop(); return car_debug_active ? stop_car_debug() : Car_Motor_Set_Speed(0, 0, 0, 0); }
     if (n == 3U && d[0] == 0x02U && d[1] == 0x12U && d[2] == 0xFFU) { ZDT_Stepper_stop(zdt_stepper_motors[0], 0U); return true; }
     if (n == 3U && d[0] == 0x03U && d[1] == ANO_COMMAND_CAR_READ_FLASH && d[2] == 0x00U) return Car_Motor_Read_Flash();
     if (n == 3U && d[0] == 0x03U && d[1] == ANO_COMMAND_CAR_FACTORY_RESET && d[2] == 0x00U) return Car_Motor_Factory_Reset();
@@ -1045,13 +1463,16 @@ static bool command(const uint8_t *d, uint16_t n)
     if (n == 3U && d[0] == 0x03U && d[1] == ANO_COMMAND_CAR_DEBUG_STOP && d[2] == 0x00U) return stop_car_debug();
     if (n == 3U && d[0] == 0x03U && d[1] == ANO_COMMAND_CAR_RESTORE_DEFAULTS && d[2] == 0x00U) return restore_defaults();
     if (n == 3U && d[0] == 0x03U && d[1] == ANO_COMMAND_ATTITUDE_ENABLE && d[2] == 0x00U) { car_debug_active = 0U; return Car_Attitude_Control_Set_Enabled(true); }
-    if (n == 3U && d[0] == 0x03U && d[1] == ANO_COMMAND_ATTITUDE_DISABLE && d[2] == 0x00U) return Car_Attitude_Control_Set_Enabled(false);
+    if (n == 3U && d[0] == 0x03U && d[1] == ANO_COMMAND_ATTITUDE_DISABLE && d[2] == 0x00U) return Car_Lap_Task_Stop();
     if (n == 3U && d[0] == 0x03U && d[1] == ANO_COMMAND_RATE_STEP_TEST && d[2] == 0x00U) return start_attitude_step(CAR_ATTITUDE_STEP_RATE);
     if (n == 3U && d[0] == 0x03U && d[1] == ANO_COMMAND_ANGLE_STEP_TEST && d[2] == 0x00U) return start_attitude_step(CAR_ATTITUDE_STEP_ANGLE);
     if (n == 3U && d[0] == 0x03U && d[1] == ANO_COMMAND_STEPPER_FF_CALIBRATE && d[2] == 0x00U) { Stepper_Feedforward_Reset_Bias(); return true; }
+    if (n == 3U && d[0] == 0x03U && d[1] == ANO_COMMAND_CAR_LAP_START && d[2] == 0x00U) { if (car_debug_active && !stop_car_debug()) return false; return Car_Lap_Task_Start(); }
+    if (n == 3U && d[0] == 0x03U && d[1] == ANO_COMMAND_CAR_LAP_STOP && d[2] == 0x00U) return Car_Lap_Task_Stop();
+    if (n == 3U && d[0] == 0x03U && d[1] == ANO_COMMAND_CAR_LAP_CLEAR && d[2] == 0x00U) return Car_Lap_Task_Clear();
     if (n == 9U && d[0] == 1U && !car_debug_active && !Car_Attitude_Control_Is_Enabled()) return Car_Motor_Set_Speed(get_i16(&d[1]), get_i16(&d[3]), get_i16(&d[5]), get_i16(&d[7]));
     if (n == 9U && d[0] == 2U && !car_debug_active && !Car_Attitude_Control_Is_Enabled()) return Car_Motor_Set_PWM(get_i16(&d[1]), get_i16(&d[3]), get_i16(&d[5]), get_i16(&d[7]));
-    if (n == 1U && d[0] == 3U) { (void)Car_Attitude_Control_Set_Enabled(false); return car_debug_active ? stop_car_debug() : Car_Motor_Set_Speed(0, 0, 0, 0); }
+    if (n == 1U && d[0] == 3U) { (void)Car_Lap_Task_Stop(); return car_debug_active ? stop_car_debug() : Car_Motor_Set_Speed(0, 0, 0, 0); }
     if (n == 7U && d[0] == 0x10U && d[1] == 0U) { float s = get_float(&d[3]); if (s >= 0.0f && s <= 1000.0f) { ZDT_Stepper_Set_Speed(zdt_stepper_motors[0], d[2] ? ZDT_STEPPER_CCW : ZDT_STEPPER_CW, s, 0U, 0U); return true; } }
     if (n == 12U && d[0] == 0x11U && d[1] == 0U) { float s = get_float(&d[3]), p = get_float(&d[7]); if (s >= 0.0f && s <= 1000.0f && p >= 0.0f && p <= 3600.0f) { ZDT_Stepper_Set_position(zdt_stepper_motors[0], d[2] ? ZDT_STEPPER_CCW : ZDT_STEPPER_CW, s, p, d[11] ? ZDT_STEPPER_ABS_POS_MODE : ZDT_STEPPER_REL_POS_MODE, 0U); return true; } }
     if (n == 2U && d[0] == 0x12U && (d[1] == 0xFFU || d[1] == 0U)) { ZDT_Stepper_stop(zdt_stepper_motors[0], 0U); return true; }
@@ -1063,10 +1484,13 @@ static bool command(const uint8_t *d, uint16_t n)
     if (n == 1U && d[0] == ANO_COMMAND_CAR_DEBUG_STOP) return stop_car_debug();
     if (n == 1U && d[0] == ANO_COMMAND_CAR_RESTORE_DEFAULTS) return restore_defaults();
     if (n == 1U && d[0] == ANO_COMMAND_ATTITUDE_ENABLE) { car_debug_active = 0U; return Car_Attitude_Control_Set_Enabled(true); }
-    if (n == 1U && d[0] == ANO_COMMAND_ATTITUDE_DISABLE) return Car_Attitude_Control_Set_Enabled(false);
+    if (n == 1U && d[0] == ANO_COMMAND_ATTITUDE_DISABLE) return Car_Lap_Task_Stop();
     if (n == 1U && d[0] == ANO_COMMAND_RATE_STEP_TEST) return start_attitude_step(CAR_ATTITUDE_STEP_RATE);
     if (n == 1U && d[0] == ANO_COMMAND_ANGLE_STEP_TEST) return start_attitude_step(CAR_ATTITUDE_STEP_ANGLE);
     if (n == 1U && d[0] == ANO_COMMAND_STEPPER_FF_CALIBRATE) { Stepper_Feedforward_Reset_Bias(); return true; }
+    if (n == 1U && d[0] == ANO_COMMAND_CAR_LAP_START) { if (car_debug_active && !stop_car_debug()) return false; return Car_Lap_Task_Start(); }
+    if (n == 1U && d[0] == ANO_COMMAND_CAR_LAP_STOP) return Car_Lap_Task_Stop();
+    if (n == 1U && d[0] == ANO_COMMAND_CAR_LAP_CLEAR) return Car_Lap_Task_Clear();
     return false;
 }
 
@@ -1085,8 +1509,11 @@ static void handle(uint8_t source, uint8_t id, const uint8_t *d, uint16_t n, uin
         bool accepted = false;
         uint16_t parameter_id = get_u16(d); float value = get_float(&d[2]); float *v = parameter(parameter_id);
         if (App_Role_Get() == APP_ROLE_ARM &&
-            (parameter_id <= CAR_KD || (parameter_id >= CAR_TYPE && parameter_id <= STEP_ANGLE_FEEDBACK_INVERTED))) return;
-        if (App_Role_Get() == APP_ROLE_CAR && parameter_id >= YAW_KP && parameter_id <= PITCH_KD) return;
+            (parameter_id <= CAR_KD || (parameter_id >= CAR_TYPE && parameter_id <= STEP_ANGLE_FEEDBACK_INVERTED) ||
+             parameter_id == CAR_LAP_STOP_DELAY_MS)) return;
+        if (App_Role_Get() == APP_ROLE_CAR &&
+            ((parameter_id >= YAW_KP && parameter_id <= PITCH_KD) ||
+             (parameter_id >= ARM_LIMIT_MIN && parameter_id <= ARM_HOME_MODE))) return;
         if (parameter_id == HOST_BAUD && isfinite(value) && value == (float)(uint32_t)value &&
             baud_rate_is_valid((uint32_t)value) && storage_ready) {
             uint32_t requested_baud_rate = (uint32_t)value;
@@ -1121,6 +1548,12 @@ static void handle(uint8_t source, uint8_t id, const uint8_t *d, uint16_t n, uin
             accepted = write_attitude_parameter(parameter_id, value);
         } else if (parameter_id >= STEPPER_FF_ENABLE && parameter_id <= STEPPER_FF_OUTPUT_LIMIT) {
             accepted = write_feedforward_parameter(parameter_id, value);
+        } else if (parameter_id >= ARM_LIMIT_MIN && parameter_id <= ARM_HOME_MODE) {
+            accepted = write_arm_parameter(parameter_id, value);
+        } else if (parameter_id == CAR_LAP_STOP_DELAY_MS && isfinite(value) && value == floorf(value) &&
+                   value >= 0.0f && value <= 2000.0f) {
+            accepted = Car_Lap_Task_Set_Stop_Delay((uint32_t)value);
+            if (accepted) car_lap_stop_delay_ms = value;
         } else if (parameter_id == BOARD_ROLE && isfinite(value) && value == floorf(value) &&
                    value >= (float)APP_ROLE_CAR && value <= (float)APP_ROLE_ARM) {
             accepted = App_Role_Set_Persisted((app_role_t)(uint8_t)value);
@@ -1169,7 +1602,7 @@ void ANO_Host_Init(void)
     if (host_baud_rate != huart1.Init.BaudRate) apply_baud_rate(host_baud_rate);
     else HAL_UART_Receive_IT(&huart1, &rx_byte, 1U);
 }
-void ANO_Host_Process(void) { while (rx_head != rx_tail) { uint8_t b = rx_queue[rx_head]; rx_head = (rx_head + 1U) % ANO_RX_QUEUE_SIZE; feed(b); } if (pending_baud_rate != 0U && (int32_t)(HAL_GetTick() - baud_switch_at_ms) >= 0 && !tx_active && tx_count == 0U) { uint32_t baud_rate = pending_baud_rate; pending_baud_rate = 0U; apply_baud_rate(baud_rate); } if (App_Role_Get() == APP_ROLE_CAR && HAL_GetTick() - last_imu_ms >= ANO_IMU_PERIOD_MS) { last_imu_ms = HAL_GetTick(); send_imu(); } if (HAL_GetTick() - last_control_telemetry_ms >= 20U) { last_control_telemetry_ms = HAL_GetTick(); if (App_Role_Get() == APP_ROLE_CAR) { send_control_telemetry(); send_tracking_diagnostic(); } else { send_stepper_feedforward_diagnostic(); } } if (App_Role_Get() == APP_ROLE_CAR && HAL_GetTick() - last_telemetry_ms >= 100U) { last_telemetry_ms = HAL_GetTick(); send_telemetry(); } if (HAL_GetTick() - last_diagnostic_ms >= 500U) { last_diagnostic_ms = HAL_GetTick(); send_storage_diagnostic(); } }
+void ANO_Host_Process(void) { while (rx_head != rx_tail) { uint8_t b = rx_queue[rx_head]; rx_head = (rx_head + 1U) % ANO_RX_QUEUE_SIZE; feed(b); } if (App_Role_Get() == APP_ROLE_ARM) process_arm_debug(); if (pending_baud_rate != 0U && (int32_t)(HAL_GetTick() - baud_switch_at_ms) >= 0 && !tx_active && tx_count == 0U) { uint32_t baud_rate = pending_baud_rate; pending_baud_rate = 0U; apply_baud_rate(baud_rate); } if (App_Role_Get() == APP_ROLE_CAR && HAL_GetTick() - last_imu_ms >= ANO_IMU_PERIOD_MS) { last_imu_ms = HAL_GetTick(); send_imu(); } if (HAL_GetTick() - last_control_telemetry_ms >= 20U) { last_control_telemetry_ms = HAL_GetTick(); if (App_Role_Get() == APP_ROLE_CAR) { send_car_lap_status(); send_control_telemetry(); send_tracking_diagnostic(); } else { send_stepper_feedforward_diagnostic(); send_arm_debug_diagnostic(); } } if (App_Role_Get() == APP_ROLE_CAR && HAL_GetTick() - last_telemetry_ms >= 100U) { last_telemetry_ms = HAL_GetTick(); send_telemetry(); } if (HAL_GetTick() - last_diagnostic_ms >= 500U) { last_diagnostic_ms = HAL_GetTick(); send_storage_diagnostic(); } }
 void ANO_Host_UART_RxCplt_Callback(void) { uint8_t next = (rx_tail + 1U) % ANO_RX_QUEUE_SIZE; if (next != rx_head) { rx_queue[rx_tail] = rx_byte; rx_tail = next; } HAL_UART_Receive_IT(&huart1, &rx_byte, 1U); }
 void ANO_Host_UART_TxCplt_Callback(void) { if (tx_active && tx_count) { tx_head = (tx_head + 1U) % ANO_TX_QUEUE_DEPTH; tx_count--; } tx_active = 0U; start_tx(); }
 void ANO_Host_UART_Error_Callback(void) { tx_active = 0U; HAL_UART_Receive_IT(&huart1, &rx_byte, 1U); }
