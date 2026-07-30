@@ -5,6 +5,7 @@
 #include "Car_Lap_Task.h"
 #include "Gray_Sensor.h"
 #include "JY61P.h"
+#include "WheelTec.h"
 #include "Stepper_PID.h"
 #include "Tracking_Link.h"
 #include "W25Qxx.h"
@@ -37,7 +38,6 @@
 #define ANO_ID_DIAGNOSTIC 0xF5U
 #define ANO_ID_STEPPER_FF_DIAGNOSTIC 0xF6U
 #define ANO_ID_ARM_DEBUG_DIAGNOSTIC 0xF7U
-#define ANO_ID_CAR_LAP_STATUS 0xF8U
 #define ANO_RX_QUEUE_SIZE 128U
 #define ANO_DATA_MAX 96U
 #define ANO_TX_QUEUE_DEPTH 8U
@@ -46,7 +46,7 @@
 #define ANO_BAUD_SWITCH_DELAY_MS 50U
 #define ANO_STORAGE_ADDRESS 0U
 #define ANO_STORAGE_MAGIC 0x414E4F57UL
-#define ANO_STORAGE_VERSION 8U
+#define ANO_STORAGE_VERSION 10U
 #define ARM_DEBUG_POSITION_PERIOD_MS 20U
 #define ARM_DEBUG_POSITION_STALE_MS 100U
 #define ARM_HOME_STATUS_PERIOD_MS 50U
@@ -116,6 +116,10 @@ enum {
     ARM_HOME_MODE,
     CAR_LAP_STOP_DELAY_MS,
     ARM_BALANCE_POSITION,
+    CAR_LAP_COUNTS_PER_METER,
+    TRACKING_DIRECTION_INVERTED,
+    TRACKING_ERROR_FILTER_TIME,
+    TRACKING_TARGET_RATE_SLEW,
     ANO_PARAM_COUNT
 };
 
@@ -138,8 +142,8 @@ static const ano_command_desc_t commands[] = {
     {{0x03U, ANO_COMMAND_ANGLE_STEP_TEST, 0x00U}, "航向角阶跃测试", "按配置幅度执行相对航向角正阶跃和回零响应"},
     {{0x03U, ANO_COMMAND_STEPPER_FF_CALIBRATE, 0x00U}, "前馈零偏校准", "保持小车静止并重新采集一秒IMU加速度零偏"},
     {{0x03U, ANO_COMMAND_CAR_LAP_START, 0x00U}, "启动一圈停车", "启用循迹并计时，返回A点十字后按补偿停车"},
-    {{0x03U, ANO_COMMAND_CAR_LAP_STOP, 0x00U}, "停止一圈任务", "立即停止循迹并冻结当前圈时"},
-    {{0x03U, ANO_COMMAND_CAR_LAP_CLEAR, 0x00U}, "清除一圈记录", "清除已完成或已停止的一圈状态和圈时"},
+    {{0x03U, ANO_COMMAND_CAR_LAP_STOP, 0x00U}, "停止一圈任务", "立即停止循迹并冻结本圈时间、里程和平均速度"},
+    {{0x03U, ANO_COMMAND_CAR_LAP_CLEAR, 0x00U}, "清除一圈记录", "清除本圈状态、时间、里程和平均速度"},
     {{0x03U, ANO_COMMAND_ARM_DEBUG_ENTER, 0x00U}, "进入臂杆调试", "停止闭环输出并开放受限的臂杆调试命令"},
     {{0x03U, ANO_COMMAND_ARM_DEBUG_EXIT, 0x00U}, "退出臂杆调试", "立即停止电机并退出臂杆调试模式"},
     {{0x03U, ANO_COMMAND_ARM_HOME, 0x00U}, "臂杆电机回零", "按回零模式触发驱动器回零，完成后需确认零点"},
@@ -176,6 +180,7 @@ static uint32_t last_control_telemetry_ms;
 static uint32_t last_diagnostic_ms;
 static uint32_t last_imu_ms;
 static uint32_t last_imu_sequence;
+static uint32_t last_ahrs_sequence;
 static uint32_t host_baud_rate = ANO_DEFAULT_BAUD_RATE;
 static uint32_t pending_baud_rate;
 static uint32_t baud_switch_at_ms;
@@ -193,6 +198,7 @@ static float arm_debug_timeout_ms = 500.0f;
 static float arm_home_mode;
 static float car_lap_stop_delay_ms;
 static float arm_balance_position;
+static float car_lap_counts_per_meter = 285053.625f;
 static uint8_t arm_debug_active;
 static uint8_t arm_zero_valid;
 static uint8_t arm_motion_active;
@@ -252,8 +258,39 @@ typedef struct
     car_attitude_control_config_t attitude;
     stepper_feedforward_config_t feedforward;
     ano_arm_debug_config_t arm_debug;
+    float car_lap_counts_per_meter;
+    car_tracking_config_t tracking;
     uint32_t checksum;
 } ano_storage_record_t;
+
+typedef struct
+{
+    uint32_t magic;
+    uint8_t version;
+    uint32_t baud_rate;
+    uint8_t reserved[3];
+    float values[HOST_BAUD];
+    float directions[2];
+    car_attitude_control_config_t attitude;
+    stepper_feedforward_config_t feedforward;
+    ano_arm_debug_config_t arm_debug;
+    float car_lap_counts_per_meter;
+    uint32_t checksum;
+} ano_storage_record_v9_t;
+
+typedef struct
+{
+    uint32_t magic;
+    uint8_t version;
+    uint32_t baud_rate;
+    uint8_t reserved[3];
+    float values[HOST_BAUD];
+    float directions[2];
+    car_attitude_control_config_t attitude;
+    stepper_feedforward_config_t feedforward;
+    ano_arm_debug_config_t arm_debug;
+    uint32_t checksum;
+} ano_storage_record_v8_t;
 
 typedef struct
 {
@@ -418,7 +455,9 @@ static void reset_local_defaults(void)
     arm_home_mode = 0.0f;
     arm_balance_position = 0.0f;
     car_lap_stop_delay_ms = 0.0f;
+    car_lap_counts_per_meter = 285053.625f;
     (void)Car_Lap_Task_Set_Stop_Delay(0U);
+    (void)Car_Lap_Task_Set_Counts_Per_Meter(car_lap_counts_per_meter);
     arm_debug_active = 0U;
     arm_zero_valid = 0U;
     arm_motion_active = 0U;
@@ -517,6 +556,22 @@ static uint32_t storage_record_v7_checksum(const ano_storage_record_v7_t *record
     return checksum;
 }
 
+static uint32_t storage_record_v8_checksum(const ano_storage_record_v8_t *record)
+{
+    const uint8_t *data = (const uint8_t *)record;
+    uint32_t checksum = 0x6D2B79F5U;
+    for (uint16_t i = 0U; i < sizeof(*record) - sizeof(record->checksum); i++) checksum = (checksum << 5U) ^ (checksum >> 27U) ^ data[i];
+    return checksum;
+}
+
+static uint32_t storage_record_v9_checksum(const ano_storage_record_v9_t *record)
+{
+    const uint8_t *data = (const uint8_t *)record;
+    uint32_t checksum = 0x6D2B79F5U;
+    for (uint16_t i = 0U; i < sizeof(*record) - sizeof(record->checksum); i++) checksum = (checksum << 5U) ^ (checksum >> 27U) ^ data[i];
+    return checksum;
+}
+
 static float *parameter(uint16_t id);
 static bool write_car_parameter(uint16_t parameter_id, float value);
 static bool stop_arm_debug(bool exit_debug);
@@ -545,6 +600,7 @@ static bool save_storage(uint32_t baud_rate)
     record.directions[1] = car_m2_direction;
     record.attitude = *Car_Attitude_Control_Get_Config();
     record.feedforward = *Stepper_Feedforward_Get_Config();
+    record.tracking = *Car_Attitude_Control_Get_Tracking_Config();
     record.arm_debug.limit_min = arm_limit_min;
     record.arm_debug.limit_max = arm_limit_max;
     record.arm_debug.speed = arm_debug_speed;
@@ -555,6 +611,7 @@ static bool save_storage(uint32_t baud_rate)
     record.arm_debug.timeout_ms = arm_debug_timeout_ms;
     record.arm_debug.home_mode = arm_home_mode;
     record.arm_debug.balance_position = arm_balance_position;
+    record.car_lap_counts_per_meter = car_lap_counts_per_meter;
     record.checksum = storage_record_checksum(&record);
     if (!W25Qxx_EraseSector(ANO_STORAGE_ADDRESS) ||
         !W25Qxx_Write(ANO_STORAGE_ADDRESS, (const uint8_t *)&record, sizeof(record)) ||
@@ -604,6 +661,87 @@ static void load_storage(void)
         if (isfinite(record.arm_debug.microstepping) && record.arm_debug.microstepping >= 1.0f && record.arm_debug.microstepping <= 255.0f && record.arm_debug.microstepping == floorf(record.arm_debug.microstepping)) arm_driver_microstep = record.arm_debug.microstepping;
         if (isfinite(record.arm_debug.timeout_ms) && record.arm_debug.timeout_ms >= 100.0f && record.arm_debug.timeout_ms <= 5000.0f && record.arm_debug.timeout_ms == floorf(record.arm_debug.timeout_ms)) arm_debug_timeout_ms = record.arm_debug.timeout_ms;
         if (isfinite(record.arm_debug.home_mode) && record.arm_debug.home_mode >= 0.0f && record.arm_debug.home_mode <= 4.0f && record.arm_debug.home_mode == floorf(record.arm_debug.home_mode)) arm_home_mode = record.arm_debug.home_mode;
+        if (isfinite(record.car_lap_counts_per_meter) &&
+            Car_Lap_Task_Set_Counts_Per_Meter(record.car_lap_counts_per_meter))
+        {
+            car_lap_counts_per_meter = record.car_lap_counts_per_meter;
+        }
+        (void)Car_Attitude_Control_Apply_Tracking_Config(&record.tracking);
+    }
+    else if (record.version == 9U)
+    {
+        ano_storage_record_v9_t legacy = {0};
+        if (!W25Qxx_Read(ANO_STORAGE_ADDRESS, (uint8_t *)&legacy, sizeof(legacy)) ||
+            legacy.checksum != storage_record_v9_checksum(&legacy))
+        {
+            return;
+        }
+        for (uint16_t id = 0U; id < HOST_BAUD; id++)
+        {
+            float *target = parameter(id);
+            if (target != NULL && isfinite(legacy.values[id])) *target = legacy.values[id];
+        }
+        if (legacy.directions[0] == 0.0f || legacy.directions[0] == 1.0f) car_m1_direction = legacy.directions[0];
+        if (legacy.directions[1] == 0.0f || legacy.directions[1] == 1.0f) car_m2_direction = legacy.directions[1];
+        if (isfinite(legacy.arm_debug.limit_min) && isfinite(legacy.arm_debug.balance_position) &&
+            isfinite(legacy.arm_debug.limit_max) && legacy.arm_debug.limit_min < legacy.arm_debug.balance_position &&
+            legacy.arm_debug.balance_position < legacy.arm_debug.limit_max)
+        {
+            arm_limit_min = legacy.arm_debug.limit_min;
+            arm_limit_max = legacy.arm_debug.limit_max;
+            arm_balance_position = legacy.arm_debug.balance_position;
+            arm_limit_configured = 0x03U;
+            arm_point_configured = 0x07U;
+        }
+        if (isfinite(legacy.arm_debug.speed) && legacy.arm_debug.speed > 0.0f && legacy.arm_debug.speed <= 1000.0f) arm_debug_speed = legacy.arm_debug.speed;
+        if (isfinite(legacy.arm_debug.target_position)) arm_target_position = legacy.arm_debug.target_position;
+        if (legacy.arm_debug.direction == 0.0f || legacy.arm_debug.direction == 1.0f) arm_debug_direction = legacy.arm_debug.direction;
+        if (isfinite(legacy.arm_debug.acceleration) && legacy.arm_debug.acceleration >= 0.0f && legacy.arm_debug.acceleration <= 255.0f) arm_debug_accel = legacy.arm_debug.acceleration;
+        if (isfinite(legacy.arm_debug.microstepping) && legacy.arm_debug.microstepping >= 1.0f && legacy.arm_debug.microstepping <= 255.0f) arm_driver_microstep = legacy.arm_debug.microstepping;
+        if (isfinite(legacy.arm_debug.timeout_ms) && legacy.arm_debug.timeout_ms >= 100.0f && legacy.arm_debug.timeout_ms <= 5000.0f) arm_debug_timeout_ms = legacy.arm_debug.timeout_ms;
+        if (isfinite(legacy.arm_debug.home_mode) && legacy.arm_debug.home_mode >= 0.0f && legacy.arm_debug.home_mode <= 4.0f) arm_home_mode = legacy.arm_debug.home_mode;
+        if (isfinite(legacy.car_lap_counts_per_meter) &&
+            Car_Lap_Task_Set_Counts_Per_Meter(legacy.car_lap_counts_per_meter))
+        {
+            car_lap_counts_per_meter = legacy.car_lap_counts_per_meter;
+        }
+        (void)Car_Attitude_Control_Apply_Config(&legacy.attitude);
+        (void)Stepper_Feedforward_Apply_Config(&legacy.feedforward);
+    }
+    else if (record.version == 8U)
+    {
+        ano_storage_record_v8_t legacy = {0};
+        if (!W25Qxx_Read(ANO_STORAGE_ADDRESS, (uint8_t *)&legacy, sizeof(legacy)) ||
+            legacy.checksum != storage_record_v8_checksum(&legacy))
+        {
+            return;
+        }
+        for (uint16_t id = 0U; id < HOST_BAUD; id++)
+        {
+            float *target = parameter(id);
+            if (target != NULL && isfinite(legacy.values[id])) *target = legacy.values[id];
+        }
+        if (legacy.directions[0] == 0.0f || legacy.directions[0] == 1.0f) car_m1_direction = legacy.directions[0];
+        if (legacy.directions[1] == 0.0f || legacy.directions[1] == 1.0f) car_m2_direction = legacy.directions[1];
+        if (isfinite(legacy.arm_debug.limit_min) && isfinite(legacy.arm_debug.balance_position) &&
+            isfinite(legacy.arm_debug.limit_max) && legacy.arm_debug.limit_min < legacy.arm_debug.balance_position &&
+            legacy.arm_debug.balance_position < legacy.arm_debug.limit_max)
+        {
+            arm_limit_min = legacy.arm_debug.limit_min;
+            arm_limit_max = legacy.arm_debug.limit_max;
+            arm_balance_position = legacy.arm_debug.balance_position;
+            arm_limit_configured = 0x03U;
+            arm_point_configured = 0x07U;
+        }
+        if (isfinite(legacy.arm_debug.speed) && legacy.arm_debug.speed > 0.0f && legacy.arm_debug.speed <= 1000.0f) arm_debug_speed = legacy.arm_debug.speed;
+        if (isfinite(legacy.arm_debug.target_position)) arm_target_position = legacy.arm_debug.target_position;
+        if (legacy.arm_debug.direction == 0.0f || legacy.arm_debug.direction == 1.0f) arm_debug_direction = legacy.arm_debug.direction;
+        if (isfinite(legacy.arm_debug.acceleration) && legacy.arm_debug.acceleration >= 0.0f && legacy.arm_debug.acceleration <= 255.0f) arm_debug_accel = legacy.arm_debug.acceleration;
+        if (isfinite(legacy.arm_debug.microstepping) && legacy.arm_debug.microstepping >= 1.0f && legacy.arm_debug.microstepping <= 255.0f) arm_driver_microstep = legacy.arm_debug.microstepping;
+        if (isfinite(legacy.arm_debug.timeout_ms) && legacy.arm_debug.timeout_ms >= 100.0f && legacy.arm_debug.timeout_ms <= 5000.0f) arm_debug_timeout_ms = legacy.arm_debug.timeout_ms;
+        if (isfinite(legacy.arm_debug.home_mode) && legacy.arm_debug.home_mode >= 0.0f && legacy.arm_debug.home_mode <= 4.0f) arm_home_mode = legacy.arm_debug.home_mode;
+        (void)Car_Attitude_Control_Apply_Config(&legacy.attitude);
+        (void)Stepper_Feedforward_Apply_Config(&legacy.feedforward);
     }
     else if (record.version == 7U)
     {
@@ -815,7 +953,8 @@ static float *parameter(uint16_t id)
         &arm_limit_min, &arm_limit_max, &arm_debug_speed, &arm_target_position,
         &arm_debug_direction, &arm_debug_accel, &arm_driver_microstep,
         &arm_debug_timeout_ms, &arm_home_mode, &car_lap_stop_delay_ms,
-        &arm_balance_position
+        &arm_balance_position, &car_lap_counts_per_meter,
+        NULL, NULL, NULL
     };
     if (id >= ATTITUDE_MODE && id <= STEP_ANGLE_FEEDBACK_INVERTED)
     {
@@ -839,6 +978,15 @@ static float *parameter(uint16_t id)
             &feedforward->output_limit_rpm
         };
         return feedforward_values[id - STEPPER_FF_ENABLE];
+    }
+    if (id >= TRACKING_DIRECTION_INVERTED && id <= TRACKING_TARGET_RATE_SLEW)
+    {
+        car_tracking_config_t *tracking = Car_Attitude_Control_Get_Tracking_Config();
+        float *const tracking_values[] = {
+            &tracking->direction_inverted, &tracking->error_filter_time_s,
+            &tracking->target_rate_slew_deg_s2
+        };
+        return tracking_values[id - TRACKING_DIRECTION_INVERTED];
     }
     return id < ANO_PARAM_COUNT ? values[id] : NULL;
 }
@@ -974,6 +1122,21 @@ static bool write_attitude_parameter(uint16_t parameter_id, float value)
     return Car_Attitude_Control_Apply_Config(&next);
 }
 
+static bool write_tracking_parameter(uint16_t parameter_id, float value)
+{
+    car_tracking_config_t next = *Car_Attitude_Control_Get_Tracking_Config();
+
+    if (!isfinite(value)) return false;
+    switch (parameter_id)
+    {
+    case TRACKING_DIRECTION_INVERTED: next.direction_inverted = value; break;
+    case TRACKING_ERROR_FILTER_TIME: next.error_filter_time_s = value; break;
+    case TRACKING_TARGET_RATE_SLEW: next.target_rate_slew_deg_s2 = value; break;
+    default: return false;
+    }
+    return Car_Attitude_Control_Apply_Tracking_Config(&next);
+}
+
 static bool write_car_parameter(uint16_t parameter_id, float value)
 {
     float *target = parameter(parameter_id);
@@ -1069,7 +1232,8 @@ static void send_param_info(uint16_t id)
         "角速度阶跃幅度", "航向角阶跃幅度", "阶跃保持时间", "航向角反馈倒置",
         "滚球前馈使能", "前后X轴增益", "左右Y轴增益", "前馈滤波常数", "前馈加速度死区", "前馈转速限幅", "控制板角色",
         "臂杆最左点", "臂杆最右点", "臂杆调试速度", "臂杆目标位置", "臂杆调试方向",
-        "臂杆加速度", "驱动细分", "调试超时时间", "驱动回零模式", "一圈停车补偿", "臂杆平衡点"
+        "臂杆加速度", "驱动细分", "调试超时时间", "驱动回零模式", "一圈停车补偿", "臂杆平衡点", "里程每米计数",
+        "循迹方向倒置", "偏差滤波时间", "目标转向斜率"
     };
     static const char *const infos[ANO_PARAM_COUNT] = {
         "四驱速度环比例系数", "四驱速度环积分系数", "四驱速度环微分系数",
@@ -1087,7 +1251,10 @@ static void send_param_info(uint16_t id)
         "臂杆最向左倾斜绝对角度，修改后须重新回零", "臂杆最向右倾斜绝对角度，修改后须重新回零",
         "速度和定位命令使用的转速，单位RPM", "绝对定位目标角度，必须位于上下限内", "0顺时针，1逆时针",
         "驱动器加速度档位，0至255", "驱动器细分值，1至255，应用配置后生效", "运动看门狗超时，100至5000毫秒", "驱动器回零模式，0至4",
-        "检测到A点十字后继续行驶时间，单位毫秒，范围0至2000", "上电回零后自动到达的绝对角度，必须严格位于左右点之间"
+        "检测到A点十字后继续行驶时间，单位毫秒，范围0至2000", "上电回零后自动到达的绝对角度，必须严格位于左右点之间",
+        "单轮前进一米对应的累计编码器计数，用于里程标定",
+        "0为当前修正方向，1为反向", "归一化循迹偏差一阶低通时间常数，单位秒，0为关闭",
+        "目标转向角速度最大变化率，单位度每二次方秒"
     };
     uint8_t d[ANO_DATA_MAX] = {0}; uint16_t i = 0U;
     if (id >= ANO_PARAM_COUNT) return;
@@ -1647,8 +1814,9 @@ static void send_control_telemetry(void)
 static void send_tracking_diagnostic(void)
 {
     const car_attitude_control_debug_t *control = Car_Attitude_Control_Get_Debug();
+    car_lap_status_t lap;
     const uint8_t gray = Gray_Sensor_Get_Stable() & 0x0FU;
-    uint8_t d[24];
+    uint8_t d[36];
     uint16_t i = 0U;
 
     if (!tx_has_capacity(1U)) return;
@@ -1659,79 +1827,73 @@ static void send_tracking_diagnostic(void)
     }
     put_float(d, &i, control->line_offset);
     put_float(d, &i, control->target_rate);
+    Car_Lap_Task_Get_Status(&lap);
+    put_float(d, &i, (float)lap.elapsed_ms * 0.001f);
+    put_float(d, &i, lap.distance_m);
+    put_float(d, &i, lap.average_speed_mps);
     send_frame(ANO_ID_TRACKING_DIAGNOSTIC, d, i);
 }
 
-static void send_car_lap_status(void)
+static int16_t float_to_i16(float value)
 {
-    car_lap_status_t status;
-    uint8_t d[8];
-    uint16_t i = 0U;
-
-    if (!tx_has_capacity(1U)) return;
-    Car_Lap_Task_Get_Status(&status);
-    d[i++] = (uint8_t)status.state;
-    d[i++] = status.gray_state;
-    put_i32(d, &i, (int32_t)status.elapsed_ms);
-    put_u16(d, &i, (uint16_t)status.stop_delay_ms);
-    send_frame(ANO_ID_CAR_LAP_STATUS, d, i);
-}
-
-static int16_t scale_i16(int16_t value, int32_t numerator, int32_t denominator)
-{
-    return (int16_t)(((int32_t)value * numerator) / denominator);
+    if (value > 32767.0f) return INT16_MAX;
+    if (value < -32768.0f) return INT16_MIN;
+    return (int16_t)value;
 }
 
 static void send_imu(void)
 {
-    const jy61p_status_t *imu_status = JY61P_Get_Status();
-    const jy61p_sample_t *imu;
+    wheeltec_status_t imu_status;
+    wheeltec_imu_data_t imu;
+    wheeltec_ahrs_data_t ahrs;
     uint8_t d[14];
     uint16_t i;
 
-    if (!imu_status->sample_valid || imu_status->sequence == last_imu_sequence ||
+    WheelTec_Get_Status(&imu_status);
+    if (!imu_status.online || !WheelTec_Get_IMU(&imu) || !WheelTec_Get_AHRS(&ahrs) ||
+        (imu.sequence == last_imu_sequence && ahrs.sequence == last_ahrs_sequence) ||
         !tx_has_capacity(4U))
     {
         return;
     }
-    imu = JY61P_Get_Sample();
 
     i = 0U;
-    put_i16(d, &i, imu->acceleration.x);
-    put_i16(d, &i, imu->acceleration.y);
-    put_i16(d, &i, imu->acceleration.z);
-    put_i16(d, &i, imu->angular_velocity.x);
-    put_i16(d, &i, imu->angular_velocity.y);
-    put_i16(d, &i, imu->angular_velocity.z);
+    put_i16(d, &i, float_to_i16(imu.acceleration.x * (32768.0f / (16.0f * 9.80665f))));
+    put_i16(d, &i, float_to_i16(imu.acceleration.y * (32768.0f / (16.0f * 9.80665f))));
+    put_i16(d, &i, float_to_i16(imu.acceleration.z * (32768.0f / (16.0f * 9.80665f))));
+    put_i16(d, &i, float_to_i16(imu.angular_velocity.x * (32768.0f / 34.906585f)));
+    put_i16(d, &i, float_to_i16(imu.angular_velocity.y * (32768.0f / 34.906585f)));
+    put_i16(d, &i, float_to_i16(imu.angular_velocity.z * (32768.0f / 34.906585f)));
     d[i++] = 0U;
     send_frame(ANO_ID_SENSOR_BASIC, d, i);
 
     i = 0U;
-    put_i16(d, &i, imu->magnetic_field.x);
-    put_i16(d, &i, imu->magnetic_field.y);
-    put_i16(d, &i, imu->magnetic_field.z);
-    put_i32(d, &i, 0);
-    put_i16(d, &i, imu->temperature / 10);
+    put_i16(d, &i, float_to_i16(imu.magnetic_field.x));
+    put_i16(d, &i, float_to_i16(imu.magnetic_field.y));
+    put_i16(d, &i, float_to_i16(imu.magnetic_field.z));
+    put_i32(d, &i, (int32_t)imu.pressure);
+    put_i16(d, &i, float_to_i16(imu.imu_temperature * 10.0f));
     d[i++] = 0U;
     d[i++] = 1U;
     send_frame(ANO_ID_SENSOR_EXTENDED, d, i);
 
     i = 0U;
-    put_i16(d, &i, scale_i16(imu->angle.x, 18000, 32768));
-    put_i16(d, &i, scale_i16(imu->angle.y, 18000, 32768));
-    put_i16(d, &i, scale_i16(imu->angle.z, 18000, 32768));
+    put_i16(d, &i, float_to_i16(ahrs.angle.x * 5729.57795f));
+    put_i16(d, &i, float_to_i16(ahrs.angle.y * 5729.57795f));
+    put_i16(d, &i, float_to_i16(ahrs.angle.z * 5729.57795f));
     d[i++] = 1U;
     send_frame(ANO_ID_ATTITUDE_EULER, d, i);
 
     i = 0U;
-    put_i16(d, &i, scale_i16(imu->quaternion.w, 10000, 32768));
-    put_i16(d, &i, scale_i16(imu->quaternion.x, 10000, 32768));
-    put_i16(d, &i, scale_i16(imu->quaternion.y, 10000, 32768));
-    put_i16(d, &i, scale_i16(imu->quaternion.z, 10000, 32768));
+    put_i16(d, &i, float_to_i16(ahrs.quaternion_w * 10000.0f));
+    put_i16(d, &i, float_to_i16(ahrs.quaternion_x * 10000.0f));
+    put_i16(d, &i, float_to_i16(ahrs.quaternion_y * 10000.0f));
+    put_i16(d, &i, float_to_i16(ahrs.quaternion_z * 10000.0f));
     d[i++] = 1U;
     send_frame(ANO_ID_ATTITUDE_QUATERNION, d, i);
 
-    last_imu_sequence = imu_status->sequence;
+    last_imu_sequence = imu.sequence;
+    last_ahrs_sequence = ahrs.sequence;
 }
 
 static void send_storage_diagnostic(void)
@@ -1835,7 +1997,8 @@ static void handle(uint8_t source, uint8_t id, const uint8_t *d, uint16_t n, uin
         uint16_t parameter_id = get_u16(d); float value = get_float(&d[2]); float *v = parameter(parameter_id);
         if (App_Role_Get() == APP_ROLE_ARM &&
             (parameter_id <= CAR_KD || (parameter_id >= CAR_TYPE && parameter_id <= STEP_ANGLE_FEEDBACK_INVERTED) ||
-             parameter_id == CAR_LAP_STOP_DELAY_MS)) return;
+             parameter_id == CAR_LAP_STOP_DELAY_MS || parameter_id == CAR_LAP_COUNTS_PER_METER ||
+             (parameter_id >= TRACKING_DIRECTION_INVERTED && parameter_id <= TRACKING_TARGET_RATE_SLEW))) return;
         if (App_Role_Get() == APP_ROLE_CAR &&
             ((parameter_id >= YAW_KP && parameter_id <= PITCH_KD) ||
              (parameter_id >= ARM_LIMIT_MIN && parameter_id <= ARM_HOME_MODE) ||
@@ -1874,6 +2037,8 @@ static void handle(uint8_t source, uint8_t id, const uint8_t *d, uint16_t n, uin
             accepted = write_attitude_parameter(parameter_id, value);
         } else if (parameter_id >= STEPPER_FF_ENABLE && parameter_id <= STEPPER_FF_OUTPUT_LIMIT) {
             accepted = write_feedforward_parameter(parameter_id, value);
+        } else if (parameter_id >= TRACKING_DIRECTION_INVERTED && parameter_id <= TRACKING_TARGET_RATE_SLEW) {
+            accepted = write_tracking_parameter(parameter_id, value);
         } else if (parameter_id >= ARM_LIMIT_MIN && parameter_id <= ARM_HOME_MODE) {
             accepted = write_arm_parameter(parameter_id, value);
         } else if (parameter_id == ARM_BALANCE_POSITION) {
@@ -1882,6 +2047,9 @@ static void handle(uint8_t source, uint8_t id, const uint8_t *d, uint16_t n, uin
                    value >= 0.0f && value <= 2000.0f) {
             accepted = Car_Lap_Task_Set_Stop_Delay((uint32_t)value);
             if (accepted) car_lap_stop_delay_ms = value;
+        } else if (parameter_id == CAR_LAP_COUNTS_PER_METER && isfinite(value)) {
+            accepted = Car_Lap_Task_Set_Counts_Per_Meter(value);
+            if (accepted) car_lap_counts_per_meter = value;
         } else if (parameter_id == BOARD_ROLE && isfinite(value) && value == floorf(value) &&
                    value >= (float)APP_ROLE_CAR && value <= (float)APP_ROLE_ARM) {
             accepted = App_Role_Set_Persisted((app_role_t)(uint8_t)value);
@@ -1931,7 +2099,7 @@ void ANO_Host_Init(void)
     if (host_baud_rate != huart1.Init.BaudRate) apply_baud_rate(host_baud_rate);
     else HAL_UART_Receive_IT(&huart1, &rx_byte, 1U);
 }
-void ANO_Host_Process(void) { while (rx_head != rx_tail) { uint8_t b = rx_queue[rx_head]; rx_head = (rx_head + 1U) % ANO_RX_QUEUE_SIZE; feed(b); } if (App_Role_Get() == APP_ROLE_ARM) process_arm_debug(); if (pending_baud_rate != 0U && (int32_t)(HAL_GetTick() - baud_switch_at_ms) >= 0 && !tx_active && tx_count == 0U) { uint32_t baud_rate = pending_baud_rate; pending_baud_rate = 0U; apply_baud_rate(baud_rate); } if (App_Role_Get() == APP_ROLE_CAR && HAL_GetTick() - last_imu_ms >= ANO_IMU_PERIOD_MS) { last_imu_ms = HAL_GetTick(); send_imu(); } if (HAL_GetTick() - last_control_telemetry_ms >= 20U) { last_control_telemetry_ms = HAL_GetTick(); if (App_Role_Get() == APP_ROLE_CAR) { send_car_lap_status(); send_control_telemetry(); send_tracking_diagnostic(); } else { send_stepper_feedforward_diagnostic(); send_arm_debug_diagnostic(); } } if (App_Role_Get() == APP_ROLE_CAR && HAL_GetTick() - last_telemetry_ms >= 100U) { last_telemetry_ms = HAL_GetTick(); send_telemetry(); } if (HAL_GetTick() - last_diagnostic_ms >= 500U) { last_diagnostic_ms = HAL_GetTick(); send_storage_diagnostic(); } }
+void ANO_Host_Process(void) { while (rx_head != rx_tail) { uint8_t b = rx_queue[rx_head]; rx_head = (rx_head + 1U) % ANO_RX_QUEUE_SIZE; feed(b); } if (App_Role_Get() == APP_ROLE_ARM) process_arm_debug(); if (pending_baud_rate != 0U && (int32_t)(HAL_GetTick() - baud_switch_at_ms) >= 0 && !tx_active && tx_count == 0U) { uint32_t baud_rate = pending_baud_rate; pending_baud_rate = 0U; apply_baud_rate(baud_rate); } if (App_Role_Get() == APP_ROLE_CAR && HAL_GetTick() - last_imu_ms >= ANO_IMU_PERIOD_MS) { last_imu_ms = HAL_GetTick(); send_imu(); } if (HAL_GetTick() - last_control_telemetry_ms >= 20U) { last_control_telemetry_ms = HAL_GetTick(); if (App_Role_Get() == APP_ROLE_CAR) { send_control_telemetry(); send_tracking_diagnostic(); } else { send_stepper_feedforward_diagnostic(); send_arm_debug_diagnostic(); } } if (App_Role_Get() == APP_ROLE_CAR && HAL_GetTick() - last_telemetry_ms >= 100U) { last_telemetry_ms = HAL_GetTick(); send_telemetry(); } if (HAL_GetTick() - last_diagnostic_ms >= 500U) { last_diagnostic_ms = HAL_GetTick(); send_storage_diagnostic(); } }
 void ANO_Host_UART_RxCplt_Callback(void) { uint8_t next = (rx_tail + 1U) % ANO_RX_QUEUE_SIZE; if (next != rx_head) { rx_queue[rx_tail] = rx_byte; rx_tail = next; } HAL_UART_Receive_IT(&huart1, &rx_byte, 1U); }
 void ANO_Host_UART_TxCplt_Callback(void) { if (tx_active && tx_count) { tx_head = (tx_head + 1U) % ANO_TX_QUEUE_DEPTH; tx_count--; } tx_active = 0U; start_tx(); }
 void ANO_Host_UART_Error_Callback(void) { tx_active = 0U; HAL_UART_Receive_IT(&huart1, &rx_byte, 1U); }

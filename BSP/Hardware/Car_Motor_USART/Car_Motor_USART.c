@@ -7,6 +7,7 @@
 #include "ANO_Host.h"
 #include "App_Role.h"
 #include "Board_Link.h"
+#include "WheelTec.h"
 
 #include <stdio.h>
 #include <stdarg.h>
@@ -366,6 +367,11 @@ static void Car_Motor_Parse_Frame(const char *frame)
     if (parsed)
     {
         car_motor_telemetry.last_driver_frame = (uint8_t)driver_frame;
+        if (strncmp(frame, "MAll:", 5U) == 0)
+        {
+            car_motor_telemetry.total_encoder_valid = 1U;
+            car_motor_telemetry.total_encoder_ms = HAL_GetTick();
+        }
     }
     else
     {
@@ -522,7 +528,7 @@ void Car_Motor_UART_Error_Callback(void)
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 {
     if (huart->Instance == USART1) { ANO_Host_UART_RxCplt_Callback(); return; }
-    if (Board_Link_Is_UART(huart)) { Board_Link_UART_RxCplt_Callback(); return; }
+    if (App_Role_Get() == APP_ROLE_CAR && huart->Instance == USART2) { WheelTec_UART_RxCplt_Callback(); return; }
     if (App_Role_Get() == APP_ROLE_ARM && huart->Instance == USART2) { Tracking_Link_UART_RxCplt_Callback(); return; }
 #if APP_ENABLE_CAR_MOTOR
     if (App_Role_Get() == APP_ROLE_CAR && huart->Instance == USART3)
@@ -550,7 +556,6 @@ void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t size)
 void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart)
 {
     if (huart->Instance == USART1) { ANO_Host_UART_TxCplt_Callback(); return; }
-    if (Board_Link_Is_UART(huart)) { Board_Link_UART_TxCplt_Callback(); return; }
 #if APP_ENABLE_CAR_MOTOR
     if (App_Role_Get() == APP_ROLE_CAR && huart->Instance == USART3)
     {
@@ -571,7 +576,7 @@ void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart)
 void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart)
 {
     if (huart->Instance == USART1) { ANO_Host_UART_Error_Callback(); return; }
-    if (Board_Link_Is_UART(huart)) { Board_Link_UART_Error_Callback(); return; }
+    if (App_Role_Get() == APP_ROLE_CAR && huart->Instance == USART2) { WheelTec_UART_Error_Callback(); return; }
     if (App_Role_Get() == APP_ROLE_ARM && huart->Instance == USART2) { Tracking_Link_UART_Error_Callback(); return; }
 #if APP_ENABLE_CAR_MOTOR
     if (App_Role_Get() == APP_ROLE_CAR && huart->Instance == USART3)

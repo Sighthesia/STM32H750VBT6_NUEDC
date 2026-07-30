@@ -19,6 +19,8 @@ typedef struct
     car_lap_state_t state;
     uint32_t elapsed_ms;
     uint32_t stop_delay_ms;
+    float distance_m;
+    float average_speed_mps;
     uint8_t gray_state;
 } car_lap_status_t;
 
@@ -29,6 +31,8 @@ bool Car_Lap_Task_Stop(void);
 bool Car_Lap_Task_Clear(void);
 bool Car_Lap_Task_Set_Stop_Delay(uint32_t delay_ms);
 uint32_t Car_Lap_Task_Get_Stop_Delay(void);
+bool Car_Lap_Task_Set_Counts_Per_Meter(float counts_per_meter);
+float Car_Lap_Task_Get_Counts_Per_Meter(void);
 void Car_Lap_Task_Get_Status(car_lap_status_t *status);
 
 #endif /* CAR_LAP_TASK_H */

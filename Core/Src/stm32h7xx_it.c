@@ -22,6 +22,7 @@
 #include "stm32h7xx_it.h"
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "Board_Link.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -232,6 +233,15 @@ void DMA1_Stream1_IRQHandler(void)
   /* USER CODE END DMA1_Stream1_IRQn 1 */
 }
 
+void EXTI3_IRQHandler(void)
+{
+  if (__HAL_GPIO_EXTI_GET_IT(GPIO_PIN_3) != 0U)
+  {
+    __HAL_GPIO_EXTI_CLEAR_IT(GPIO_PIN_3);
+    Board_Link_NSS_Falling_Callback();
+  }
+}
+
 /**
   * @brief This function handles EXTI line[9:5] interrupts.
   */
@@ -301,6 +311,11 @@ void UART5_IRQHandler(void)
   /* USER CODE BEGIN UART5_IRQn 1 */
 
   /* USER CODE END UART5_IRQn 1 */
+}
+
+void SPI3_IRQHandler(void)
+{
+  HAL_SPI_IRQHandler(&hspi3);
 }
 
 /* USER CODE BEGIN 1 */

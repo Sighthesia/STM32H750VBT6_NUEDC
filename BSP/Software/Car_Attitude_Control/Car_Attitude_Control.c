@@ -2,8 +2,8 @@
 
 #include "Car_Motor_USART.h"
 #include "Gray_Sensor.h"
-#include "JY61P.h"
 #include "PID.h"
+#include "WheelTec.h"
 #include "main.h"
 
 #include <math.h>
@@ -11,8 +11,7 @@
 
 #define CAR_CONTROL_PERIOD_S             0.01f
 #define CAR_CONTROL_IMU_TIMEOUT_MS       50U
-#define CAR_CONTROL_GYRO_SCALE_DPS       (2000.0f / 32768.0f)
-#define CAR_CONTROL_ANGLE_SCALE_DEG       (180.0f / 32768.0f)
+#define CAR_CONTROL_RAD_TO_DEG            57.2957795f
 #define CAR_CONTROL_LINE_PERIOD_S         0.01f
 #define CAR_CONTROL_LINE_D_FILTER         0.35f
 #define CAR_CONTROL_CURVE_SPEED_REDUCTION 0.55f
@@ -30,6 +29,7 @@ typedef struct
 } car_ladrc_t;
 
 static car_attitude_control_config_t config;
+static car_tracking_config_t tracking_config;
 static car_attitude_control_debug_t debug;
 static PIDController heading_pid;
 static PIDController rate_pid;
@@ -37,6 +37,7 @@ static car_ladrc_t rate_ladrc;
 static uint32_t last_sequence;
 static uint32_t last_sample_ms;
 static float line_error_previous;
+static float line_error_filtered;
 static float line_derivative_filtered;
 static float tracking_target_rate;
 static float tracking_base_speed;
@@ -80,6 +81,11 @@ static float wrap_angle(float angle)
     return angle;
 }
 
+static float apply_axis_direction(float value, float inverted)
+{
+    return inverted != 0.0f ? -value : value;
+}
+
 static void reset_controllers(void)
 {
     PIDController_Init(&heading_pid);
@@ -92,6 +98,7 @@ static void reset_controllers(void)
 static void reset_tracking_state(void)
 {
     line_error_previous = 0.0f;
+    line_error_filtered = 0.0f;
     line_derivative_filtered = 0.0f;
     tracking_target_rate = 0.0f;
     tracking_base_speed = 0.0f;
@@ -99,6 +106,13 @@ static void reset_tracking_state(void)
     line_lost_started_ms = 0U;
     line_lost_active = 0U;
     line_stop_latched = 0U;
+}
+
+static float slew_target_rate(float target)
+{
+    const float maximum_step = tracking_config.target_rate_slew_deg_s2 * CAR_CONTROL_PERIOD_S;
+    return tracking_target_rate + clampf(target - tracking_target_rate,
+                                         -maximum_step, maximum_step);
 }
 
 static void configure_pid(void)
@@ -181,10 +195,28 @@ void Car_Attitude_Control_Reset_Defaults(void)
     config.step_angle_amplitude = 45.0f;
     config.step_hold_ms = 2000.0f;
     config.step_angle_feedback_inverted = 1.0f;
+    tracking_config.direction_inverted = 0.0f;
+    tracking_config.error_filter_time_s = 0.10f;
+    tracking_config.target_rate_slew_deg_s2 = 600.0f;
     configure_pid();
-    JY61P_Set_Axis_Inverted(false, false, false);
     reset_controllers();
     reset_tracking_state();
+}
+
+bool Car_Attitude_Control_Apply_Tracking_Config(const car_tracking_config_t *next)
+{
+    if (next == NULL || !isfinite(next->direction_inverted) ||
+        !isfinite(next->error_filter_time_s) ||
+        !isfinite(next->target_rate_slew_deg_s2) ||
+        (next->direction_inverted != 0.0f && next->direction_inverted != 1.0f) ||
+        next->error_filter_time_s < 0.0f || next->error_filter_time_s > 2.0f ||
+        next->target_rate_slew_deg_s2 <= 0.0f || next->target_rate_slew_deg_s2 > 20000.0f)
+    {
+        return false;
+    }
+    tracking_config = *next;
+    reset_tracking_state();
+    return true;
 }
 
 bool Car_Attitude_Control_Apply_Config(const car_attitude_control_config_t *next)
@@ -216,9 +248,6 @@ bool Car_Attitude_Control_Apply_Config(const car_attitude_control_config_t *next
 
     config = *next;
     configure_pid();
-    JY61P_Set_Axis_Inverted(config.invert_x != 0.0f,
-                            config.invert_y != 0.0f,
-                            config.invert_z != 0.0f);
     reset_controllers();
     reset_tracking_state();
     return true;
@@ -261,13 +290,16 @@ static bool update_tracking_target(uint32_t now)
     debug.status |= CAR_ATTITUDE_STATUS_TRACKING_ONLINE;
     if (sensor_state == 0x0FU)
     {
-        line_error_previous = 0.0f;
-        line_derivative_filtered = 0.0f;
         line_lost_active = 0U;
         line_stop_latched = 0U;
-        tracking_target_rate = 0.0f;
+        line_error_filtered += CAR_CONTROL_PERIOD_S /
+                               (tracking_config.error_filter_time_s + CAR_CONTROL_PERIOD_S) *
+                               -line_error_filtered;
+        line_error_previous = line_error_filtered;
+        line_derivative_filtered = 0.0f;
+        tracking_target_rate = slew_target_rate(0.0f);
         tracking_base_speed = config.base_speed;
-        debug.line_offset = 0.0f;
+        debug.line_offset = line_error_filtered;
         return true;
     }
     if (sensor_state == 0U)
@@ -283,8 +315,11 @@ static bool update_tracking_target(uint32_t now)
         }
         if ((uint32_t)(now - line_lost_started_ms) <= CAR_CONTROL_LOST_STOP_MS)
         {
-            tracking_target_rate = -(float)last_line_sign * config.max_rate * CAR_CONTROL_SEARCH_RATE_SCALE;
+            const float direction = tracking_config.direction_inverted != 0.0f ? -1.0f : 1.0f;
+            tracking_target_rate = slew_target_rate(direction * (float)last_line_sign *
+                                                    config.max_rate * CAR_CONTROL_SEARCH_RATE_SCALE);
             tracking_base_speed = config.base_speed * CAR_CONTROL_SEARCH_SPEED_SCALE;
+            debug.line_offset = line_error_filtered;
             debug.status |= CAR_ATTITUDE_STATUS_LINE_SEARCH;
             return true;
         }
@@ -300,7 +335,11 @@ static bool update_tracking_target(uint32_t now)
             active_count++;
         }
     }
-    const float error = (float)weighted_position / (3.0f * (float)active_count);
+    const float raw_error = (float)weighted_position / (3.0f * (float)active_count);
+    const float filter_alpha = CAR_CONTROL_PERIOD_S /
+                               (tracking_config.error_filter_time_s + CAR_CONTROL_PERIOD_S);
+    line_error_filtered += filter_alpha * (raw_error - line_error_filtered);
+    const float error = line_error_filtered;
     const float derivative = line_lost_active != 0U ? 0.0f :
                              (error - line_error_previous) / CAR_CONTROL_LINE_PERIOD_S;
     const float magnitude = fabsf(error);
@@ -317,34 +356,39 @@ static bool update_tracking_target(uint32_t now)
     line_derivative_filtered += CAR_CONTROL_LINE_D_FILTER *
                                 (derivative - line_derivative_filtered);
     line_error_previous = error;
-    tracking_target_rate = -(config.heading_kp * error * 30.0f +
-                             config.heading_kd * line_derivative_filtered * 30.0f);
-    tracking_target_rate = clampf(tracking_target_rate, -config.max_rate, config.max_rate);
+    const float direction = tracking_config.direction_inverted != 0.0f ? -1.0f : 1.0f;
+    float requested_rate = direction * (config.heading_kp * error * 30.0f +
+                                        config.heading_kd * line_derivative_filtered * 30.0f);
+    requested_rate = clampf(requested_rate, -config.max_rate, config.max_rate);
+    tracking_target_rate = slew_target_rate(requested_rate);
     tracking_base_speed = config.base_speed * clampf(
         1.0f - CAR_CONTROL_CURVE_SPEED_REDUCTION * magnitude -
         0.20f * fabsf(tracking_target_rate) / config.max_rate,
         CAR_CONTROL_MIN_SPEED_SCALE, 1.0f);
     debug.line_offset = error;
-    debug.heading_p = -config.heading_kp * error * 30.0f;
+    debug.heading_p = direction * config.heading_kp * error * 30.0f;
     debug.heading_i = 0.0f;
-    debug.heading_d = -config.heading_kd * line_derivative_filtered * 30.0f;
+    debug.heading_d = direction * config.heading_kd * line_derivative_filtered * 30.0f;
     return true;
 }
 
 bool Car_Attitude_Control_Start_Step(car_attitude_step_mode_t mode)
 {
-    const jy61p_status_t *imu_status = JY61P_Get_Status();
+    wheeltec_status_t imu_status;
+    wheeltec_ahrs_data_t ahrs;
+
+    WheelTec_Get_Status(&imu_status);
 
     if ((mode != CAR_ATTITUDE_STEP_RATE && mode != CAR_ATTITUDE_STEP_ANGLE) ||
-        !imu_status->sample_valid || !imu_status->available)
+        !imu_status.online || !WheelTec_Get_AHRS(&ahrs))
     {
         return false;
     }
     step_mode = mode;
     step_return_phase = 0U;
     step_phase_started_ms = HAL_GetTick();
-    step_start_heading = (float)JY61P_Get_Sample()->angle.z * CAR_CONTROL_ANGLE_SCALE_DEG;
-    last_sequence = imu_status->sequence;
+    step_start_heading = apply_axis_direction(ahrs.angle.z, config.invert_z) * CAR_CONTROL_RAD_TO_DEG;
+    last_sequence = ahrs.sequence;
     last_sample_ms = step_phase_started_ms;
     enabled = 1U;
     stopped = 0U;
@@ -377,6 +421,11 @@ car_attitude_control_config_t *Car_Attitude_Control_Get_Config(void)
     return &config;
 }
 
+car_tracking_config_t *Car_Attitude_Control_Get_Tracking_Config(void)
+{
+    return &tracking_config;
+}
+
 const car_attitude_control_debug_t *Car_Attitude_Control_Get_Debug(void)
 {
     return &debug;
@@ -384,13 +433,17 @@ const car_attitude_control_debug_t *Car_Attitude_Control_Get_Debug(void)
 
 void Car_Attitude_Control_Process(void)
 {
-    const jy61p_status_t *imu_status = JY61P_Get_Status();
+    wheeltec_status_t imu_status;
+    wheeltec_ahrs_data_t ahrs;
     uint32_t now = HAL_GetTick();
-    bool new_sample = imu_status->sample_valid && imu_status->sequence != last_sequence;
+
+    WheelTec_Get_Status(&imu_status);
+    bool sample_valid = imu_status.online && WheelTec_Get_AHRS(&ahrs);
+    bool new_sample = sample_valid && ahrs.sequence != last_sequence;
 
     debug.status = 0U;
     if (enabled) debug.status |= CAR_ATTITUDE_STATUS_ENABLED;
-    if (imu_status->sample_valid && (uint32_t)(now - last_sample_ms) <= CAR_CONTROL_IMU_TIMEOUT_MS)
+    if (sample_valid && (uint32_t)(now - last_sample_ms) <= CAR_CONTROL_IMU_TIMEOUT_MS)
     {
         debug.status |= CAR_ATTITUDE_STATUS_IMU_VALID;
     }
@@ -406,7 +459,7 @@ void Car_Attitude_Control_Process(void)
     }
     if (new_sample)
     {
-        last_sequence = imu_status->sequence;
+        last_sequence = ahrs.sequence;
         last_sample_ms = now;
         debug.status |= CAR_ATTITUDE_STATUS_IMU_VALID;
     }
@@ -432,9 +485,8 @@ void Car_Attitude_Control_Process(void)
         reset_controllers();
         return;
     }
-    const jy61p_sample_t *imu = JY61P_Get_Sample();
-    const float measured_heading = (float)imu->angle.z * CAR_CONTROL_ANGLE_SCALE_DEG;
-    const float measured_rate = (float)imu->angular_velocity.z * CAR_CONTROL_GYRO_SCALE_DPS;
+    const float measured_heading = apply_axis_direction(ahrs.angle.z, config.invert_z) * CAR_CONTROL_RAD_TO_DEG;
+    const float measured_rate = apply_axis_direction(ahrs.angular_velocity.z, config.invert_z) * CAR_CONTROL_RAD_TO_DEG;
     float target_heading = 0.0f;
     float heading_error = 0.0f;
 

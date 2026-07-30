@@ -31,6 +31,7 @@
 #include "Car_Motor_USART.h"
 #include "ANO_Host.h"
 #include "JY61P.h"
+#include "WheelTec.h"
 #include "Stepper_PID.h"
 #include "lcd_driver.h"
 #include "lcd_wegui_driver.h"
@@ -145,7 +146,7 @@ static void App_Peripheral_Init(void)
     Car_Lap_Task_Init();
 #endif
     Gray_Sensor_Init();
-    JY61P_Init();
+    WheelTec_Init();
   }
   else
   {
@@ -154,6 +155,7 @@ static void App_Peripheral_Init(void)
     ZDT_Stepper_Enable(zdt_stepper_motors[0], ZDT_STEPPER_ENABLE, ZDT_STEPPER_SYNC_DISABLE);
 #endif
     Tracking_Link_Init();
+    JY61P_Init();
   }
   Board_Link_Init();
   ANO_Host_Init();
@@ -176,6 +178,9 @@ static void App_Process(void)
     Car_Lap_Task_Process();
     Car_Attitude_Control_Process();
 #endif
+  }
+  else
+  {
     JY61P_Process();
   }
   Board_Link_Process();

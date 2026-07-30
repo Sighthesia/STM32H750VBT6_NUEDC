@@ -41,6 +41,13 @@ typedef struct
     float step_angle_feedback_inverted;
 } car_attitude_control_config_t;
 
+typedef struct
+{
+    float direction_inverted;
+    float error_filter_time_s;
+    float target_rate_slew_deg_s2;
+} car_tracking_config_t;
+
 enum
 {
     CAR_ATTITUDE_STATUS_ENABLED = 1U << 0,
@@ -88,6 +95,8 @@ bool Car_Attitude_Control_Start_Step(car_attitude_step_mode_t mode);
 void Car_Attitude_Control_Cancel_Step(void);
 bool Car_Attitude_Control_Is_Enabled(void);
 car_attitude_control_config_t *Car_Attitude_Control_Get_Config(void);
+car_tracking_config_t *Car_Attitude_Control_Get_Tracking_Config(void);
+bool Car_Attitude_Control_Apply_Tracking_Config(const car_tracking_config_t *config);
 const car_attitude_control_debug_t *Car_Attitude_Control_Get_Debug(void);
 
 #endif /* CAR_ATTITUDE_CONTROL_H */

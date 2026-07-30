@@ -54,6 +54,7 @@ file(GLOB_RECURSE BSP_SOURCES CONFIGURE_DEPENDS
     "BSP/Hardware/WeGUI/*.c"
     "BSP/Hardware/ANO_Host/*.c"
     "BSP/Hardware/JY61P/*.c"
+    "BSP/Hardware/WheelTec/*.c"
     "BSP/Hardware/AT24C02/*.c"
     "BSP/Hardware/W25Qxx/*.c"
     "BSP/Hardware/Tracking_Link/*.c"
