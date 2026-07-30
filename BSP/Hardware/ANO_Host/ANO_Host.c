@@ -939,10 +939,19 @@ static void handle(uint8_t source, uint8_t id, const uint8_t *d, uint16_t n, uin
         bool accepted = false;
         uint16_t parameter_id = get_u16(d); float value = get_float(&d[2]); float *v = parameter(parameter_id);
         if (parameter_id == HOST_BAUD && isfinite(value) && value == (float)(uint32_t)value &&
-            baud_rate_is_valid((uint32_t)value) && storage_ready && save_storage((uint32_t)value)) {
-            pending_baud_rate = (uint32_t)value;
-            baud_switch_at_ms = HAL_GetTick() + ANO_BAUD_SWITCH_DELAY_MS;
-            accepted = true;
+            baud_rate_is_valid((uint32_t)value) && storage_ready) {
+            uint32_t requested_baud_rate = (uint32_t)value;
+
+            if (requested_baud_rate == host_baud_rate) {
+                accepted = true;
+            } else {
+                /* Queue the ACK before the blocking flash transaction exceeds the host timeout. */
+                send_check(source, id, sum, add);
+                if (save_storage(requested_baud_rate)) {
+                    pending_baud_rate = requested_baud_rate;
+                    baud_switch_at_ms = HAL_GetTick() + ANO_BAUD_SWITCH_DELAY_MS;
+                }
+            }
         } else if (parameter_id <= CAR_KD || (parameter_id >= CAR_TYPE && parameter_id < HOST_BAUD)) {
             accepted = write_car_parameter(parameter_id, value);
         } else if (parameter_id == CAR_DEBUG_CONTROL_MODE && isfinite(value) && (value == 0.0f || value == 1.0f)) {
