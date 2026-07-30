@@ -225,6 +225,21 @@ static bool Car_Motor_Format_Command(const char *format, ...)
     return length > 0 && (size_t)length < sizeof(command) && Car_Motor_Queue_Command(command, true);
 }
 
+static bool Car_Motor_Ensure_Telemetry_Upload(void)
+{
+    if (car_motor_telemetry.encoder_upload_active)
+    {
+        return true;
+    }
+    if (!Car_Motor_Set_Upload(true, true, true))
+    {
+        return false;
+    }
+
+    car_motor_telemetry.encoder_upload_active = 1U;
+    return true;
+}
+
 static bool Car_Motor_Start_Voltage_Measurement(const char *stop_command)
 {
     char commands[3][CAR_MOTOR_FRAME_MAX_LENGTH];
@@ -436,10 +451,13 @@ void Car_Motor_Process(void)
     uint32_t now = HAL_GetTick();
     if (car_motor_voltage_measurement_active &&
         (car_motor_telemetry.voltage_valid || now - car_motor_last_voltage_request_ms >= CAR_MOTOR_VOLTAGE_TIMEOUT_MS) &&
-        Car_Motor_Set_Upload(true, true, true))
+        Car_Motor_Ensure_Telemetry_Upload())
     {
-        car_motor_telemetry.encoder_upload_active = 1U;
         car_motor_voltage_measurement_active = 0U;
+    }
+    if (!car_motor_output_stopped)
+    {
+        (void)Car_Motor_Ensure_Telemetry_Upload();
     }
     if (!car_motor_voltage_measurement_active && car_motor_output_stopped)
     {
@@ -699,6 +717,7 @@ bool Car_Motor_Set_Speed(int16_t m1, int16_t m2, int16_t m3, int16_t m4)
     if (car_motor_reversed[1]) m2 = (int16_t)-m2;
     char command[CAR_MOTOR_FRAME_MAX_LENGTH];
     int length = snprintf(command, sizeof(command), "$spd:%d,%d,%d,%d#", m1, m2, m3, m4);
+    (void)Car_Motor_Ensure_Telemetry_Upload();
     bool queued = length > 0 && (size_t)length < sizeof(command) &&
                   Car_Motor_Queue_Latest_Speed(command);
     if (queued) car_motor_output_stopped = 0U;
@@ -720,6 +739,7 @@ bool Car_Motor_Set_PWM(int16_t m1, int16_t m2, int16_t m3, int16_t m4)
     }
     if (car_motor_reversed[0]) m1 = (int16_t)-m1;
     if (car_motor_reversed[1]) m2 = (int16_t)-m2;
+    (void)Car_Motor_Ensure_Telemetry_Upload();
     bool queued = Car_Motor_Format_Command("$pwm:%d,%d,%d,%d#", m1, m2, m3, m4);
     if (queued) car_motor_output_stopped = 0U;
     return queued;
