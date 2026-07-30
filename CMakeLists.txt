@@ -61,6 +61,7 @@ file(GLOB_RECURSE BSP_SOURCES CONFIGURE_DEPENDS
     "BSP/Hardware/Board_Link/*.c"
     "BSP/Software/PID/*.c"
     "BSP/Software/Car_Attitude_Control/*.c"
+    "BSP/Software/Car_Lap_Task/*.c"
     "BSP/Software/Stepper_Control/Stepper_PID.c"
     "BSP/Software/G030_I2C_Link/*.c"
     "BSP/Software/App_Role/*.c"

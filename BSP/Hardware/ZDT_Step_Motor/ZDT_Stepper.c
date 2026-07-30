@@ -157,9 +157,23 @@ void ZDT_Stepper_Init(void)
             uart_motors[uart_idx].motors[m].huart = huart;
             uart_motors[uart_idx].motors[m].hdma_rx = hdma_rx;
             memset(uart_motors[uart_idx].motors[m].rx_buffer, 0, sizeof(uart_motors[uart_idx].motors[m].rx_buffer));
+            uart_motors[uart_idx].motors[m].data.microstepping = 16U;
             uart_motors[uart_idx].motor_count++;
             // 保存指针
             zdt_stepper_motors[i] = &uart_motors[uart_idx].motors[m];
+        }
+    }
+    for (uint8_t i = 0U; i < uart_count; i++)
+    {
+        if (uart_motors[i].motor_count > 0U)
+        {
+            (void)HAL_UARTEx_ReceiveToIdle_DMA(uart_motors[i].huart,
+                                               uart_motors[i].motors[0].rx_buffer,
+                                               sizeof(uart_motors[i].motors[0].rx_buffer));
+            if (uart_motors[i].huart->hdmarx != NULL)
+            {
+                __HAL_DMA_DISABLE_IT(uart_motors[i].huart->hdmarx, DMA_IT_HT);
+            }
         }
     }
 }
@@ -268,6 +282,12 @@ void assign_message_based_on_command(uint8_t command_id, char *message, size_t m
     case 0x84:
         snprintf(message, message_size, "修改细分");
         break;
+    case 0x9A:
+        snprintf(message, message_size, "触发回零");
+        break;
+    case 0x9C:
+        snprintf(message, message_size, "中断回零");
+        break;
     default:
         snprintf(message, message_size, "未知的指令");
         break;
@@ -278,9 +298,9 @@ void receive_motor_status(ZDTStepperMotor *motor, uint8_t *data, uint16_t size)
 {
     char message[50];       // 字符串缓冲区
     char statu_message[13]; // 状态字符串缓冲区
-    if (data == NULL || motor == NULL)
+    if (data == NULL || motor == NULL || size < 4U)
         return; // 检查输入是否为空
-    if (size == 4 && data[1] != 0x3A)
+    if (size == 4 && data[1] != 0x3A && data[1] != 0x3B)
     {
         uint8_t motor_id = data[0];   // 电机地址
         uint8_t command_id = data[1]; // 指令标识
@@ -292,11 +312,14 @@ void receive_motor_status(ZDTStepperMotor *motor, uint8_t *data, uint16_t size)
             return; // 校验失败，返回
         }
         snprintf(statu_message, sizeof(statu_message), (status == 0x02) ? "执行成功" : "执行失败");
+        motor->data.last_command = command_id;
+        motor->data.last_command_status = status;
+        motor->data.last_command_ms = HAL_GetTick();
         assign_message_based_on_command(command_id, message, sizeof(message));
         printf("电机 %d:%s:%s\n", motor_id, message, statu_message);
         // 这里可以根据需要进一步处理接收到的指令
     }
-    else
+    else if (size >= 4U)
     {
         uint8_t motor_id = data[0];        // 电机地址
         uint8_t command_id = data[1];      // 指令标识
@@ -314,72 +337,87 @@ void receive_motor_status(ZDTStepperMotor *motor, uint8_t *data, uint16_t size)
         switch (command_id)
         {
         case 0x1F:
+            if (size < 7U) break;
             motor->data.firmware_version = (data[2] << 8) | data[3]; // 固件版本
             motor->data.hardware_version = (data[4] << 8) | data[5]; // 硬件版本
             snprintf(message + strlen(message), sizeof(message) - strlen(message), "固件版本: %d, 硬件版本: %d", motor->data.firmware_version, motor->data.hardware_version);
             break;
 
         case 0x20:
+            if (size < 7U) break;
             motor->data.phase_resistance = (data[2] << 8) | data[3]; // 相电阻
             motor->data.phase_inductance = (data[4] << 8) | data[5]; // 相电感
             snprintf(message + strlen(message), sizeof(message) - strlen(message), "相电阻: %d mΩ, 相电感: %d µH", motor->data.phase_resistance, motor->data.phase_inductance);
             break;
 
         case 0x24:
+            if (size < 5U) break;
             motor->data.bus_voltage = (data[2] << 8) | data[3];
             snprintf(message + strlen(message), sizeof(message) - strlen(message), "总线电压: %d mV", motor->data.bus_voltage);
             break;
 
         case 0x26:
+            if (size < 5U) break;
             motor->data.bus_average_current = (data[2] << 8) | data[3];
             snprintf(message + strlen(message), sizeof(message) - strlen(message), "总线平均电流: %d mA", motor->data.bus_average_current);
             break;
 
         case 0x27:
+            if (size < 5U) break;
             motor->data.phase_current = (data[2] << 8) | data[3];
             snprintf(message + strlen(message), sizeof(message) - strlen(message), "相电流: %d mA", motor->data.phase_current);
             break;
 
         case 0x29:
+            if (size < 5U) break;
             motor->data.encoder_raw_value = (data[2] << 8) | data[3];
             snprintf(message + strlen(message), sizeof(message) - strlen(message), "编码器原始值: %d", motor->data.encoder_raw_value);
             break;
 
         case 0x31:
+            if (size < 5U) break;
             motor->data.encoder_calibrated_value = (data[2] << 8) | data[3];
             snprintf(message + strlen(message), sizeof(message) - strlen(message), "经过线性化校准后的编码器值: %d", motor->data.encoder_calibrated_value);
             break;
 
         case 0x33:
-            temp = (data[3] << 24) | (data[4] << 16) | (data[5] << 8) | data[6]; // 组合四个字节
-            motor->data.target_position = (data[2] == 0x01) ? -((float)temp) / 10.0f : ((float)temp) / 10.0f;
+            if (size < 8U) break;
+            temp = ((uint32_t)data[3] << 24) | ((uint32_t)data[4] << 16) | ((uint32_t)data[5] << 8) | data[6]; // 组合四个字节
+            motor->data.target_position = (data[2] == 0x01) ? -((float)temp * 360.0f) / 65536.0f : ((float)temp * 360.0f) / 65536.0f;
             snprintf(message + strlen(message), sizeof(message) - strlen(message), "目标位置: %.1f °", motor->data.target_position);
             break;
 
         case 0x35:
+            if (size < 6U) break;
             temp = (data[3] << 8) | data[4]; // 组合两个字节
             motor->data.current_speed = (data[2] == 0x01) ? -((float)temp) / 10.0f : ((float)temp) / 10.0f;
+            motor->data.current_speed_ms = HAL_GetTick();
             snprintf(message + strlen(message), sizeof(message) - strlen(message), "实时转速: %.1f RPM", motor->data.current_speed);
             break;
 
         case 0x36:
-            temp = (data[3] << 24) | (data[4] << 16) | (data[5] << 8) | data[6]; // 组合四个字节
-            motor->data.current_position = (data[2] == 0x01) ? -((float)temp) / 10.0f : ((float)temp) / 10.0f;
+            if (size < 8U) break;
+            temp = ((uint32_t)data[3] << 24) | ((uint32_t)data[4] << 16) | ((uint32_t)data[5] << 8) | data[6]; // 组合四个字节
+            motor->data.current_position = (data[2] == 0x01) ? -((float)temp * 360.0f) / 65536.0f : ((float)temp * 360.0f) / 65536.0f;
+            motor->data.current_position_ms = HAL_GetTick();
             snprintf(message + strlen(message), sizeof(message) - strlen(message), "实时位置: %.1f °", motor->data.current_position);
             break;
 
         case 0x37:
-            temp = (data[3] << 24) | (data[4] << 16) | (data[5] << 8) | data[6]; // 组合四个字节
-            motor->data.position_error = (data[2] == 0x01) ? -((float)temp) / 10.0f : ((float)temp) / 10.0f;
+            if (size < 8U) break;
+            temp = ((uint32_t)data[3] << 24) | ((uint32_t)data[4] << 16) | ((uint32_t)data[5] << 8) | data[6]; // 组合四个字节
+            motor->data.position_error = (data[2] == 0x01) ? -((float)temp * 360.0f) / 65536.0f : ((float)temp * 360.0f) / 65536.0f;
             snprintf(message + strlen(message), sizeof(message) - strlen(message), "位置误差: %.1f °", motor->data.position_error);
             break;
 
         case 0x39:
+            if (size < 5U) break;
             motor->data.driver_temperature = (data[2] == 0x01) ? -((int8_t)data[3]) : ((int8_t)data[3]);
             snprintf(message + strlen(message), sizeof(message) - strlen(message), "驱动器实时温度: %.d °C", motor->data.driver_temperature);
             break;
 
         case 0x3A:
+            if (size < 4U) break;
             motor->data.motor_status_flags = data[2];
             motor->data.motor_enabled = (data[2] & 0x01);
             motor->data.motor_position_reached = (data[2] & 0x02) >> 1;
@@ -388,13 +426,22 @@ void receive_motor_status(ZDTStepperMotor *motor, uint8_t *data, uint16_t size)
             snprintf(message + strlen(message), sizeof(message) - strlen(message), "status=0x%02X", motor->data.motor_status_flags);
             break;
 
+        case 0x3B:
+            if (size < 4U) break;
+            motor->data.homing_status_flags = data[2];
+            motor->data.homing_status_ms = HAL_GetTick();
+            snprintf(message + strlen(message), sizeof(message) - strlen(message), "homing=0x%02X", motor->data.homing_status_flags);
+            break;
+
         default:
             snprintf(message + strlen(message), sizeof(message) - strlen(message), "未知命令");
             break;
         }
 
-        // 最后统一打印
-        printf("%s\n", message);
+        if (command_id != 0x35U && command_id != 0x36U && command_id != 0x3BU)
+        {
+            printf("%s\n", message);
+        }
     }
 }
 
@@ -420,8 +467,12 @@ void ZDT_Stepper_USRT_RX_callback(UART_HandleTypeDef *huart, uint16_t Size)
             // 重新启动DMA接收
             if (uart_motors[i].motor_count > 0)
             {
+                memset(uart_motors[i].motors[0].rx_buffer, 0, sizeof(uart_motors[i].motors[0].rx_buffer));
                 HAL_UARTEx_ReceiveToIdle_DMA(huart, uart_motors[i].motors[0].rx_buffer, sizeof(uart_motors[i].motors[0].rx_buffer));
-                // 移除特定DMA中断的禁用，由用户在应用层自行处理
+                if (huart->hdmarx != NULL)
+                {
+                    __HAL_DMA_DISABLE_IT(huart->hdmarx, DMA_IT_HT);
+                }
             }
             return;
         }
@@ -496,14 +547,28 @@ void ZDT_Stepper_UART_TxCplt_Callback(UART_HandleTypeDef *huart)
 void ZDT_Stepper_UART_Error_Callback(UART_HandleTypeDef *huart)
 {
     ZDTStepperTxState *state = ZDT_Stepper_Get_Tx_State(huart);
-    if (!state || huart->gState == HAL_UART_STATE_BUSY_TX)
+    if (!state)
     {
         return;
     }
-
-    state->busy = 0U;
-    state->transmit_errors++;
-    ZDT_Stepper_Start_Next_Transmit(state);
+    for (uint8_t i = 0U; i < uart_count; i++)
+    {
+        if (uart_motors[i].huart == huart && uart_motors[i].motor_count > 0U)
+        {
+            uart_motors[i].motors[0].data.current_position_ms = 0U;
+            memset(uart_motors[i].motors[0].rx_buffer, 0, sizeof(uart_motors[i].motors[0].rx_buffer));
+            (void)HAL_UARTEx_ReceiveToIdle_DMA(huart, uart_motors[i].motors[0].rx_buffer,
+                                               sizeof(uart_motors[i].motors[0].rx_buffer));
+            if (huart->hdmarx != NULL) __HAL_DMA_DISABLE_IT(huart->hdmarx, DMA_IT_HT);
+            break;
+        }
+    }
+    if (huart->gState != HAL_UART_STATE_BUSY_TX)
+    {
+        state->busy = 0U;
+        state->transmit_errors++;
+        ZDT_Stepper_Start_Next_Transmit(state);
+    }
 }
 /* 自定义部分结束 */
 
@@ -537,6 +602,17 @@ void ZDT_Stepper_Set_Speed(ZDTStepperMotor *motor, uint8_t dir, float speed_f, u
     if (!motor)
         return;
 
+    if (motor->data.limits_enabled != 0U)
+    {
+        if (motor->data.current_position_ms == 0U ||
+            (dir == ZDT_STEPPER_CCW && motor->data.current_position >= motor->data.limit_max) ||
+            (dir == ZDT_STEPPER_CW && motor->data.current_position <= motor->data.limit_min))
+        {
+            ZDT_Stepper_stop(motor, sync_flag);
+            return;
+        }
+    }
+
     uint16_t speed = (uint16_t)(speed_f * 10); // 转换为两个字节的数据
     // 命令格式：地址 + 0xF6 + 方向 + 速度高 + 速度低 + 加速度档位 + 多机同步标志 + 校验字节
     uint8_t command[8];
@@ -564,17 +640,26 @@ void ZDT_Stepper_Set_Speed(ZDTStepperMotor *motor, uint8_t dir, float speed_f, u
  */
 void ZDT_Stepper_Set_position(ZDTStepperMotor *motor, uint8_t dir, float speed_f, float position_angle_f, uint8_t position_mode, uint8_t sync_flag)
 {
+    ZDT_Stepper_Set_position_accel(motor, dir, speed_f, 0U, position_angle_f, position_mode, sync_flag);
+}
+
+void ZDT_Stepper_Set_position_accel(ZDTStepperMotor *motor, uint8_t dir, float speed_f, uint8_t accel, float position_angle_f, uint8_t position_mode, uint8_t sync_flag)
+{
     if (!motor)
         return;
 
-    // 1.8°/step, 16细分, 一圈脉冲数 = 360/1.8*16 = 3200
-    // 角度转脉冲数: pulse = angle / 360 * 3200
-    float pulses_per_circle = 360.0f / 1.8f * 16.0f;                                           // 3200
+    if (motor->data.limits_enabled != 0U && position_mode == ZDT_STEPPER_ABS_POS_MODE)
+    {
+        float target = dir == ZDT_STEPPER_CCW ? position_angle_f : -position_angle_f;
+        if (target < motor->data.limit_min || target > motor->data.limit_max)
+            return;
+    }
+
+    uint8_t microstepping = motor->data.microstepping == 0U ? 16U : motor->data.microstepping;
+    float pulses_per_circle = 360.0f / 1.8f * (float)microstepping;
     uint32_t pulse_count = (uint32_t)((position_angle_f / 360.0f) * pulses_per_circle + 0.5f); // 四舍五入
 
     uint16_t speed = (uint16_t)(speed_f * 10); // 速度乘以 10
-    uint8_t accel_accel = 0;                   // 默认加速度档位为0（直线加减速）
-
     // 命令格式：地址 + 0xFD + 方向 + 速度高 + 速度低 + 加速度档位 + 脉冲数(4字节) + 相对/绝对 + 同步 + 校验
     uint8_t command[13];
     command[0] = motor->id;                  // 地址
@@ -582,7 +667,7 @@ void ZDT_Stepper_Set_position(ZDTStepperMotor *motor, uint8_t dir, float speed_f
     command[2] = dir;                        // 方向 (01: CCW, 00: CW)
     command[3] = (speed >> 8) & 0xFF;        // 速度高位
     command[4] = speed & 0xFF;               // 速度低位
-    command[5] = accel_accel;                // 加速度档位（1字节）
+    command[5] = accel;                      // 加速度档位（1字节）
     command[6] = (pulse_count >> 24) & 0xFF; // 脉冲数高位
     command[7] = (pulse_count >> 16) & 0xFF; // 脉冲数次高位
     command[8] = (pulse_count >> 8) & 0xFF;  // 脉冲数次低位
@@ -609,6 +694,15 @@ void ZDT_Stepper_Set_T_position(ZDTStepperMotor *motor, uint8_t dir, float speed
 {
     if (!motor)
         return;
+
+    if (motor->data.limits_enabled != 0U && position_mode == ZDT_STEPPER_ABS_POS_MODE)
+    {
+        uint8_t microstepping = motor->data.microstepping == 0U ? 16U : motor->data.microstepping;
+        float angle = (float)pulse_count * 360.0f / (200.0f * (float)microstepping);
+        float target = dir == ZDT_STEPPER_CCW ? angle : -angle;
+        if (target < motor->data.limit_min || target > motor->data.limit_max)
+            return;
+    }
 
     uint16_t speed = (uint16_t)(speed_f * 10); // 速度乘以 10
 
@@ -742,6 +836,15 @@ void ZDT_Stepper_trigger_zero_return(ZDTStepperMotor *motor, uint8_t return_mode
     ZDT_Stepper_UART_Send_Data(motor, command, 5);
 }
 
+void ZDT_Stepper_abort_zero_return(ZDTStepperMotor *motor)
+{
+    if (!motor)
+        return;
+
+    uint8_t command[4] = {motor->id, 0x9C, 0x48, 0x6B};
+    ZDT_Stepper_UART_Send_Data(motor, command, sizeof(command));
+}
+
 /**
  * @brief 解除堵转保护
  *
@@ -783,7 +886,7 @@ void ZDT_Stepper_trigger_encoder_calibration(ZDTStepperMotor *motor)
 
 void ZDT_Stepper_set_microstepping(ZDTStepperMotor *motor, uint8_t store_flag, uint8_t microstepping_value)
 {
-    if (!motor)
+    if (!motor || microstepping_value == 0U)
         return;
 
     // 命令格式
@@ -795,6 +898,7 @@ void ZDT_Stepper_set_microstepping(ZDTStepperMotor *motor, uint8_t store_flag, u
     command[4] = microstepping_value; // 细分值
     command[5] = 0x6B;                // 校验字节
     ZDT_Stepper_UART_Send_Data(motor, command, 6);
+    motor->data.microstepping = microstepping_value;
 }
 
 /**
@@ -972,4 +1076,23 @@ void ZDT_Stepper_Read_motor_status_flags(ZDTStepperMotor *motor)
     command[1] = 0x3A;         // 命令头
     command[2] = 0x6B;         // 校验字节
     ZDT_Stepper_UART_Send_Data(motor, command, 3);
+}
+
+void ZDT_Stepper_Read_homing_status_flags(ZDTStepperMotor *motor)
+{
+    if (!motor)
+        return;
+
+    uint8_t command[3] = {motor->id, 0x3B, 0x6B};
+    ZDT_Stepper_UART_Send_Data(motor, command, sizeof(command));
+}
+
+void ZDT_Stepper_Set_Software_Limits(ZDTStepperMotor *motor, float minimum, float maximum, bool enabled)
+{
+    if (!motor)
+        return;
+
+    motor->data.limit_min = minimum;
+    motor->data.limit_max = maximum;
+    motor->data.limits_enabled = enabled && minimum < maximum ? 1U : 0U;
 }

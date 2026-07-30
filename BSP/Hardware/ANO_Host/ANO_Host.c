@@ -3,6 +3,7 @@
 #include "Car_Motor_USART.h"
 #include "Car_Attitude_Control.h"
 #include "Car_Lap_Task.h"
+#include "Gray_Sensor.h"
 #include "JY61P.h"
 #include "Stepper_PID.h"
 #include "Tracking_Link.h"
@@ -45,9 +46,14 @@
 #define ANO_BAUD_SWITCH_DELAY_MS 50U
 #define ANO_STORAGE_ADDRESS 0U
 #define ANO_STORAGE_MAGIC 0x414E4F57UL
-#define ANO_STORAGE_VERSION 7U
+#define ANO_STORAGE_VERSION 8U
 #define ARM_DEBUG_POSITION_PERIOD_MS 20U
 #define ARM_DEBUG_POSITION_STALE_MS 100U
+#define ARM_HOME_STATUS_PERIOD_MS 50U
+#define ARM_HOME_SETTLE_MS 100U
+#define ARM_STARTUP_HOME_TIMEOUT_MS 22000U
+#define ARM_STARTUP_MOVE_TIMEOUT_MS 10000U
+#define ARM_BALANCE_TOLERANCE_DEG 0.5f
 
 enum {
     CAR_KP,
@@ -109,6 +115,7 @@ enum {
     ARM_DEBUG_TIMEOUT_MS,
     ARM_HOME_MODE,
     CAR_LAP_STOP_DELAY_MS,
+    ARM_BALANCE_POSITION,
     ANO_PARAM_COUNT
 };
 
@@ -185,6 +192,7 @@ static float arm_driver_microstep = 16.0f;
 static float arm_debug_timeout_ms = 500.0f;
 static float arm_home_mode;
 static float car_lap_stop_delay_ms;
+static float arm_balance_position;
 static uint8_t arm_debug_active;
 static uint8_t arm_zero_valid;
 static uint8_t arm_motion_active;
@@ -196,6 +204,28 @@ static uint8_t arm_speed_motion;
 static uint32_t arm_motion_deadline_ms;
 static uint32_t arm_last_position_request_ms;
 static uint32_t arm_zero_confirm_issued_ms;
+static uint32_t arm_last_speed_request_ms;
+static uint32_t arm_last_home_status_request_ms;
+static uint32_t arm_startup_deadline_ms;
+static uint32_t arm_startup_move_issued_ms;
+static uint8_t arm_point_configured;
+static uint8_t arm_home_complete;
+static uint8_t arm_home_seen_active;
+static uint8_t arm_home_idle_samples;
+static uint32_t arm_home_status_processed_ms;
+
+typedef enum
+{
+    ARM_STARTUP_IDLE,
+    ARM_STARTUP_WAIT_HOME_ACK,
+    ARM_STARTUP_WAIT_HOME_DONE,
+    ARM_STARTUP_WAIT_ZERO_ACK,
+    ARM_STARTUP_MOVE_BALANCE,
+    ARM_STARTUP_DONE,
+    ARM_STARTUP_FAILED
+} arm_startup_state_t;
+
+static arm_startup_state_t arm_startup_state;
 
 typedef struct
 {
@@ -208,6 +238,7 @@ typedef struct
     float microstepping;
     float timeout_ms;
     float home_mode;
+    float balance_position;
 } ano_arm_debug_config_t;
 
 typedef struct
@@ -223,6 +254,31 @@ typedef struct
     ano_arm_debug_config_t arm_debug;
     uint32_t checksum;
 } ano_storage_record_t;
+
+typedef struct
+{
+    uint32_t magic;
+    uint8_t version;
+    uint32_t baud_rate;
+    uint8_t reserved[3];
+    float values[HOST_BAUD];
+    float directions[2];
+    car_attitude_control_config_t attitude;
+    stepper_feedforward_config_t feedforward;
+    struct
+    {
+        float limit_min;
+        float limit_max;
+        float speed;
+        float target_position;
+        float direction;
+        float acceleration;
+        float microstepping;
+        float timeout_ms;
+        float home_mode;
+    } arm_debug;
+    uint32_t checksum;
+} ano_storage_record_v7_t;
 
 typedef struct
 {
@@ -360,6 +416,7 @@ static void reset_local_defaults(void)
     arm_driver_microstep = 16.0f;
     arm_debug_timeout_ms = 500.0f;
     arm_home_mode = 0.0f;
+    arm_balance_position = 0.0f;
     car_lap_stop_delay_ms = 0.0f;
     (void)Car_Lap_Task_Set_Stop_Delay(0U);
     arm_debug_active = 0U;
@@ -370,6 +427,14 @@ static void reset_local_defaults(void)
     arm_limit_configured = 0U;
     arm_motion_positive = 0U;
     arm_speed_motion = 0U;
+    arm_point_configured = 0U;
+    arm_home_complete = 0U;
+    arm_home_seen_active = 0U;
+    arm_home_idle_samples = 0U;
+    arm_home_status_processed_ms = 0U;
+    arm_home_status_processed_ms = 0U;
+    arm_startup_state = ARM_STARTUP_IDLE;
+    arm_startup_move_issued_ms = 0U;
     Car_Attitude_Control_Reset_Defaults();
     Stepper_Feedforward_Reset_Defaults();
 
@@ -444,14 +509,24 @@ static uint32_t storage_record_v6_checksum(const ano_storage_record_v6_t *record
     return checksum;
 }
 
+static uint32_t storage_record_v7_checksum(const ano_storage_record_v7_t *record)
+{
+    const uint8_t *data = (const uint8_t *)record;
+    uint32_t checksum = 0x6D2B79F5U;
+    for (uint16_t i = 0U; i < sizeof(*record) - sizeof(record->checksum); i++) checksum = (checksum << 5U) ^ (checksum >> 27U) ^ data[i];
+    return checksum;
+}
+
 static float *parameter(uint16_t id);
 static bool write_car_parameter(uint16_t parameter_id, float value);
 static bool stop_arm_debug(bool exit_debug);
+static bool arm_points_valid(void);
 
 static bool save_storage(uint32_t baud_rate)
 {
     ano_storage_record_t record = {0};
     ano_storage_record_t verify = {0};
+    if (App_Role_Get() == APP_ROLE_ARM && !arm_points_valid()) return false;
     storage_operation = 3U;
     record.magic = ANO_STORAGE_MAGIC;
     record.version = ANO_STORAGE_VERSION;
@@ -479,6 +554,7 @@ static bool save_storage(uint32_t baud_rate)
     record.arm_debug.microstepping = arm_driver_microstep;
     record.arm_debug.timeout_ms = arm_debug_timeout_ms;
     record.arm_debug.home_mode = arm_home_mode;
+    record.arm_debug.balance_position = arm_balance_position;
     record.checksum = storage_record_checksum(&record);
     if (!W25Qxx_EraseSector(ANO_STORAGE_ADDRESS) ||
         !W25Qxx_Write(ANO_STORAGE_ADDRESS, (const uint8_t *)&record, sizeof(record)) ||
@@ -511,12 +587,15 @@ static void load_storage(void)
         }
         if (record.directions[0] == 0.0f || record.directions[0] == 1.0f) car_m1_direction = record.directions[0];
         if (record.directions[1] == 0.0f || record.directions[1] == 1.0f) car_m2_direction = record.directions[1];
-        if (isfinite(record.arm_debug.limit_min) && isfinite(record.arm_debug.limit_max) &&
-            record.arm_debug.limit_min < record.arm_debug.limit_max)
+        if (isfinite(record.arm_debug.limit_min) && isfinite(record.arm_debug.balance_position) &&
+            isfinite(record.arm_debug.limit_max) && record.arm_debug.limit_min < record.arm_debug.balance_position &&
+            record.arm_debug.balance_position < record.arm_debug.limit_max)
         {
             arm_limit_min = record.arm_debug.limit_min;
             arm_limit_max = record.arm_debug.limit_max;
+            arm_balance_position = record.arm_debug.balance_position;
             arm_limit_configured = 0x03U;
+            arm_point_configured = 0x07U;
         }
         if (isfinite(record.arm_debug.speed) && record.arm_debug.speed > 0.0f && record.arm_debug.speed <= 1000.0f) arm_debug_speed = record.arm_debug.speed;
         if (isfinite(record.arm_debug.target_position)) arm_target_position = record.arm_debug.target_position;
@@ -525,6 +604,28 @@ static void load_storage(void)
         if (isfinite(record.arm_debug.microstepping) && record.arm_debug.microstepping >= 1.0f && record.arm_debug.microstepping <= 255.0f && record.arm_debug.microstepping == floorf(record.arm_debug.microstepping)) arm_driver_microstep = record.arm_debug.microstepping;
         if (isfinite(record.arm_debug.timeout_ms) && record.arm_debug.timeout_ms >= 100.0f && record.arm_debug.timeout_ms <= 5000.0f && record.arm_debug.timeout_ms == floorf(record.arm_debug.timeout_ms)) arm_debug_timeout_ms = record.arm_debug.timeout_ms;
         if (isfinite(record.arm_debug.home_mode) && record.arm_debug.home_mode >= 0.0f && record.arm_debug.home_mode <= 4.0f && record.arm_debug.home_mode == floorf(record.arm_debug.home_mode)) arm_home_mode = record.arm_debug.home_mode;
+    }
+    else if (record.version == 7U)
+    {
+        ano_storage_record_v7_t legacy = {0};
+        if (!W25Qxx_Read(ANO_STORAGE_ADDRESS, (uint8_t *)&legacy, sizeof(legacy)) ||
+            legacy.checksum != storage_record_v7_checksum(&legacy))
+        {
+            return;
+        }
+        for (uint16_t id = 0U; id < HOST_BAUD; id++)
+        {
+            float *target = parameter(id);
+            if (target != NULL && isfinite(legacy.values[id])) *target = legacy.values[id];
+        }
+        if (legacy.directions[0] == 0.0f || legacy.directions[0] == 1.0f) car_m1_direction = legacy.directions[0];
+        if (legacy.directions[1] == 0.0f || legacy.directions[1] == 1.0f) car_m2_direction = legacy.directions[1];
+        if (isfinite(legacy.arm_debug.speed) && legacy.arm_debug.speed > 0.0f && legacy.arm_debug.speed <= 1000.0f) arm_debug_speed = legacy.arm_debug.speed;
+        if (isfinite(legacy.arm_debug.acceleration) && legacy.arm_debug.acceleration >= 0.0f && legacy.arm_debug.acceleration <= 255.0f) arm_debug_accel = legacy.arm_debug.acceleration;
+        if (isfinite(legacy.arm_debug.timeout_ms) && legacy.arm_debug.timeout_ms >= 100.0f && legacy.arm_debug.timeout_ms <= 5000.0f) arm_debug_timeout_ms = legacy.arm_debug.timeout_ms;
+        if (isfinite(legacy.arm_debug.home_mode) && legacy.arm_debug.home_mode >= 0.0f && legacy.arm_debug.home_mode <= 3.0f) arm_home_mode = legacy.arm_debug.home_mode;
+        (void)Car_Attitude_Control_Apply_Config(&legacy.attitude);
+        (void)Stepper_Feedforward_Apply_Config(&legacy.feedforward);
     }
     else if (record.version == 6U)
     {
@@ -713,7 +814,8 @@ static float *parameter(uint16_t id)
         NULL, NULL, NULL, NULL, NULL, NULL, &board_role,
         &arm_limit_min, &arm_limit_max, &arm_debug_speed, &arm_target_position,
         &arm_debug_direction, &arm_debug_accel, &arm_driver_microstep,
-        &arm_debug_timeout_ms, &arm_home_mode, &car_lap_stop_delay_ms
+        &arm_debug_timeout_ms, &arm_home_mode, &car_lap_stop_delay_ms,
+        &arm_balance_position
     };
     if (id >= ATTITUDE_MODE && id <= STEP_ANGLE_FEEDBACK_INVERTED)
     {
@@ -759,30 +861,64 @@ static bool write_feedforward_parameter(uint16_t parameter_id, float value)
     return Stepper_Feedforward_Apply_Config(&next);
 }
 
+static bool arm_points_valid(void)
+{
+    return arm_point_configured == 0x07U && isfinite(arm_limit_min) &&
+           isfinite(arm_balance_position) && isfinite(arm_limit_max) &&
+           arm_limit_min < 0.0f && arm_limit_max > 0.0f &&
+           arm_limit_min < arm_balance_position && arm_balance_position < arm_limit_max;
+}
+
+static void invalidate_arm_reference(void)
+{
+    menu_stepper_tracking_enable = 0;
+    arm_zero_valid = 0U;
+    arm_home_complete = 0U;
+    arm_home_seen_active = 0U;
+    arm_home_idle_samples = 0U;
+    if (zdt_stepper_motors[0] != NULL)
+    {
+        ZDT_Stepper_stop(zdt_stepper_motors[0], ZDT_STEPPER_SYNC_DISABLE);
+        ZDT_Stepper_Set_Software_Limits(zdt_stepper_motors[0], arm_limit_min, arm_limit_max, false);
+    }
+}
+
 static bool write_arm_parameter(uint16_t parameter_id, float value)
 {
     float *target = parameter(parameter_id);
 
-    if (target == NULL || !isfinite(value) || arm_motion_active) return false;
+    if (target == NULL || !isfinite(value) || arm_motion_active || arm_home_active ||
+        (arm_startup_state >= ARM_STARTUP_WAIT_HOME_ACK && arm_startup_state <= ARM_STARTUP_MOVE_BALANCE)) return false;
     switch (parameter_id)
     {
     case ARM_LIMIT_MIN:
         if (value < -3600.0f || value > 3600.0f ||
-            ((arm_limit_configured & 0x02U) != 0U && value >= arm_limit_max)) return false;
+            ((arm_point_configured & 0x02U) != 0U && value >= arm_balance_position) ||
+            ((arm_point_configured & 0x04U) != 0U && value >= arm_limit_max)) return false;
         arm_limit_configured |= 0x01U;
-        arm_zero_valid = 0U;
+        arm_point_configured |= 0x01U;
+        invalidate_arm_reference();
         break;
     case ARM_LIMIT_MAX:
         if (value < -3600.0f || value > 3600.0f ||
-            ((arm_limit_configured & 0x01U) != 0U && value <= arm_limit_min)) return false;
+            ((arm_point_configured & 0x01U) != 0U && value <= arm_limit_min) ||
+            ((arm_point_configured & 0x02U) != 0U && value <= arm_balance_position)) return false;
         arm_limit_configured |= 0x02U;
-        arm_zero_valid = 0U;
+        arm_point_configured |= 0x04U;
+        invalidate_arm_reference();
+        break;
+    case ARM_BALANCE_POSITION:
+        if (value < -3600.0f || value > 3600.0f ||
+            ((arm_point_configured & 0x01U) != 0U && value <= arm_limit_min) ||
+            ((arm_point_configured & 0x04U) != 0U && value >= arm_limit_max)) return false;
+        arm_point_configured |= 0x02U;
+        invalidate_arm_reference();
         break;
     case ARM_DEBUG_SPEED:
         if (value <= 0.0f || value > 1000.0f) return false;
         break;
     case ARM_TARGET_POSITION:
-        if (value < -3600.0f || value > 3600.0f) return false;
+        if (!arm_points_valid() || value < arm_limit_min || value > arm_limit_max) return false;
         break;
     case ARM_DEBUG_DIRECTION:
         if (value != 0.0f && value != 1.0f) return false;
@@ -797,7 +933,7 @@ static bool write_arm_parameter(uint16_t parameter_id, float value)
         if (value < 100.0f || value > 5000.0f || value != floorf(value)) return false;
         break;
     case ARM_HOME_MODE:
-        if (value < 0.0f || value > 4.0f || value != floorf(value)) return false;
+        if (value < 0.0f || value > 3.0f || value != floorf(value)) return false;
         break;
     default:
         return false;
@@ -932,8 +1068,8 @@ static void send_param_info(uint16_t id)
         "LADRC观测带宽", "LADRC控制带宽", "LADRC对象增益", "最大角速度", "最大差速", "IMU X轴倒置", "IMU Y轴倒置", "IMU Z轴倒置",
         "角速度阶跃幅度", "航向角阶跃幅度", "阶跃保持时间", "航向角反馈倒置",
         "滚球前馈使能", "前后X轴增益", "左右Y轴增益", "前馈滤波常数", "前馈加速度死区", "前馈转速限幅", "控制板角色",
-        "臂杆最小角度", "臂杆最大角度", "臂杆调试速度", "臂杆目标位置", "臂杆调试方向",
-        "臂杆加速度", "驱动细分", "调试超时时间", "驱动回零模式", "一圈停车补偿"
+        "臂杆最左点", "臂杆最右点", "臂杆调试速度", "臂杆目标位置", "臂杆调试方向",
+        "臂杆加速度", "驱动细分", "调试超时时间", "驱动回零模式", "一圈停车补偿", "臂杆平衡点"
     };
     static const char *const infos[ANO_PARAM_COUNT] = {
         "四驱速度环比例系数", "四驱速度环积分系数", "四驱速度环微分系数",
@@ -948,10 +1084,10 @@ static void send_param_info(uint16_t id)
         "角速度阶跃幅度，单位度每秒", "相对Z轴航向阶跃幅度，单位度", "正阶跃和回零各自保持毫秒数", "0原方向，1倒置，仅作用于航向角阶跃",
         "0关闭，1启用；启用后先静止校准", "JY61P X轴到Pitch转速增益，可为负", "JY61P Y轴到Yaw转速增益，可为负",
         "一阶低通时间常数，单位秒", "滤波加速度死区，单位g", "单轴前馈最大转速，单位RPM", "0小车控制板，1臂杆电机板；保存后重启生效",
-        "机械零点负向软件限位，单位度；修改后须重新确认零点", "机械零点正向软件限位，单位度；修改后须重新确认零点",
+        "臂杆最向左倾斜绝对角度，修改后须重新回零", "臂杆最向右倾斜绝对角度，修改后须重新回零",
         "速度和定位命令使用的转速，单位RPM", "绝对定位目标角度，必须位于上下限内", "0顺时针，1逆时针",
         "驱动器加速度档位，0至255", "驱动器细分值，1至255，应用配置后生效", "运动看门狗超时，100至5000毫秒", "驱动器回零模式，0至4",
-        "检测到A点十字后继续行驶时间，单位毫秒，范围0至2000"
+        "检测到A点十字后继续行驶时间，单位毫秒，范围0至2000", "上电回零后自动到达的绝对角度，必须严格位于左右点之间"
     };
     uint8_t d[ANO_DATA_MAX] = {0}; uint16_t i = 0U;
     if (id >= ANO_PARAM_COUNT) return;
@@ -1075,17 +1211,22 @@ static bool start_attitude_step(car_attitude_step_mode_t mode)
 
 static bool arm_limits_valid(void)
 {
-    return arm_limit_configured == 0x03U && isfinite(arm_limit_min) &&
-           isfinite(arm_limit_max) && arm_limit_min < arm_limit_max;
+    return arm_points_valid();
 }
 
 static bool stop_arm_debug(bool exit_debug)
 {
     if (zdt_stepper_motors[0] == NULL) return false;
+    if (arm_home_active) ZDT_Stepper_abort_zero_return(zdt_stepper_motors[0]);
     ZDT_Stepper_stop(zdt_stepper_motors[0], ZDT_STEPPER_SYNC_DISABLE);
     arm_motion_active = 0U;
     arm_speed_motion = 0U;
     arm_home_active = 0U;
+    arm_zero_confirm_pending = 0U;
+    if (arm_startup_state >= ARM_STARTUP_WAIT_HOME_ACK && arm_startup_state <= ARM_STARTUP_MOVE_BALANCE)
+    {
+        arm_startup_state = ARM_STARTUP_FAILED;
+    }
     if (exit_debug) arm_debug_active = 0U;
     return true;
 }
@@ -1107,6 +1248,9 @@ static bool start_arm_home(void)
     arm_zero_valid = 0U;
     arm_zero_confirm_pending = 0U;
     arm_home_active = 1U;
+    arm_home_complete = 0U;
+    arm_home_seen_active = 0U;
+    arm_home_idle_samples = 0U;
     ZDT_Stepper_trigger_zero_return(zdt_stepper_motors[0], (uint8_t)arm_home_mode, ZDT_STEPPER_SYNC_DISABLE);
     arm_zero_confirm_issued_ms = HAL_GetTick();
     return true;
@@ -1116,9 +1260,7 @@ static bool confirm_arm_zero(void)
 {
     ZDTStepperMotor *motor = zdt_stepper_motors[0];
 
-    if (!arm_debug_active || !arm_home_active || !arm_limits_valid() || motor == NULL ||
-        motor->data.last_command != 0x9AU || motor->data.last_command_status != 0x02U ||
-        (int32_t)(motor->data.last_command_ms - arm_zero_confirm_issued_ms) < 0)
+    if (!arm_debug_active || !arm_home_complete || !arm_limits_valid() || motor == NULL)
     {
         return false;
     }
@@ -1126,6 +1268,165 @@ static bool confirm_arm_zero(void)
     arm_zero_confirm_pending = 1U;
     arm_zero_confirm_issued_ms = HAL_GetTick();
     return true;
+}
+
+static void fail_arm_startup(void)
+{
+    if (zdt_stepper_motors[0] != NULL)
+    {
+        if (arm_home_active) ZDT_Stepper_abort_zero_return(zdt_stepper_motors[0]);
+        ZDT_Stepper_stop(zdt_stepper_motors[0], ZDT_STEPPER_SYNC_DISABLE);
+    }
+    arm_motion_active = 0U;
+    arm_speed_motion = 0U;
+    arm_home_active = 0U;
+    arm_zero_confirm_pending = 0U;
+    arm_zero_valid = 0U;
+    ZDT_Stepper_Set_Software_Limits(zdt_stepper_motors[0], arm_limit_min, arm_limit_max, false);
+    arm_debug_active = 0U;
+    arm_startup_state = ARM_STARTUP_FAILED;
+}
+
+static void start_arm_startup(void)
+{
+    ZDTStepperMotor *motor = zdt_stepper_motors[0];
+    uint32_t now = HAL_GetTick();
+
+    if (App_Role_Get() != APP_ROLE_ARM || motor == NULL || !arm_points_valid()) return;
+    menu_stepper_tracking_enable = 0;
+    arm_debug_active = 0U;
+    arm_zero_valid = 0U;
+    arm_motion_active = 0U;
+    arm_home_active = 1U;
+    arm_home_complete = 0U;
+    arm_home_seen_active = 0U;
+    arm_home_idle_samples = 0U;
+    arm_home_status_processed_ms = 0U;
+    arm_zero_confirm_pending = 0U;
+    ZDT_Stepper_stop(motor, ZDT_STEPPER_SYNC_DISABLE);
+    ZDT_Stepper_Enable(motor, ZDT_STEPPER_ENABLE, ZDT_STEPPER_SYNC_DISABLE);
+    ZDT_Stepper_trigger_zero_return(motor, (uint8_t)arm_home_mode, ZDT_STEPPER_SYNC_DISABLE);
+    arm_zero_confirm_issued_ms = now;
+    arm_last_home_status_request_ms = now;
+    arm_startup_deadline_ms = now + ARM_STARTUP_HOME_TIMEOUT_MS;
+    arm_startup_state = ARM_STARTUP_WAIT_HOME_ACK;
+}
+
+static void move_arm_to_balance(void)
+{
+    ZDTStepperMotor *motor = zdt_stepper_motors[0];
+    uint8_t direction = arm_balance_position >= 0.0f ? ZDT_STEPPER_CCW : ZDT_STEPPER_CW;
+    float travel_seconds = fabsf(arm_balance_position) / (arm_debug_speed * 6.0f);
+    uint32_t timeout_ms = (uint32_t)(travel_seconds * 1000.0f) + 3000U;
+    uint32_t now = HAL_GetTick();
+
+    if (timeout_ms < ARM_STARTUP_MOVE_TIMEOUT_MS) timeout_ms = ARM_STARTUP_MOVE_TIMEOUT_MS;
+    if (timeout_ms > 120000U) timeout_ms = 120000U;
+
+    arm_motion_positive = arm_balance_position >= motor->data.current_position ? 1U : 0U;
+    arm_startup_move_issued_ms = now;
+    ZDT_Stepper_Set_position_accel(motor, direction, arm_debug_speed, (uint8_t)arm_debug_accel,
+                                   fabsf(arm_balance_position), ZDT_STEPPER_ABS_POS_MODE,
+                                   ZDT_STEPPER_SYNC_DISABLE);
+    arm_motion_active = 1U;
+    arm_speed_motion = 0U;
+    arm_startup_deadline_ms = now + timeout_ms;
+    arm_startup_state = ARM_STARTUP_MOVE_BALANCE;
+}
+
+static void process_arm_startup(ZDTStepperMotor *motor, uint32_t now)
+{
+    if (arm_startup_state < ARM_STARTUP_WAIT_HOME_ACK || arm_startup_state > ARM_STARTUP_MOVE_BALANCE) return;
+    if ((int32_t)(now - arm_startup_deadline_ms) >= 0)
+    {
+        fail_arm_startup();
+        return;
+    }
+    if ((arm_startup_state == ARM_STARTUP_WAIT_HOME_ACK || arm_startup_state == ARM_STARTUP_WAIT_HOME_DONE) &&
+        now - arm_last_home_status_request_ms >= ARM_HOME_STATUS_PERIOD_MS)
+    {
+        arm_last_home_status_request_ms = now;
+        ZDT_Stepper_Read_homing_status_flags(motor);
+    }
+    if (arm_startup_state == ARM_STARTUP_WAIT_HOME_ACK)
+    {
+        if (motor->data.last_command == 0x9AU &&
+            (int32_t)(motor->data.last_command_ms - arm_zero_confirm_issued_ms) >= 0)
+        {
+            if (motor->data.last_command_status != 0x02U) fail_arm_startup();
+            else arm_startup_state = ARM_STARTUP_WAIT_HOME_DONE;
+        }
+        return;
+    }
+    if (arm_startup_state == ARM_STARTUP_WAIT_HOME_DONE)
+    {
+        if ((int32_t)(motor->data.homing_status_ms - arm_zero_confirm_issued_ms) < 0) return;
+        if (motor->data.homing_status_ms == arm_home_status_processed_ms) return;
+        arm_home_status_processed_ms = motor->data.homing_status_ms;
+        if ((int32_t)(motor->data.homing_status_ms - arm_zero_confirm_issued_ms) >= 0 &&
+            (motor->data.homing_status_flags & 0x08U) != 0U)
+        {
+            fail_arm_startup();
+            return;
+        }
+        if ((motor->data.homing_status_flags & 0x04U) != 0U)
+        {
+            arm_home_seen_active = 1U;
+            arm_home_idle_samples = 0U;
+            return;
+        }
+        if (arm_home_idle_samples < 0xFFU) arm_home_idle_samples++;
+        if ((arm_home_seen_active != 0U || arm_home_idle_samples >= 3U) &&
+            (motor->data.homing_status_flags & 0x03U) == 0x03U &&
+            now - arm_zero_confirm_issued_ms >= ARM_HOME_SETTLE_MS)
+        {
+            ZDT_Stepper_clear_current_position(motor);
+            arm_zero_confirm_issued_ms = now;
+            arm_startup_deadline_ms = now + 1000U;
+            arm_startup_state = ARM_STARTUP_WAIT_ZERO_ACK;
+        }
+        return;
+    }
+    if (arm_startup_state == ARM_STARTUP_WAIT_ZERO_ACK)
+    {
+        if (motor->data.last_command == 0x0AU &&
+            (int32_t)(motor->data.last_command_ms - arm_zero_confirm_issued_ms) >= 0)
+        {
+            if (motor->data.last_command_status != 0x02U)
+            {
+                fail_arm_startup();
+                return;
+            }
+            arm_zero_valid = 1U;
+            ZDT_Stepper_Set_Software_Limits(motor, arm_limit_min, arm_limit_max, true);
+            arm_home_active = 0U;
+            arm_home_complete = 1U;
+            motor->data.current_position = 0.0f;
+            motor->data.current_position_ms = now;
+            move_arm_to_balance();
+        }
+        return;
+    }
+    if (arm_startup_state == ARM_STARTUP_MOVE_BALANCE)
+    {
+        if ((int32_t)(motor->data.current_position_ms - arm_startup_move_issued_ms) <= 0 ||
+            (int32_t)(motor->data.current_speed_ms - arm_startup_move_issued_ms) <= 0)
+        {
+            return;
+        }
+        if (now - motor->data.current_position_ms > ARM_DEBUG_POSITION_STALE_MS ||
+            now - motor->data.current_speed_ms > ARM_DEBUG_POSITION_STALE_MS)
+        {
+            fail_arm_startup();
+            return;
+        }
+    }
+    if (fabsf(motor->data.current_position - arm_balance_position) <= ARM_BALANCE_TOLERANCE_DEG &&
+        fabsf(motor->data.current_speed) <= 1.0f)
+    {
+        arm_motion_active = 0U;
+        arm_startup_state = ARM_STARTUP_DONE;
+    }
 }
 
 static bool start_arm_speed(void)
@@ -1180,7 +1481,7 @@ static bool apply_arm_driver_config(void)
     if (!arm_debug_active || arm_motion_active || zdt_stepper_motors[0] == NULL) return false;
     ZDT_Stepper_set_microstepping(zdt_stepper_motors[0], ZDT_STEPPER_STORE,
                                   (uint8_t)arm_driver_microstep);
-    arm_zero_valid = 0U;
+    invalidate_arm_reference();
     return true;
 }
 
@@ -1216,18 +1517,58 @@ static void process_arm_debug(void)
     uint32_t now = HAL_GetTick();
 
     if (motor == NULL) return;
+    if (now - arm_last_position_request_ms >= ARM_DEBUG_POSITION_PERIOD_MS)
+    {
+        arm_last_position_request_ms = now;
+        ZDT_Stepper_Read_current_position(motor);
+    }
+    if (now - arm_last_speed_request_ms >= ARM_DEBUG_POSITION_PERIOD_MS)
+    {
+        arm_last_speed_request_ms = now;
+        ZDT_Stepper_Read_current_speed(motor);
+    }
+    if (arm_zero_valid && motor->data.current_position_ms != 0U &&
+        ((motor->data.current_position <= arm_limit_min && motor->data.current_speed < -0.5f) ||
+         (motor->data.current_position >= arm_limit_max && motor->data.current_speed > 0.5f)))
+    {
+        ZDT_Stepper_stop(motor, ZDT_STEPPER_SYNC_DISABLE);
+        arm_motion_active = 0U;
+        if (arm_startup_state == ARM_STARTUP_MOVE_BALANCE) fail_arm_startup();
+    }
+    process_arm_startup(motor, now);
+    if (arm_startup_state >= ARM_STARTUP_WAIT_HOME_ACK && arm_startup_state <= ARM_STARTUP_MOVE_BALANCE) return;
     if (arm_zero_confirm_pending && motor->data.last_command == 0x0AU &&
         motor->data.last_command_status == 0x02U &&
         (int32_t)(motor->data.last_command_ms - arm_zero_confirm_issued_ms) >= 0)
     {
         arm_zero_confirm_pending = 0U;
         arm_zero_valid = 1U;
+        ZDT_Stepper_Set_Software_Limits(motor, arm_limit_min, arm_limit_max, true);
         arm_home_active = 0U;
         motor->data.current_position = 0.0f;
         motor->data.current_position_ms = now;
     }
     if (arm_home_active)
     {
+        if (now - arm_last_home_status_request_ms >= ARM_HOME_STATUS_PERIOD_MS)
+        {
+            arm_last_home_status_request_ms = now;
+            ZDT_Stepper_Read_homing_status_flags(motor);
+        }
+        if ((motor->data.homing_status_flags & 0x08U) != 0U)
+        {
+            (void)stop_arm_debug(true);
+            return;
+        }
+        if ((int32_t)(motor->data.homing_status_ms - arm_zero_confirm_issued_ms) >= 0 &&
+            (motor->data.homing_status_flags & 0x04U) == 0U &&
+            (motor->data.homing_status_flags & 0x03U) == 0x03U &&
+            now - arm_zero_confirm_issued_ms >= ARM_HOME_SETTLE_MS)
+        {
+            arm_home_active = 0U;
+            arm_home_complete = 1U;
+            return;
+        }
         if ((int32_t)(now - (arm_zero_confirm_issued_ms + (uint32_t)arm_debug_timeout_ms)) >= 0)
         {
             (void)stop_arm_debug(true);
@@ -1235,11 +1576,6 @@ static void process_arm_debug(void)
         return;
     }
     if (!arm_motion_active) return;
-    if (now - arm_last_position_request_ms >= ARM_DEBUG_POSITION_PERIOD_MS)
-    {
-        arm_last_position_request_ms = now;
-        ZDT_Stepper_Read_current_position(motor);
-    }
     float stopping_margin = arm_speed_motion ? arm_debug_speed * 0.006f * (float)(ARM_DEBUG_POSITION_PERIOD_MS * 2U) : 0.0f;
     bool limit_reached = arm_motion_positive != 0U ?
                          motor->data.current_position + stopping_margin >= arm_limit_max :
@@ -1255,18 +1591,12 @@ static void process_arm_debug(void)
 static void send_arm_debug_diagnostic(void)
 {
     ZDTStepperMotor *motor = zdt_stepper_motors[0];
-    uint8_t d[32];
+    uint8_t d[8];
     uint16_t i = 0U;
 
     if (motor == NULL || !tx_has_capacity(1U)) return;
     put_float(d, &i, motor->data.current_position);
     put_float(d, &i, motor->data.current_speed);
-    put_float(d, &i, (float)arm_debug_active);
-    put_float(d, &i, (float)arm_zero_valid);
-    put_float(d, &i, (float)arm_motion_active);
-    put_float(d, &i, (float)motor->data.last_command);
-    put_float(d, &i, (float)motor->data.last_command_status);
-    put_float(d, &i, (float)motor->data.motor_status_flags);
     send_frame(ANO_ID_ARM_DEBUG_DIAGNOSTIC, d, i);
 }
 
@@ -1317,23 +1647,18 @@ static void send_control_telemetry(void)
 static void send_tracking_diagnostic(void)
 {
     const car_attitude_control_debug_t *control = Car_Attitude_Control_Get_Debug();
-    tracking_link_sample_t tracking;
-    uint8_t d[48];
+    const uint8_t gray = Gray_Sensor_Get_Stable() & 0x0FU;
+    uint8_t d[24];
     uint16_t i = 0U;
-    bool valid = Tracking_Link_Get_Sample(&tracking);
-    bool direction_valid = valid && tracking.pattern == TRACKING_PATTERN_LINE;
 
     if (!tx_has_capacity(1U)) return;
 
-    for (uint8_t bit = 0U; bit < 8U; bit++)
+    for (uint8_t bit = 0U; bit < 4U; bit++)
     {
-        put_float(d, &i, valid ? (float)((tracking.state >> bit) & 0x01U) : 0.0f);
+        put_float(d, &i, (float)((gray >> bit) & 0x01U));
     }
-    put_float(d, &i, direction_valid ? control->heading_p : 0.0f);
-    put_float(d, &i, direction_valid ? control->heading_d : 0.0f);
-    put_float(d, &i, direction_valid ? control->target_rate : 0.0f);
-    /* Internal tracking angle is left-negative; F4 displays left-positive. */
-    put_float(d, &i, direction_valid ? -(float)tracking.angle_x10 * 0.1f : 0.0f);
+    put_float(d, &i, control->line_offset);
+    put_float(d, &i, control->target_rate);
     send_frame(ANO_ID_TRACKING_DIAGNOSTIC, d, i);
 }
 
@@ -1513,7 +1838,8 @@ static void handle(uint8_t source, uint8_t id, const uint8_t *d, uint16_t n, uin
              parameter_id == CAR_LAP_STOP_DELAY_MS)) return;
         if (App_Role_Get() == APP_ROLE_CAR &&
             ((parameter_id >= YAW_KP && parameter_id <= PITCH_KD) ||
-             (parameter_id >= ARM_LIMIT_MIN && parameter_id <= ARM_HOME_MODE))) return;
+             (parameter_id >= ARM_LIMIT_MIN && parameter_id <= ARM_HOME_MODE) ||
+             parameter_id == ARM_BALANCE_POSITION)) return;
         if (parameter_id == HOST_BAUD && isfinite(value) && value == (float)(uint32_t)value &&
             baud_rate_is_valid((uint32_t)value) && storage_ready) {
             uint32_t requested_baud_rate = (uint32_t)value;
@@ -1549,6 +1875,8 @@ static void handle(uint8_t source, uint8_t id, const uint8_t *d, uint16_t n, uin
         } else if (parameter_id >= STEPPER_FF_ENABLE && parameter_id <= STEPPER_FF_OUTPUT_LIMIT) {
             accepted = write_feedforward_parameter(parameter_id, value);
         } else if (parameter_id >= ARM_LIMIT_MIN && parameter_id <= ARM_HOME_MODE) {
+            accepted = write_arm_parameter(parameter_id, value);
+        } else if (parameter_id == ARM_BALANCE_POSITION) {
             accepted = write_arm_parameter(parameter_id, value);
         } else if (parameter_id == CAR_LAP_STOP_DELAY_MS && isfinite(value) && value == floorf(value) &&
                    value >= 0.0f && value <= 2000.0f) {
@@ -1599,6 +1927,7 @@ void ANO_Host_Init(void)
     last_control_telemetry_ms = HAL_GetTick();
     storage_ready = W25Qxx_Init() ? 1U : 0U;
     if (storage_ready) load_storage();
+    if (App_Role_Get() == APP_ROLE_ARM) start_arm_startup();
     if (host_baud_rate != huart1.Init.BaudRate) apply_baud_rate(host_baud_rate);
     else HAL_UART_Receive_IT(&huart1, &rx_byte, 1U);
 }
