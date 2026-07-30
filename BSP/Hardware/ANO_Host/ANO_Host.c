@@ -2345,9 +2345,10 @@ static void send_control_telemetry(void)
 static void send_tracking_diagnostic(void)
 {
     const car_attitude_control_debug_t *control = Car_Attitude_Control_Get_Debug();
+    const car_motor_telemetry_t *motor = Car_Motor_Get_Telemetry();
     car_lap_status_t lap;
     const uint8_t gray = Gray_Sensor_Get_Stable() & 0x0FU;
-    uint8_t d[72];
+    uint8_t d[92];
     uint16_t i = 0U;
 
     if (!tx_has_capacity(1U)) return;
@@ -2371,6 +2372,12 @@ static void send_tracking_diagnostic(void)
     put_float(d, &i, control->line_position_weight);
     put_float(d, &i, control->line_time_weight);
     put_float(d, &i, control->imu_fusion_weight);
+    put_float(d, &i, (float)lap.last_start_result);
+    put_float(d, &i, (float)motor->total_encoder_valid);
+    put_float(d, &i, motor->total_encoder_valid != 0U ?
+                     (float)(HAL_GetTick() - motor->total_encoder_ms) : -1.0f);
+    put_float(d, &i, (float)motor->encoder_upload_active);
+    put_float(d, &i, (float)car_debug_active);
     send_frame(ANO_ID_TRACKING_DIAGNOSTIC, d, i);
 }
 
@@ -2489,7 +2496,7 @@ static bool command(const uint8_t *d, uint16_t n)
     if (n == 3U && d[0] == 0x03U && d[1] == ANO_COMMAND_RATE_STEP_TEST && d[2] == 0x00U) return start_attitude_step(CAR_ATTITUDE_STEP_RATE);
     if (n == 3U && d[0] == 0x03U && d[1] == ANO_COMMAND_ANGLE_STEP_TEST && d[2] == 0x00U) return start_attitude_step(CAR_ATTITUDE_STEP_ANGLE);
     if (n == 3U && d[0] == 0x03U && d[1] == ANO_COMMAND_STEPPER_FF_CALIBRATE && d[2] == 0x00U) { Stepper_Feedforward_Reset_Bias(); return true; }
-    if (n == 3U && d[0] == 0x03U && d[1] == ANO_COMMAND_CAR_LAP_START && d[2] == 0x00U) { if (car_debug_active && !stop_car_debug()) return false; return Car_Lap_Task_Start(); }
+    if (n == 3U && d[0] == 0x03U && d[1] == ANO_COMMAND_CAR_LAP_START && d[2] == 0x00U) { if (car_debug_active) (void)stop_car_debug(); return Car_Lap_Task_Start(); }
     if (n == 3U && d[0] == 0x03U && d[1] == ANO_COMMAND_CAR_LAP_STOP && d[2] == 0x00U) return Car_Lap_Task_Stop();
     if (n == 3U && d[0] == 0x03U && d[1] == ANO_COMMAND_CAR_LAP_CLEAR && d[2] == 0x00U) return Car_Lap_Task_Clear();
     if (n == 9U && d[0] == 1U && !car_debug_active && !Car_Attitude_Control_Is_Enabled()) return Car_Motor_Set_Speed(get_i16(&d[1]), get_i16(&d[3]), get_i16(&d[5]), get_i16(&d[7]));
@@ -2510,7 +2517,7 @@ static bool command(const uint8_t *d, uint16_t n)
     if (n == 1U && d[0] == ANO_COMMAND_RATE_STEP_TEST) return start_attitude_step(CAR_ATTITUDE_STEP_RATE);
     if (n == 1U && d[0] == ANO_COMMAND_ANGLE_STEP_TEST) return start_attitude_step(CAR_ATTITUDE_STEP_ANGLE);
     if (n == 1U && d[0] == ANO_COMMAND_STEPPER_FF_CALIBRATE) { Stepper_Feedforward_Reset_Bias(); return true; }
-    if (n == 1U && d[0] == ANO_COMMAND_CAR_LAP_START) { if (car_debug_active && !stop_car_debug()) return false; return Car_Lap_Task_Start(); }
+    if (n == 1U && d[0] == ANO_COMMAND_CAR_LAP_START) { if (car_debug_active) (void)stop_car_debug(); return Car_Lap_Task_Start(); }
     if (n == 1U && d[0] == ANO_COMMAND_CAR_LAP_STOP) return Car_Lap_Task_Stop();
     if (n == 1U && d[0] == ANO_COMMAND_CAR_LAP_CLEAR) return Car_Lap_Task_Clear();
     return false;

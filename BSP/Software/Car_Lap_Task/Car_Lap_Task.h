@@ -14,6 +14,15 @@ typedef enum
     CAR_LAP_STATE_ABORTED
 } car_lap_state_t;
 
+typedef enum
+{
+    CAR_LAP_START_NOT_ATTEMPTED = 0,
+    CAR_LAP_START_OK,
+    CAR_LAP_START_WRONG_ROLE,
+    CAR_LAP_START_BUSY,
+    CAR_LAP_START_CONTROL_FAILED
+} car_lap_start_result_t;
+
 typedef struct
 {
     float half_turn_angle_deg;
@@ -32,6 +41,7 @@ typedef struct
     float relative_yaw_deg;
     uint8_t gray_state;
     uint8_t half_turn_armed;
+    car_lap_start_result_t last_start_result;
 } car_lap_status_t;
 
 void Car_Lap_Task_Init(void);

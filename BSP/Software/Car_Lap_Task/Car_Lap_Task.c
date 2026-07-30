@@ -23,12 +23,14 @@ static uint32_t condition_started_ms;
 static uint32_t stop_delay_started_ms;
 static uint32_t stop_delay_ms;
 static int32_t encoder_baseline[2];
+static uint8_t encoder_baseline_valid;
 static float counts_per_meter;
 static float distance_m;
 static float average_speed_mps;
 static car_lap_config_t config;
 static uint32_t half_turn_started_ms;
 static uint8_t half_turn_armed;
+static car_lap_start_result_t last_start_result;
 
 static void update_odometry(void)
 {
@@ -38,6 +40,13 @@ static void update_odometry(void)
     if (!telemetry->total_encoder_valid ||
         (uint32_t)(HAL_GetTick() - telemetry->total_encoder_ms) > CAR_LAP_ENCODER_TIMEOUT_MS)
     {
+        encoder_baseline_valid = 0U;
+        return;
+    }
+    if (encoder_baseline_valid == 0U)
+    {
+        for (uint8_t i = 0U; i < 2U; i++) encoder_baseline[i] = telemetry->total_encoder[i];
+        encoder_baseline_valid = 1U;
         return;
     }
     for (uint8_t i = 0U; i < 2U; i++)
@@ -73,6 +82,8 @@ void Car_Lap_Task_Init(void)
     config.cross_confirm_ms = 50.0f;
     half_turn_started_ms = 0U;
     half_turn_armed = 0U;
+    last_start_result = CAR_LAP_START_NOT_ATTEMPTED;
+    encoder_baseline_valid = 0U;
     for (uint8_t i = 0U; i < 2U; i++) encoder_baseline[i] = 0;
 }
 
@@ -80,11 +91,15 @@ bool Car_Lap_Task_Start(void)
 {
     const car_motor_telemetry_t *telemetry = Car_Motor_Get_Telemetry();
 
-    if (App_Role_Get() != APP_ROLE_CAR ||
-        (state != CAR_LAP_STATE_IDLE && state != CAR_LAP_STATE_FINISHED &&
-         state != CAR_LAP_STATE_ABORTED) || !telemetry->total_encoder_valid ||
-        (uint32_t)(HAL_GetTick() - telemetry->total_encoder_ms) > CAR_LAP_ENCODER_TIMEOUT_MS)
+    if (App_Role_Get() != APP_ROLE_CAR)
     {
+        last_start_result = CAR_LAP_START_WRONG_ROLE;
+        return false;
+    }
+    if (state != CAR_LAP_STATE_IDLE && state != CAR_LAP_STATE_FINISHED &&
+        state != CAR_LAP_STATE_ABORTED)
+    {
+        last_start_result = CAR_LAP_START_BUSY;
         return false;
     }
 
@@ -96,13 +111,18 @@ bool Car_Lap_Task_Start(void)
     average_speed_mps = 0.0f;
     half_turn_started_ms = 0U;
     half_turn_armed = 0U;
+    encoder_baseline_valid = telemetry->total_encoder_valid != 0U &&
+                             (uint32_t)(started_ms - telemetry->total_encoder_ms) <=
+                             CAR_LAP_ENCODER_TIMEOUT_MS;
     for (uint8_t i = 0U; i < 2U; i++) encoder_baseline[i] = telemetry->total_encoder[i];
     state = CAR_LAP_STATE_WAIT_LEAVE;
     if (!Car_Attitude_Control_Set_Enabled(true))
     {
         state = CAR_LAP_STATE_ABORTED;
+        last_start_result = CAR_LAP_START_CONTROL_FAILED;
         return false;
     }
+    last_start_result = CAR_LAP_START_OK;
     return true;
 }
 
@@ -297,4 +317,5 @@ void Car_Lap_Task_Get_Status(car_lap_status_t *status)
     status->relative_yaw_deg = Car_Attitude_Control_Get_Debug()->tracking_angle;
     status->gray_state = Gray_Sensor_Get_Stable() & CAR_LAP_CROSS_PATTERN;
     status->half_turn_armed = half_turn_armed;
+    status->last_start_result = last_start_result;
 }
