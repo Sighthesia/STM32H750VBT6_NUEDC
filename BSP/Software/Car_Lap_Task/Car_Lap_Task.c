@@ -6,10 +6,10 @@
 #include "Gray_Sensor.h"
 #include "main.h"
 
+#include <math.h>
+
 #define CAR_LAP_CROSS_PATTERN       0x0FU
 #define CAR_LAP_LEAVE_CONFIRM_MS    100U
-#define CAR_LAP_CROSS_CONFIRM_MS    30U
-#define CAR_LAP_MINIMUM_TIME_MS     3000U
 #define CAR_LAP_STOP_DELAY_MAX_MS   2000U
 #define CAR_LAP_DEFAULT_COUNTS_PER_METER 285053.625f
 #define CAR_LAP_MIN_COUNTS_PER_METER 1.0f
@@ -26,6 +26,9 @@ static int32_t encoder_baseline[2];
 static float counts_per_meter;
 static float distance_m;
 static float average_speed_mps;
+static car_lap_config_t config;
+static uint32_t half_turn_started_ms;
+static uint8_t half_turn_armed;
 
 static void update_odometry(void)
 {
@@ -64,6 +67,12 @@ void Car_Lap_Task_Init(void)
     counts_per_meter = CAR_LAP_DEFAULT_COUNTS_PER_METER;
     distance_m = 0.0f;
     average_speed_mps = 0.0f;
+    config.half_turn_angle_deg = 180.0f;
+    config.half_turn_window_deg = 30.0f;
+    config.half_turn_confirm_ms = 100.0f;
+    config.cross_confirm_ms = 50.0f;
+    half_turn_started_ms = 0U;
+    half_turn_armed = 0U;
     for (uint8_t i = 0U; i < 2U; i++) encoder_baseline[i] = 0;
 }
 
@@ -85,6 +94,8 @@ bool Car_Lap_Task_Start(void)
     stop_delay_started_ms = 0U;
     distance_m = 0.0f;
     average_speed_mps = 0.0f;
+    half_turn_started_ms = 0U;
+    half_turn_armed = 0U;
     for (uint8_t i = 0U; i < 2U; i++) encoder_baseline[i] = telemetry->total_encoder[i];
     state = CAR_LAP_STATE_WAIT_LEAVE;
     if (!Car_Attitude_Control_Set_Enabled(true))
@@ -109,6 +120,8 @@ bool Car_Lap_Task_Stop(void)
         state = CAR_LAP_STATE_ABORTED;
     }
     condition_started_ms = 0U;
+    half_turn_started_ms = 0U;
+    half_turn_armed = 0U;
     return Car_Attitude_Control_Set_Enabled(false);
 }
 
@@ -127,6 +140,8 @@ bool Car_Lap_Task_Clear(void)
     stop_delay_started_ms = 0U;
     distance_m = 0.0f;
     average_speed_mps = 0.0f;
+    half_turn_started_ms = 0U;
+    half_turn_armed = 0U;
     return true;
 }
 
@@ -162,6 +177,29 @@ bool Car_Lap_Task_Set_Counts_Per_Meter(float value)
 float Car_Lap_Task_Get_Counts_Per_Meter(void)
 {
     return counts_per_meter;
+}
+
+car_lap_config_t *Car_Lap_Task_Get_Config(void)
+{
+    return &config;
+}
+
+bool Car_Lap_Task_Apply_Config(const car_lap_config_t *next)
+{
+    if (next == NULL || !isfinite(next->half_turn_angle_deg) ||
+        !isfinite(next->half_turn_window_deg) || !isfinite(next->half_turn_confirm_ms) ||
+        !isfinite(next->cross_confirm_ms) ||
+        next->half_turn_angle_deg < 90.0f || next->half_turn_angle_deg > 270.0f ||
+        next->half_turn_window_deg < 1.0f || next->half_turn_window_deg > 90.0f ||
+        next->half_turn_confirm_ms < 0.0f || next->half_turn_confirm_ms > 2000.0f ||
+        next->cross_confirm_ms < 10.0f || next->cross_confirm_ms > 1000.0f ||
+        next->half_turn_confirm_ms != (float)(uint32_t)next->half_turn_confirm_ms ||
+        next->cross_confirm_ms != (float)(uint32_t)next->cross_confirm_ms)
+    {
+        return false;
+    }
+    config = *next;
+    return true;
 }
 
 void Car_Lap_Task_Process(void)
@@ -200,7 +238,31 @@ void Car_Lap_Task_Process(void)
     }
     else if (state == CAR_LAP_STATE_RUNNING)
     {
-        if (elapsed_ms < CAR_LAP_MINIMUM_TIME_MS || !is_cross())
+        const car_attitude_control_debug_t *control = Car_Attitude_Control_Get_Debug();
+        const float yaw_magnitude = control->tracking_angle < 0.0f ?
+                                    -control->tracking_angle : control->tracking_angle;
+        const bool in_half_turn_window =
+            yaw_magnitude >= config.half_turn_angle_deg - config.half_turn_window_deg &&
+            yaw_magnitude <= config.half_turn_angle_deg + config.half_turn_window_deg;
+
+        if (!half_turn_armed)
+        {
+            if (!in_half_turn_window)
+            {
+                half_turn_started_ms = 0U;
+            }
+            else if (half_turn_started_ms == 0U)
+            {
+                half_turn_started_ms = now;
+            }
+            else if ((uint32_t)(now - half_turn_started_ms) >=
+                     (uint32_t)config.half_turn_confirm_ms)
+            {
+                half_turn_armed = 1U;
+                condition_started_ms = 0U;
+            }
+        }
+        if (!half_turn_armed || !is_cross())
         {
             condition_started_ms = 0U;
         }
@@ -208,7 +270,7 @@ void Car_Lap_Task_Process(void)
         {
             condition_started_ms = now;
         }
-        else if ((uint32_t)(now - condition_started_ms) >= CAR_LAP_CROSS_CONFIRM_MS)
+        else if ((uint32_t)(now - condition_started_ms) >= (uint32_t)config.cross_confirm_ms)
         {
             state = CAR_LAP_STATE_STOP_DELAY;
             stop_delay_started_ms = now;
@@ -232,5 +294,7 @@ void Car_Lap_Task_Get_Status(car_lap_status_t *status)
     status->stop_delay_ms = stop_delay_ms;
     status->distance_m = distance_m;
     status->average_speed_mps = average_speed_mps;
+    status->relative_yaw_deg = Car_Attitude_Control_Get_Debug()->tracking_angle;
     status->gray_state = Gray_Sensor_Get_Stable() & CAR_LAP_CROSS_PATTERN;
+    status->half_turn_armed = half_turn_armed;
 }

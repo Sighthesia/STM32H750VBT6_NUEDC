@@ -46,6 +46,11 @@ typedef struct
     float direction_inverted;
     float error_filter_time_s;
     float target_rate_slew_deg_s2;
+    float line_initial_weight;
+    float line_weight_ramp_time_s;
+    float line_release_time_s;
+    float line_heading_rate_deg_s;
+    float heading_error_limit_deg;
 } car_tracking_config_t;
 
 enum
@@ -60,7 +65,8 @@ enum
     CAR_ATTITUDE_STATUS_STEP_ACTIVE = 1U << 7,
     CAR_ATTITUDE_STATUS_ANGLE_STEP = 1U << 8,
     CAR_ATTITUDE_STATUS_LINE_SEARCH = 1U << 9,
-    CAR_ATTITUDE_STATUS_PATTERN_INVALID = 1U << 10
+    CAR_ATTITUDE_STATUS_PATTERN_INVALID = 1U << 10,
+    CAR_ATTITUDE_STATUS_HEADING_TRACKING = 1U << 11
 };
 
 typedef struct
@@ -68,6 +74,8 @@ typedef struct
     float target_heading;
     float tracking_angle;
     float line_offset;
+    float line_weight;
+    float line_heading_rate;
     float commanded_base_speed;
     float target_rate;
     float measured_rate;

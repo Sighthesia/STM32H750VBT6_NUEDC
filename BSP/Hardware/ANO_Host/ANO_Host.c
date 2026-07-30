@@ -46,7 +46,7 @@
 #define ANO_BAUD_SWITCH_DELAY_MS 50U
 #define ANO_STORAGE_ADDRESS 0U
 #define ANO_STORAGE_MAGIC 0x414E4F57UL
-#define ANO_STORAGE_VERSION 11U
+#define ANO_STORAGE_VERSION 12U
 #define ARM_DEBUG_POSITION_PERIOD_MS 20U
 #define ARM_DEBUG_POSITION_STALE_MS 100U
 #define ARM_HOME_STATUS_PERIOD_MS 50U
@@ -121,6 +121,15 @@ enum {
     TRACKING_ERROR_FILTER_TIME,
     TRACKING_TARGET_RATE_SLEW,
     IMU_SOURCE,
+    TRACKING_LINE_INITIAL_WEIGHT,
+    TRACKING_LINE_WEIGHT_RAMP_TIME,
+    TRACKING_LINE_RELEASE_TIME,
+    TRACKING_LINE_HEADING_RATE,
+    TRACKING_HEADING_ERROR_LIMIT,
+    LAP_HALF_TURN_ANGLE,
+    LAP_HALF_TURN_WINDOW,
+    LAP_HALF_TURN_CONFIRM_MS,
+    LAP_CROSS_CONFIRM_MS,
     ANO_PARAM_COUNT
 };
 
@@ -250,6 +259,13 @@ typedef struct
 
 typedef struct
 {
+    float direction_inverted;
+    float error_filter_time_s;
+    float target_rate_slew_deg_s2;
+} ano_tracking_config_v11_t;
+
+typedef struct
+{
     uint32_t magic;
     uint8_t version;
     uint32_t baud_rate;
@@ -261,6 +277,7 @@ typedef struct
     ano_arm_debug_config_t arm_debug;
     float car_lap_counts_per_meter;
     car_tracking_config_t tracking;
+    car_lap_config_t lap;
     uint8_t imu_source;
     uint8_t reserved_2[3];
     uint32_t checksum;
@@ -278,7 +295,25 @@ typedef struct
     stepper_feedforward_config_t feedforward;
     ano_arm_debug_config_t arm_debug;
     float car_lap_counts_per_meter;
-    car_tracking_config_t tracking;
+    ano_tracking_config_v11_t tracking;
+    uint8_t imu_source;
+    uint8_t reserved_2[3];
+    uint32_t checksum;
+} ano_storage_record_v11_t;
+
+typedef struct
+{
+    uint32_t magic;
+    uint8_t version;
+    uint32_t baud_rate;
+    uint8_t reserved[3];
+    float values[HOST_BAUD];
+    float directions[2];
+    car_attitude_control_config_t attitude;
+    stepper_feedforward_config_t feedforward;
+    ano_arm_debug_config_t arm_debug;
+    float car_lap_counts_per_meter;
+    ano_tracking_config_v11_t tracking;
     uint32_t checksum;
 } ano_storage_record_v10_t;
 
@@ -444,6 +479,7 @@ static bool baud_rate_is_valid(uint32_t baud_rate)
 
 static void reset_local_defaults(void)
 {
+    const car_lap_config_t lap_defaults = {180.0f, 30.0f, 100.0f, 50.0f};
     board_role = (float)App_Role_Get();
     car_pid[0] = 0.8f;
     car_pid[1] = 0.06f;
@@ -479,6 +515,7 @@ static void reset_local_defaults(void)
     (void)Car_IMU_Set_Source(CAR_IMU_SOURCE_JY61P);
     (void)Car_Lap_Task_Set_Stop_Delay(0U);
     (void)Car_Lap_Task_Set_Counts_Per_Meter(car_lap_counts_per_meter);
+    (void)Car_Lap_Task_Apply_Config(&lap_defaults);
     arm_debug_active = 0U;
     arm_zero_valid = 0U;
     arm_motion_active = 0U;
@@ -601,6 +638,14 @@ static uint32_t storage_record_v10_checksum(const ano_storage_record_v10_t *reco
     return checksum;
 }
 
+static uint32_t storage_record_v11_checksum(const ano_storage_record_v11_t *record)
+{
+    const uint8_t *data = (const uint8_t *)record;
+    uint32_t checksum = 0x6D2B79F5U;
+    for (uint16_t i = 0U; i < sizeof(*record) - sizeof(record->checksum); i++) checksum = (checksum << 5U) ^ (checksum >> 27U) ^ data[i];
+    return checksum;
+}
+
 static float *parameter(uint16_t id);
 static bool write_car_parameter(uint16_t parameter_id, float value);
 static bool stop_arm_debug(bool exit_debug);
@@ -630,6 +675,7 @@ static bool save_storage(uint32_t baud_rate)
     record.attitude = *Car_Attitude_Control_Get_Config();
     record.feedforward = *Stepper_Feedforward_Get_Config();
     record.tracking = *Car_Attitude_Control_Get_Tracking_Config();
+    record.lap = *Car_Lap_Task_Get_Config();
     record.arm_debug.limit_min = arm_limit_min;
     record.arm_debug.limit_max = arm_limit_max;
     record.arm_debug.speed = arm_debug_speed;
@@ -697,10 +743,44 @@ static void load_storage(void)
             car_lap_counts_per_meter = record.car_lap_counts_per_meter;
         }
         (void)Car_Attitude_Control_Apply_Tracking_Config(&record.tracking);
+        (void)Car_Lap_Task_Apply_Config(&record.lap);
         if (record.imu_source <= (uint8_t)CAR_IMU_SOURCE_WHEELTEC)
         {
             imu_source = (float)record.imu_source;
             (void)Car_IMU_Set_Source((car_imu_source_t)record.imu_source);
+        }
+    }
+    else if (record.version == 11U)
+    {
+        ano_storage_record_v11_t legacy = {0};
+        if (!W25Qxx_Read(ANO_STORAGE_ADDRESS, (uint8_t *)&legacy, sizeof(legacy)) ||
+            legacy.checksum != storage_record_v11_checksum(&legacy))
+        {
+            return;
+        }
+        for (uint16_t id = 0U; id < HOST_BAUD; id++)
+        {
+            float *target = parameter(id);
+            if (target != NULL && isfinite(legacy.values[id])) *target = legacy.values[id];
+        }
+        if (legacy.directions[0] == 0.0f || legacy.directions[0] == 1.0f) car_m1_direction = legacy.directions[0];
+        if (legacy.directions[1] == 0.0f || legacy.directions[1] == 1.0f) car_m2_direction = legacy.directions[1];
+        if (isfinite(legacy.car_lap_counts_per_meter) &&
+            Car_Lap_Task_Set_Counts_Per_Meter(legacy.car_lap_counts_per_meter))
+        {
+            car_lap_counts_per_meter = legacy.car_lap_counts_per_meter;
+        }
+        car_tracking_config_t tracking = *Car_Attitude_Control_Get_Tracking_Config();
+        tracking.direction_inverted = legacy.tracking.direction_inverted;
+        tracking.error_filter_time_s = legacy.tracking.error_filter_time_s;
+        tracking.target_rate_slew_deg_s2 = legacy.tracking.target_rate_slew_deg_s2;
+        (void)Car_Attitude_Control_Apply_Config(&legacy.attitude);
+        (void)Car_Attitude_Control_Apply_Tracking_Config(&tracking);
+        (void)Stepper_Feedforward_Apply_Config(&legacy.feedforward);
+        if (legacy.imu_source <= (uint8_t)CAR_IMU_SOURCE_WHEELTEC)
+        {
+            imu_source = (float)legacy.imu_source;
+            (void)Car_IMU_Set_Source((car_imu_source_t)legacy.imu_source);
         }
     }
     else if (record.version == 10U)
@@ -723,8 +803,12 @@ static void load_storage(void)
         {
             car_lap_counts_per_meter = legacy.car_lap_counts_per_meter;
         }
+        car_tracking_config_t tracking = *Car_Attitude_Control_Get_Tracking_Config();
+        tracking.direction_inverted = legacy.tracking.direction_inverted;
+        tracking.error_filter_time_s = legacy.tracking.error_filter_time_s;
+        tracking.target_rate_slew_deg_s2 = legacy.tracking.target_rate_slew_deg_s2;
         (void)Car_Attitude_Control_Apply_Config(&legacy.attitude);
-        (void)Car_Attitude_Control_Apply_Tracking_Config(&legacy.tracking);
+        (void)Car_Attitude_Control_Apply_Tracking_Config(&tracking);
         (void)Stepper_Feedforward_Apply_Config(&legacy.feedforward);
     }
     else if (record.version == 9U)
@@ -998,6 +1082,8 @@ static float *parameter(uint16_t id)
 {
     car_attitude_control_config_t *attitude = Car_Attitude_Control_Get_Config();
     stepper_feedforward_config_t *feedforward = Stepper_Feedforward_Get_Config();
+    car_tracking_config_t *tracking = Car_Attitude_Control_Get_Tracking_Config();
+    car_lap_config_t *lap = Car_Lap_Task_Get_Config();
     static float *const values[ANO_PARAM_COUNT] = {
         &car_pid[0], &car_pid[1], &car_pid[2],
         &yaw_pid.Kp, &yaw_pid.Ki, &yaw_pid.Kd,
@@ -1040,12 +1126,28 @@ static float *parameter(uint16_t id)
     }
     if (id >= TRACKING_DIRECTION_INVERTED && id <= TRACKING_TARGET_RATE_SLEW)
     {
-        car_tracking_config_t *tracking = Car_Attitude_Control_Get_Tracking_Config();
         float *const tracking_values[] = {
             &tracking->direction_inverted, &tracking->error_filter_time_s,
             &tracking->target_rate_slew_deg_s2
         };
         return tracking_values[id - TRACKING_DIRECTION_INVERTED];
+    }
+    if (id >= TRACKING_LINE_INITIAL_WEIGHT && id <= TRACKING_HEADING_ERROR_LIMIT)
+    {
+        float *const tracking_values[] = {
+            &tracking->line_initial_weight, &tracking->line_weight_ramp_time_s,
+            &tracking->line_release_time_s, &tracking->line_heading_rate_deg_s,
+            &tracking->heading_error_limit_deg
+        };
+        return tracking_values[id - TRACKING_LINE_INITIAL_WEIGHT];
+    }
+    if (id >= LAP_HALF_TURN_ANGLE && id <= LAP_CROSS_CONFIRM_MS)
+    {
+        float *const lap_values[] = {
+            &lap->half_turn_angle_deg, &lap->half_turn_window_deg,
+            &lap->half_turn_confirm_ms, &lap->cross_confirm_ms
+        };
+        return lap_values[id - LAP_HALF_TURN_ANGLE];
     }
     return id < ANO_PARAM_COUNT ? values[id] : NULL;
 }
@@ -1191,9 +1293,30 @@ static bool write_tracking_parameter(uint16_t parameter_id, float value)
     case TRACKING_DIRECTION_INVERTED: next.direction_inverted = value; break;
     case TRACKING_ERROR_FILTER_TIME: next.error_filter_time_s = value; break;
     case TRACKING_TARGET_RATE_SLEW: next.target_rate_slew_deg_s2 = value; break;
+    case TRACKING_LINE_INITIAL_WEIGHT: next.line_initial_weight = value; break;
+    case TRACKING_LINE_WEIGHT_RAMP_TIME: next.line_weight_ramp_time_s = value; break;
+    case TRACKING_LINE_RELEASE_TIME: next.line_release_time_s = value; break;
+    case TRACKING_LINE_HEADING_RATE: next.line_heading_rate_deg_s = value; break;
+    case TRACKING_HEADING_ERROR_LIMIT: next.heading_error_limit_deg = value; break;
     default: return false;
     }
     return Car_Attitude_Control_Apply_Tracking_Config(&next);
+}
+
+static bool write_lap_parameter(uint16_t parameter_id, float value)
+{
+    car_lap_config_t next = *Car_Lap_Task_Get_Config();
+
+    if (!isfinite(value)) return false;
+    switch (parameter_id)
+    {
+    case LAP_HALF_TURN_ANGLE: next.half_turn_angle_deg = value; break;
+    case LAP_HALF_TURN_WINDOW: next.half_turn_window_deg = value; break;
+    case LAP_HALF_TURN_CONFIRM_MS: next.half_turn_confirm_ms = value; break;
+    case LAP_CROSS_CONFIRM_MS: next.cross_confirm_ms = value; break;
+    default: return false;
+    }
+    return Car_Lap_Task_Apply_Config(&next);
 }
 
 static bool write_car_parameter(uint16_t parameter_id, float value)
@@ -1292,7 +1415,9 @@ static void send_param_info(uint16_t id)
         "滚球前馈使能", "前后X轴增益", "左右Y轴增益", "前馈滤波常数", "前馈加速度死区", "前馈转速限幅", "控制板角色",
         "臂杆最左点", "臂杆最右点", "臂杆调试速度", "臂杆目标位置", "臂杆调试方向",
         "臂杆加速度", "驱动细分", "调试超时时间", "驱动回零模式", "一圈停车补偿", "臂杆平衡点", "里程每米计数",
-        "循迹方向倒置", "偏差滤波时间", "目标转向斜率", "小车惯导来源"
+        "循迹方向倒置", "偏差滤波时间", "目标转向斜率", "小车惯导来源",
+        "光电初始权重", "光电权重增长时间", "光电释放时间", "光电航向推进速度", "航向误差限幅",
+        "半圈目标角度", "半圈角度窗口", "半圈确认时间", "横线确认时间"
     };
     static const char *const infos[ANO_PARAM_COUNT] = {
         "四驱速度环比例系数", "四驱速度环积分系数", "四驱速度环微分系数",
@@ -1313,7 +1438,12 @@ static void send_param_info(uint16_t id)
         "检测到A点十字后继续行驶时间，单位毫秒，范围0至2000", "上电回零后自动到达的绝对角度，必须严格位于左右点之间",
         "单轮前进一米对应的累计编码器计数，用于里程标定",
         "0为当前修正方向，1为反向", "归一化循迹偏差一阶低通时间常数，单位秒，0为关闭",
-        "目标转向角速度最大变化率，单位度每二次方秒", "0使用JY61P，1使用WheelTec；保存后保持"
+        "目标转向角速度最大变化率，单位度每二次方秒", "0使用JY61P，1使用WheelTec；保存后保持",
+        "光电刚触发时的修正权重，范围0至1", "同方向持续触发达到满权重的时间，单位秒",
+        "光电居中或换向时航向推进速度衰减时间，单位秒", "满偏差满权重时目标航向推进速度，单位度每秒",
+        "目标航向与实际解缠航向最大偏差，单位度", "武装终点检测所需累计Yaw角度，单位度",
+        "半圈目标允许窗口，单位度", "Yaw位于半圈窗口内的确认时间，单位毫秒",
+        "终点横线连续有效确认时间，单位毫秒"
     };
     uint8_t d[ANO_DATA_MAX] = {0}; uint16_t i = 0U;
     if (id >= ANO_PARAM_COUNT) return;
@@ -1875,7 +2005,7 @@ static void send_tracking_diagnostic(void)
     const car_attitude_control_debug_t *control = Car_Attitude_Control_Get_Debug();
     car_lap_status_t lap;
     const uint8_t gray = Gray_Sensor_Get_Stable() & 0x0FU;
-    uint8_t d[36];
+    uint8_t d[60];
     uint16_t i = 0U;
 
     if (!tx_has_capacity(1U)) return;
@@ -1890,6 +2020,12 @@ static void send_tracking_diagnostic(void)
     put_float(d, &i, (float)lap.elapsed_ms * 0.001f);
     put_float(d, &i, lap.distance_m);
     put_float(d, &i, lap.average_speed_mps);
+    put_float(d, &i, control->tracking_angle);
+    put_float(d, &i, control->target_heading);
+    put_float(d, &i, control->line_weight);
+    put_float(d, &i, control->line_heading_rate);
+    put_float(d, &i, (float)lap.half_turn_armed);
+    put_float(d, &i, (float)lap.state);
     send_frame(ANO_ID_TRACKING_DIAGNOSTIC, d, i);
 }
 
@@ -2052,7 +2188,7 @@ static void handle(uint8_t source, uint8_t id, const uint8_t *d, uint16_t n, uin
         if (App_Role_Get() == APP_ROLE_ARM &&
             (parameter_id <= CAR_KD || (parameter_id >= CAR_TYPE && parameter_id <= STEP_ANGLE_FEEDBACK_INVERTED) ||
              parameter_id == CAR_LAP_STOP_DELAY_MS || parameter_id == CAR_LAP_COUNTS_PER_METER ||
-             (parameter_id >= TRACKING_DIRECTION_INVERTED && parameter_id <= IMU_SOURCE))) return;
+             (parameter_id >= TRACKING_DIRECTION_INVERTED && parameter_id < ANO_PARAM_COUNT))) return;
         if (App_Role_Get() == APP_ROLE_CAR &&
             ((parameter_id >= YAW_KP && parameter_id <= PITCH_KD) ||
              (parameter_id >= ARM_LIMIT_MIN && parameter_id <= ARM_HOME_MODE) ||
@@ -2091,7 +2227,8 @@ static void handle(uint8_t source, uint8_t id, const uint8_t *d, uint16_t n, uin
             accepted = write_attitude_parameter(parameter_id, value);
         } else if (parameter_id >= STEPPER_FF_ENABLE && parameter_id <= STEPPER_FF_OUTPUT_LIMIT) {
             accepted = write_feedforward_parameter(parameter_id, value);
-        } else if (parameter_id >= TRACKING_DIRECTION_INVERTED && parameter_id <= TRACKING_TARGET_RATE_SLEW) {
+        } else if ((parameter_id >= TRACKING_DIRECTION_INVERTED && parameter_id <= TRACKING_TARGET_RATE_SLEW) ||
+                   (parameter_id >= TRACKING_LINE_INITIAL_WEIGHT && parameter_id <= TRACKING_HEADING_ERROR_LIMIT)) {
             accepted = write_tracking_parameter(parameter_id, value);
         } else if (parameter_id == IMU_SOURCE && App_Role_Get() == APP_ROLE_CAR &&
                    isfinite(value) && (value == 0.0f || value == 1.0f)) {
@@ -2109,6 +2246,8 @@ static void handle(uint8_t source, uint8_t id, const uint8_t *d, uint16_t n, uin
         } else if (parameter_id == CAR_LAP_COUNTS_PER_METER && isfinite(value)) {
             accepted = Car_Lap_Task_Set_Counts_Per_Meter(value);
             if (accepted) car_lap_counts_per_meter = value;
+        } else if (parameter_id >= LAP_HALF_TURN_ANGLE && parameter_id <= LAP_CROSS_CONFIRM_MS) {
+            accepted = write_lap_parameter(parameter_id, value);
         } else if (parameter_id == BOARD_ROLE && isfinite(value) && value == floorf(value) &&
                    value >= (float)APP_ROLE_CAR && value <= (float)APP_ROLE_ARM) {
             accepted = App_Role_Set_Persisted((app_role_t)(uint8_t)value);
