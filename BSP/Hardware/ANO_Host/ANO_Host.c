@@ -41,12 +41,15 @@
 #define ANO_RX_QUEUE_SIZE 128U
 #define ANO_DATA_MAX 96U
 #define ANO_TX_QUEUE_DEPTH 8U
+#define ANO_RESPONSE_QUEUE_DEPTH 8U
 #define ANO_IMU_PERIOD_MS 10U
-#define ANO_DEFAULT_BAUD_RATE 460800U
+#define ANO_DEFAULT_BAUD_RATE 921600U
 #define ANO_BAUD_SWITCH_DELAY_MS 50U
+#define ANO_PARAMETER_SESSION_MS 500U
+#define ANO_PARAMETER_SAVE_DELAY_MS 100U
 #define ANO_STORAGE_ADDRESS 0U
 #define ANO_STORAGE_MAGIC 0x414E4F57UL
-#define ANO_STORAGE_VERSION 13U
+#define ANO_STORAGE_VERSION 14U
 #define ARM_DEBUG_POSITION_PERIOD_MS 20U
 #define ARM_DEBUG_POSITION_STALE_MS 100U
 #define ARM_HOME_STATUS_PERIOD_MS 50U
@@ -135,6 +138,7 @@ enum {
     TRACKING_TIME_CURVE_EXPONENT,
     TRACKING_OPTICAL_FUSION_WEIGHT,
     TRACKING_IMU_FUSION_WEIGHT,
+    IMU_RATE_Z_INVERTED,
     ANO_PARAM_COUNT
 };
 
@@ -174,7 +178,10 @@ static const ano_command_desc_t commands[] = {
 static uint8_t rx_byte;
 static volatile uint8_t rx_queue[ANO_RX_QUEUE_SIZE], rx_head, rx_tail;
 static uint8_t tx_queue[ANO_TX_QUEUE_DEPTH][ANO_DATA_MAX + 8U], tx_length[ANO_TX_QUEUE_DEPTH];
-static volatile uint8_t tx_head, tx_tail, tx_count, tx_active;
+static uint8_t response_queue[ANO_RESPONSE_QUEUE_DEPTH][ANO_DATA_MAX + 8U];
+static uint8_t response_length[ANO_RESPONSE_QUEUE_DEPTH];
+static volatile uint8_t tx_head, tx_tail, tx_count, tx_active, tx_active_response;
+static volatile uint8_t response_head, response_tail, response_count;
 static ano_parser_t parser;
 static float car_pid[3] = {0.8f, 0.06f, 0.5f};
 static float car_type = (float)CAR_MOTOR_TYPE_310;
@@ -197,9 +204,13 @@ static uint32_t last_imu_ms;
 static uint32_t last_imu_sequence;
 static uint32_t host_baud_rate = ANO_DEFAULT_BAUD_RATE;
 static uint32_t pending_baud_rate;
+static uint32_t requested_baud_rate;
 static uint32_t baud_switch_at_ms;
+static uint32_t parameter_session_until_ms;
+static uint32_t parameter_save_at_ms;
 static uint8_t storage_ready;
 static uint8_t storage_operation;
+static uint8_t parameter_save_pending;
 static float board_role;
 static float arm_limit_min;
 static float arm_limit_max;
@@ -283,6 +294,30 @@ typedef struct
 
 typedef struct
 {
+    float mode;
+    float base_speed;
+    float heading_kp;
+    float heading_ki;
+    float heading_kd;
+    float rate_kp;
+    float rate_ki;
+    float rate_kd;
+    float ladrc_observer_bandwidth;
+    float ladrc_controller_bandwidth;
+    float ladrc_plant_gain;
+    float max_rate;
+    float max_differential;
+    float invert_x;
+    float invert_y;
+    float invert_z;
+    float step_rate_amplitude;
+    float step_angle_amplitude;
+    float step_hold_ms;
+    float step_angle_feedback_inverted;
+} ano_attitude_config_v13_t;
+
+typedef struct
+{
     uint32_t magic;
     uint8_t version;
     uint32_t baud_rate;
@@ -308,7 +343,26 @@ typedef struct
     uint8_t reserved[3];
     float values[HOST_BAUD];
     float directions[2];
-    car_attitude_control_config_t attitude;
+    ano_attitude_config_v13_t attitude;
+    stepper_feedforward_config_t feedforward;
+    ano_arm_debug_config_t arm_debug;
+    float car_lap_counts_per_meter;
+    car_tracking_config_t tracking;
+    car_lap_config_t lap;
+    uint8_t imu_source;
+    uint8_t reserved_2[3];
+    uint32_t checksum;
+} ano_storage_record_v13_t;
+
+typedef struct
+{
+    uint32_t magic;
+    uint8_t version;
+    uint32_t baud_rate;
+    uint8_t reserved[3];
+    float values[HOST_BAUD];
+    float directions[2];
+    ano_attitude_config_v13_t attitude;
     stepper_feedforward_config_t feedforward;
     ano_arm_debug_config_t arm_debug;
     float car_lap_counts_per_meter;
@@ -327,7 +381,7 @@ typedef struct
     uint8_t reserved[3];
     float values[HOST_BAUD];
     float directions[2];
-    car_attitude_control_config_t attitude;
+    ano_attitude_config_v13_t attitude;
     stepper_feedforward_config_t feedforward;
     ano_arm_debug_config_t arm_debug;
     float car_lap_counts_per_meter;
@@ -345,7 +399,7 @@ typedef struct
     uint8_t reserved[3];
     float values[HOST_BAUD];
     float directions[2];
-    car_attitude_control_config_t attitude;
+    ano_attitude_config_v13_t attitude;
     stepper_feedforward_config_t feedforward;
     ano_arm_debug_config_t arm_debug;
     float car_lap_counts_per_meter;
@@ -361,7 +415,7 @@ typedef struct
     uint8_t reserved[3];
     float values[HOST_BAUD];
     float directions[2];
-    car_attitude_control_config_t attitude;
+    ano_attitude_config_v13_t attitude;
     stepper_feedforward_config_t feedforward;
     ano_arm_debug_config_t arm_debug;
     float car_lap_counts_per_meter;
@@ -376,7 +430,7 @@ typedef struct
     uint8_t reserved[3];
     float values[HOST_BAUD];
     float directions[2];
-    car_attitude_control_config_t attitude;
+    ano_attitude_config_v13_t attitude;
     stepper_feedforward_config_t feedforward;
     ano_arm_debug_config_t arm_debug;
     uint32_t checksum;
@@ -390,7 +444,7 @@ typedef struct
     uint8_t reserved[3];
     float values[HOST_BAUD];
     float directions[2];
-    car_attitude_control_config_t attitude;
+    ano_attitude_config_v13_t attitude;
     stepper_feedforward_config_t feedforward;
     struct
     {
@@ -415,7 +469,7 @@ typedef struct
     uint8_t reserved[3];
     float values[HOST_BAUD];
     float directions[2];
-    car_attitude_control_config_t attitude;
+    ano_attitude_config_v13_t attitude;
     stepper_feedforward_config_t feedforward;
     uint32_t checksum;
 } ano_storage_record_v6_t;
@@ -428,7 +482,7 @@ typedef struct
     uint8_t reserved[3];
     float values[HOST_BAUD];
     float directions[2];
-    car_attitude_control_config_t attitude;
+    ano_attitude_config_v13_t attitude;
     uint32_t checksum;
 } ano_storage_record_v5_t;
 
@@ -517,6 +571,7 @@ static void reset_local_defaults(void)
 {
     const car_lap_config_t lap_defaults = {180.0f, 30.0f, 100.0f, 50.0f};
     board_role = (float)App_Role_Get();
+    requested_baud_rate = 0U;
     car_pid[0] = 0.8f;
     car_pid[1] = 0.06f;
     car_pid[2] = 0.5f;
@@ -690,16 +745,33 @@ static uint32_t storage_record_v12_checksum(const ano_storage_record_v12_t *reco
     return checksum;
 }
 
+static uint32_t storage_record_v13_checksum(const ano_storage_record_v13_t *record)
+{
+    const uint8_t *data = (const uint8_t *)record;
+    uint32_t checksum = 0x6D2B79F5U;
+    for (uint16_t i = 0U; i < sizeof(*record) - sizeof(record->checksum); i++) checksum = (checksum << 5U) ^ (checksum >> 27U) ^ data[i];
+    return checksum;
+}
+
+static void apply_legacy_attitude_config(const ano_attitude_config_v13_t *legacy)
+{
+    car_attitude_control_config_t attitude = *Car_Attitude_Control_Get_Config();
+
+    memcpy(&attitude, legacy, sizeof(*legacy));
+    (void)Car_Attitude_Control_Apply_Config(&attitude);
+}
+
 static float *parameter(uint16_t id);
 static bool write_car_parameter(uint16_t parameter_id, float value);
+static bool apply_car_config(void);
 static bool stop_arm_debug(bool exit_debug);
 static bool arm_points_valid(void);
+static bool parameter_session_active(void);
 
 static bool save_storage(uint32_t baud_rate)
 {
     ano_storage_record_t record = {0};
     ano_storage_record_t verify = {0};
-    if (App_Role_Get() == APP_ROLE_ARM && !arm_points_valid()) return false;
     storage_operation = 3U;
     record.magic = ANO_STORAGE_MAGIC;
     record.version = ANO_STORAGE_VERSION;
@@ -786,12 +858,61 @@ static void load_storage(void)
         {
             car_lap_counts_per_meter = record.car_lap_counts_per_meter;
         }
+        (void)Car_Attitude_Control_Apply_Config(&record.attitude);
         (void)Car_Attitude_Control_Apply_Tracking_Config(&record.tracking);
         (void)Car_Lap_Task_Apply_Config(&record.lap);
         if (record.imu_source <= (uint8_t)CAR_IMU_SOURCE_WHEELTEC)
         {
             imu_source = (float)record.imu_source;
             (void)Car_IMU_Set_Source((car_imu_source_t)record.imu_source);
+        }
+    }
+    else if (record.version == 13U)
+    {
+        ano_storage_record_v13_t legacy = {0};
+        if (!W25Qxx_Read(ANO_STORAGE_ADDRESS, (uint8_t *)&legacy, sizeof(legacy)) ||
+            legacy.checksum != storage_record_v13_checksum(&legacy))
+        {
+            return;
+        }
+        host_baud_rate = legacy.baud_rate;
+        for (uint16_t id = 0U; id < HOST_BAUD; id++)
+        {
+            float *target = parameter(id);
+            if (target != NULL && isfinite(legacy.values[id])) *target = legacy.values[id];
+        }
+        if (legacy.directions[0] == 0.0f || legacy.directions[0] == 1.0f) car_m1_direction = legacy.directions[0];
+        if (legacy.directions[1] == 0.0f || legacy.directions[1] == 1.0f) car_m2_direction = legacy.directions[1];
+        if (isfinite(legacy.arm_debug.limit_min) && isfinite(legacy.arm_debug.balance_position) &&
+            isfinite(legacy.arm_debug.limit_max) && legacy.arm_debug.limit_min < legacy.arm_debug.balance_position &&
+            legacy.arm_debug.balance_position < legacy.arm_debug.limit_max)
+        {
+            arm_limit_min = legacy.arm_debug.limit_min;
+            arm_limit_max = legacy.arm_debug.limit_max;
+            arm_balance_position = legacy.arm_debug.balance_position;
+            arm_limit_configured = 0x03U;
+            arm_point_configured = 0x07U;
+        }
+        if (isfinite(legacy.arm_debug.speed) && legacy.arm_debug.speed > 0.0f && legacy.arm_debug.speed <= 1000.0f) arm_debug_speed = legacy.arm_debug.speed;
+        if (isfinite(legacy.arm_debug.target_position)) arm_target_position = legacy.arm_debug.target_position;
+        if (legacy.arm_debug.direction == 0.0f || legacy.arm_debug.direction == 1.0f) arm_debug_direction = legacy.arm_debug.direction;
+        if (isfinite(legacy.arm_debug.acceleration) && legacy.arm_debug.acceleration >= 0.0f && legacy.arm_debug.acceleration <= 255.0f && legacy.arm_debug.acceleration == floorf(legacy.arm_debug.acceleration)) arm_debug_accel = legacy.arm_debug.acceleration;
+        if (isfinite(legacy.arm_debug.microstepping) && legacy.arm_debug.microstepping >= 1.0f && legacy.arm_debug.microstepping <= 255.0f && legacy.arm_debug.microstepping == floorf(legacy.arm_debug.microstepping)) arm_driver_microstep = legacy.arm_debug.microstepping;
+        if (isfinite(legacy.arm_debug.timeout_ms) && legacy.arm_debug.timeout_ms >= 100.0f && legacy.arm_debug.timeout_ms <= 5000.0f && legacy.arm_debug.timeout_ms == floorf(legacy.arm_debug.timeout_ms)) arm_debug_timeout_ms = legacy.arm_debug.timeout_ms;
+        if (isfinite(legacy.arm_debug.home_mode) && legacy.arm_debug.home_mode >= 0.0f && legacy.arm_debug.home_mode <= 4.0f && legacy.arm_debug.home_mode == floorf(legacy.arm_debug.home_mode)) arm_home_mode = legacy.arm_debug.home_mode;
+        if (isfinite(legacy.car_lap_counts_per_meter) &&
+            Car_Lap_Task_Set_Counts_Per_Meter(legacy.car_lap_counts_per_meter))
+        {
+            car_lap_counts_per_meter = legacy.car_lap_counts_per_meter;
+        }
+        apply_legacy_attitude_config(&legacy.attitude);
+        (void)Car_Attitude_Control_Apply_Tracking_Config(&legacy.tracking);
+        (void)Car_Lap_Task_Apply_Config(&legacy.lap);
+        (void)Stepper_Feedforward_Apply_Config(&legacy.feedforward);
+        if (legacy.imu_source <= (uint8_t)CAR_IMU_SOURCE_WHEELTEC)
+        {
+            imu_source = (float)legacy.imu_source;
+            (void)Car_IMU_Set_Source((car_imu_source_t)legacy.imu_source);
         }
     }
     else if (record.version == 12U)
@@ -824,7 +945,7 @@ static void load_storage(void)
         tracking.line_release_time_s = legacy.tracking.line_release_time_s;
         tracking.line_heading_rate_deg_s = legacy.tracking.line_heading_rate_deg_s;
         tracking.heading_error_limit_deg = legacy.tracking.heading_error_limit_deg;
-        (void)Car_Attitude_Control_Apply_Config(&legacy.attitude);
+        apply_legacy_attitude_config(&legacy.attitude);
         (void)Car_Attitude_Control_Apply_Tracking_Config(&tracking);
         (void)Car_Lap_Task_Apply_Config(&legacy.lap);
         (void)Stepper_Feedforward_Apply_Config(&legacy.feedforward);
@@ -858,7 +979,7 @@ static void load_storage(void)
         tracking.direction_inverted = legacy.tracking.direction_inverted;
         tracking.error_filter_time_s = legacy.tracking.error_filter_time_s;
         tracking.target_rate_slew_deg_s2 = legacy.tracking.target_rate_slew_deg_s2;
-        (void)Car_Attitude_Control_Apply_Config(&legacy.attitude);
+        apply_legacy_attitude_config(&legacy.attitude);
         (void)Car_Attitude_Control_Apply_Tracking_Config(&tracking);
         (void)Stepper_Feedforward_Apply_Config(&legacy.feedforward);
         if (legacy.imu_source <= (uint8_t)CAR_IMU_SOURCE_WHEELTEC)
@@ -891,7 +1012,7 @@ static void load_storage(void)
         tracking.direction_inverted = legacy.tracking.direction_inverted;
         tracking.error_filter_time_s = legacy.tracking.error_filter_time_s;
         tracking.target_rate_slew_deg_s2 = legacy.tracking.target_rate_slew_deg_s2;
-        (void)Car_Attitude_Control_Apply_Config(&legacy.attitude);
+        apply_legacy_attitude_config(&legacy.attitude);
         (void)Car_Attitude_Control_Apply_Tracking_Config(&tracking);
         (void)Stepper_Feedforward_Apply_Config(&legacy.feedforward);
     }
@@ -932,7 +1053,7 @@ static void load_storage(void)
         {
             car_lap_counts_per_meter = legacy.car_lap_counts_per_meter;
         }
-        (void)Car_Attitude_Control_Apply_Config(&legacy.attitude);
+        apply_legacy_attitude_config(&legacy.attitude);
         (void)Stepper_Feedforward_Apply_Config(&legacy.feedforward);
     }
     else if (record.version == 8U)
@@ -967,7 +1088,7 @@ static void load_storage(void)
         if (isfinite(legacy.arm_debug.microstepping) && legacy.arm_debug.microstepping >= 1.0f && legacy.arm_debug.microstepping <= 255.0f) arm_driver_microstep = legacy.arm_debug.microstepping;
         if (isfinite(legacy.arm_debug.timeout_ms) && legacy.arm_debug.timeout_ms >= 100.0f && legacy.arm_debug.timeout_ms <= 5000.0f) arm_debug_timeout_ms = legacy.arm_debug.timeout_ms;
         if (isfinite(legacy.arm_debug.home_mode) && legacy.arm_debug.home_mode >= 0.0f && legacy.arm_debug.home_mode <= 4.0f) arm_home_mode = legacy.arm_debug.home_mode;
-        (void)Car_Attitude_Control_Apply_Config(&legacy.attitude);
+        apply_legacy_attitude_config(&legacy.attitude);
         (void)Stepper_Feedforward_Apply_Config(&legacy.feedforward);
     }
     else if (record.version == 7U)
@@ -989,7 +1110,7 @@ static void load_storage(void)
         if (isfinite(legacy.arm_debug.acceleration) && legacy.arm_debug.acceleration >= 0.0f && legacy.arm_debug.acceleration <= 255.0f) arm_debug_accel = legacy.arm_debug.acceleration;
         if (isfinite(legacy.arm_debug.timeout_ms) && legacy.arm_debug.timeout_ms >= 100.0f && legacy.arm_debug.timeout_ms <= 5000.0f) arm_debug_timeout_ms = legacy.arm_debug.timeout_ms;
         if (isfinite(legacy.arm_debug.home_mode) && legacy.arm_debug.home_mode >= 0.0f && legacy.arm_debug.home_mode <= 3.0f) arm_home_mode = legacy.arm_debug.home_mode;
-        (void)Car_Attitude_Control_Apply_Config(&legacy.attitude);
+        apply_legacy_attitude_config(&legacy.attitude);
         (void)Stepper_Feedforward_Apply_Config(&legacy.feedforward);
     }
     else if (record.version == 6U)
@@ -1007,7 +1128,7 @@ static void load_storage(void)
         }
         if (legacy.directions[0] == 0.0f || legacy.directions[0] == 1.0f) car_m1_direction = legacy.directions[0];
         if (legacy.directions[1] == 0.0f || legacy.directions[1] == 1.0f) car_m2_direction = legacy.directions[1];
-        (void)Car_Attitude_Control_Apply_Config(&legacy.attitude);
+        apply_legacy_attitude_config(&legacy.attitude);
         (void)Stepper_Feedforward_Apply_Config(&legacy.feedforward);
     }
     else if (record.version == 5U)
@@ -1025,7 +1146,7 @@ static void load_storage(void)
         }
         if (legacy.directions[0] == 0.0f || legacy.directions[0] == 1.0f) car_m1_direction = legacy.directions[0];
         if (legacy.directions[1] == 0.0f || legacy.directions[1] == 1.0f) car_m2_direction = legacy.directions[1];
-        (void)Car_Attitude_Control_Apply_Config(&legacy.attitude);
+        apply_legacy_attitude_config(&legacy.attitude);
     }
     else if (record.version == 4U)
     {
@@ -1126,7 +1247,29 @@ static void apply_baud_rate(uint32_t baud_rate)
 
 static void start_tx(void)
 {
-    if (!tx_active && tx_count != 0U) { tx_active = 1U; if (HAL_UART_Transmit_IT(&huart1, tx_queue[tx_head], tx_length[tx_head]) != HAL_OK) tx_active = 0U; }
+    uint8_t *frame;
+    uint8_t length;
+
+    if (tx_active) return;
+    if (response_count != 0U)
+    {
+        tx_active_response = 1U;
+        frame = response_queue[response_head];
+        length = response_length[response_head];
+    }
+    else if (tx_count != 0U)
+    {
+        if (parameter_session_active()) return;
+        tx_active_response = 0U;
+        frame = tx_queue[tx_head];
+        length = tx_length[tx_head];
+    }
+    else
+    {
+        return;
+    }
+    tx_active = 1U;
+    if (HAL_UART_Transmit_IT(&huart1, frame, length) != HAL_OK) tx_active = 0U;
 }
 
 static bool tx_has_capacity(uint8_t slots)
@@ -1142,11 +1285,20 @@ static bool tx_has_capacity(uint8_t slots)
 
 static void send_frame_to(uint8_t destination, uint8_t id, const uint8_t *data, uint16_t length)
 {
+    bool response = id == ANO_ID_CHECK ||
+                    (id >= ANO_ID_COMMAND_QUERY && id <= ANO_ID_DEVICE_INFO) ||
+                    id == ANO_ID_PARAM_COMMAND;
     uint8_t sum = 0U, add = 0U; uint16_t index = 0U; uint32_t primask;
+    uint8_t *frame;
     if (length > ANO_DATA_MAX) return;
     primask = __get_PRIMASK(); __disable_irq();
-    if (tx_count >= ANO_TX_QUEUE_DEPTH) { __set_PRIMASK(primask); return; }
-    uint8_t *frame = tx_queue[tx_tail];
+    if ((response && response_count >= ANO_RESPONSE_QUEUE_DEPTH) ||
+        (!response && tx_count >= ANO_TX_QUEUE_DEPTH))
+    {
+        __set_PRIMASK(primask);
+        return;
+    }
+    frame = response ? response_queue[response_tail] : tx_queue[tx_tail];
     frame[index++] = ANO_HEAD; frame[index++] = App_Role_Get_ANO_Address(); frame[index++] = destination; frame[index++] = id; frame[index++] = (uint8_t)length; frame[index++] = (uint8_t)(length >> 8U);
     if (length != 0U)
     {
@@ -1154,7 +1306,22 @@ static void send_frame_to(uint8_t destination, uint8_t id, const uint8_t *data, 
     }
     index += length;
     for (uint16_t i = 0U; i < index; i++) { sum += frame[i]; add += sum; }
-    frame[index++] = sum; frame[index++] = add; tx_length[tx_tail] = (uint8_t)index; tx_tail = (tx_tail + 1U) % ANO_TX_QUEUE_DEPTH; tx_count++; start_tx(); __set_PRIMASK(primask);
+    frame[index++] = sum;
+    frame[index++] = add;
+    if (response)
+    {
+        response_length[response_tail] = (uint8_t)index;
+        response_tail = (response_tail + 1U) % ANO_RESPONSE_QUEUE_DEPTH;
+        response_count++;
+    }
+    else
+    {
+        tx_length[tx_tail] = (uint8_t)index;
+        tx_tail = (tx_tail + 1U) % ANO_TX_QUEUE_DEPTH;
+        tx_count++;
+    }
+    start_tx();
+    __set_PRIMASK(primask);
 }
 
 static void send_frame(uint8_t id, const uint8_t *data, uint16_t length)
@@ -1242,6 +1409,7 @@ static float *parameter(uint16_t id)
         };
         return fusion_values[id - TRACKING_INNER_POSITION_WEIGHT];
     }
+    if (id == IMU_RATE_Z_INVERTED) return &attitude->rate_feedback_inverted;
     return id < ANO_PARAM_COUNT ? values[id] : NULL;
 }
 
@@ -1289,38 +1457,28 @@ static bool write_arm_parameter(uint16_t parameter_id, float value)
 {
     float *target = parameter(parameter_id);
 
-    if (target == NULL || !isfinite(value) || arm_motion_active || arm_home_active ||
-        (arm_startup_state >= ARM_STARTUP_WAIT_HOME_ACK && arm_startup_state <= ARM_STARTUP_MOVE_BALANCE)) return false;
+    if (target == NULL || !isfinite(value)) return false;
     switch (parameter_id)
     {
     case ARM_LIMIT_MIN:
-        if (value < -3600.0f || value > 3600.0f ||
-            ((arm_point_configured & 0x02U) != 0U && value >= arm_balance_position) ||
-            ((arm_point_configured & 0x04U) != 0U && value >= arm_limit_max)) return false;
+        if (value < -3600.0f || value > 3600.0f) return false;
         arm_limit_configured |= 0x01U;
         arm_point_configured |= 0x01U;
-        invalidate_arm_reference();
         break;
     case ARM_LIMIT_MAX:
-        if (value < -3600.0f || value > 3600.0f ||
-            ((arm_point_configured & 0x01U) != 0U && value <= arm_limit_min) ||
-            ((arm_point_configured & 0x02U) != 0U && value <= arm_balance_position)) return false;
+        if (value < -3600.0f || value > 3600.0f) return false;
         arm_limit_configured |= 0x02U;
         arm_point_configured |= 0x04U;
-        invalidate_arm_reference();
         break;
     case ARM_BALANCE_POSITION:
-        if (value < -3600.0f || value > 3600.0f ||
-            ((arm_point_configured & 0x01U) != 0U && value <= arm_limit_min) ||
-            ((arm_point_configured & 0x04U) != 0U && value >= arm_limit_max)) return false;
+        if (value < -3600.0f || value > 3600.0f) return false;
         arm_point_configured |= 0x02U;
-        invalidate_arm_reference();
         break;
     case ARM_DEBUG_SPEED:
         if (value <= 0.0f || value > 1000.0f) return false;
         break;
     case ARM_TARGET_POSITION:
-        if (!arm_points_valid() || value < arm_limit_min || value > arm_limit_max) return false;
+        if (value < -3600.0f || value > 3600.0f) return false;
         break;
     case ARM_DEBUG_DIRECTION:
         if (value != 0.0f && value != 1.0f) return false;
@@ -1335,7 +1493,7 @@ static bool write_arm_parameter(uint16_t parameter_id, float value)
         if (value < 100.0f || value > 5000.0f || value != floorf(value)) return false;
         break;
     case ARM_HOME_MODE:
-        if (value < 0.0f || value > 3.0f || value != floorf(value)) return false;
+        if (value < 0.0f || value > 4.0f || value != floorf(value)) return false;
         break;
     default:
         return false;
@@ -1371,6 +1529,7 @@ static bool write_attitude_parameter(uint16_t parameter_id, float value)
     case STEP_ANGLE_AMPLITUDE: next.step_angle_amplitude = value; break;
     case STEP_HOLD_MS: next.step_hold_ms = value; break;
     case STEP_ANGLE_FEEDBACK_INVERTED: next.step_angle_feedback_inverted = value; break;
+    case IMU_RATE_Z_INVERTED: next.rate_feedback_inverted = value; break;
     default: return false;
     }
     return Car_Attitude_Control_Apply_Config(&next);
@@ -1425,7 +1584,6 @@ static bool write_car_parameter(uint16_t parameter_id, float value)
         return false;
     }
 
-    bool accepted = false;
     if (parameter_id <= CAR_KD)
     {
         if (value < -1000.0f || value > 1000.0f)
@@ -1433,48 +1591,77 @@ static bool write_car_parameter(uint16_t parameter_id, float value)
             return false;
         }
 
-        float previous = *target;
         *target = value;
-        accepted = Car_Motor_Set_PID(car_pid[0], car_pid[1], car_pid[2]);
-        if (!accepted)
-        {
-            *target = previous;
-        }
+        return true;
     }
     else if (parameter_id == CAR_TYPE && value >= (float)CAR_MOTOR_TYPE_520 &&
              value <= (float)CAR_MOTOR_TYPE_TT && value == floorf(value))
     {
-        accepted = Car_Motor_Set_Type((car_motor_type_t)(uint8_t)value);
-        if (accepted) *target = value;
+        *target = value;
+        return true;
     }
     else if (parameter_id == CAR_DEADZONE && value >= 0.0f && value <= 3600.0f && value == floorf(value))
     {
-        accepted = Car_Motor_Set_Deadzone((uint16_t)value);
-        if (accepted) *target = value;
+        *target = value;
+        return true;
     }
     else if (parameter_id == CAR_LINE && value >= 0.0f && value <= 65535.0f && value == floorf(value))
     {
-        accepted = Car_Motor_Set_Line((uint16_t)value);
-        if (accepted) *target = value;
+        *target = value;
+        return true;
     }
     else if (parameter_id == CAR_WHEEL_DIAMETER && value > 0.0f)
     {
-        accepted = Car_Motor_Set_Wheel_Diameter(value);
-        if (accepted) *target = value;
+        *target = value;
+        return true;
     }
     else if (parameter_id == CAR_REDUCTION_RATIO && value > 0.0f && value <= 65535.0f && value == floorf(value))
     {
-        accepted = Car_Motor_Set_Reduction_Ratio((uint16_t)value);
-        if (accepted) *target = value;
+        *target = value;
+        return true;
     }
     else if ((parameter_id == CAR_M1_DIRECTION || parameter_id == CAR_M2_DIRECTION) &&
              (value == 0.0f || value == 1.0f))
     {
-        accepted = Car_Motor_Set_Direction((uint8_t)(parameter_id - CAR_M1_DIRECTION), value != 0.0f);
-        if (accepted) *target = value;
+        *target = value;
+        return true;
     }
 
-    return accepted;
+    return false;
+}
+
+static bool write_inactive_parameter(uint16_t parameter_id, float value)
+{
+    float *target = parameter(parameter_id);
+
+    if (target == NULL || !isfinite(value)) return false;
+    *target = value;
+    return true;
+}
+
+static void apply_parameter_after_ack(uint16_t parameter_id)
+{
+    if (App_Role_Get() == APP_ROLE_CAR)
+    {
+        if (parameter_id <= CAR_KD) (void)Car_Motor_Set_PID(car_pid[0], car_pid[1], car_pid[2]);
+        else if (parameter_id == CAR_TYPE) (void)Car_Motor_Set_Type((car_motor_type_t)(uint8_t)car_type);
+        else if (parameter_id == CAR_DEADZONE) (void)Car_Motor_Set_Deadzone((uint16_t)car_deadzone);
+        else if (parameter_id == CAR_LINE) (void)Car_Motor_Set_Line((uint16_t)car_line);
+        else if (parameter_id == CAR_WHEEL_DIAMETER) (void)Car_Motor_Set_Wheel_Diameter(car_wheel_diameter);
+        else if (parameter_id == CAR_REDUCTION_RATIO) (void)Car_Motor_Set_Reduction_Ratio((uint16_t)car_reduction_ratio);
+        else if (parameter_id == CAR_M1_DIRECTION || parameter_id == CAR_M2_DIRECTION)
+        {
+            float direction = parameter_id == CAR_M1_DIRECTION ? car_m1_direction : car_m2_direction;
+            (void)Car_Motor_Set_Direction((uint8_t)(parameter_id - CAR_M1_DIRECTION), direction != 0.0f);
+        }
+    }
+    else
+    {
+        if (parameter_id >= YAW_KP && parameter_id <= YAW_KD) PIDController_Init(&yaw_pid);
+        else if (parameter_id >= PITCH_KP && parameter_id <= PITCH_KD) PIDController_Init(&pitch_pid);
+        else if (parameter_id == ARM_LIMIT_MIN || parameter_id == ARM_LIMIT_MAX ||
+                 parameter_id == ARM_BALANCE_POSITION) invalidate_arm_reference();
+    }
 }
 
 static void send_check(uint8_t destination, uint8_t id, uint8_t sum, uint8_t add)
@@ -1482,10 +1669,62 @@ static void send_check(uint8_t destination, uint8_t id, uint8_t sum, uint8_t add
     uint8_t d[3] = {id, sum, add};
     send_frame_to(destination, ANO_ID_CHECK, d, sizeof(d));
 }
+
+static bool save_all_parameters(void)
+{
+    uint32_t baud_rate = requested_baud_rate != 0U ? requested_baud_rate : host_baud_rate;
+
+    if (!storage_ready || !save_storage(baud_rate)) return false;
+    if ((app_role_t)(uint8_t)board_role != App_Role_Get() &&
+        !App_Role_Set_Persisted((app_role_t)(uint8_t)board_role)) return false;
+    if (baud_rate != host_baud_rate)
+    {
+        pending_baud_rate = baud_rate;
+        baud_switch_at_ms = HAL_GetTick() + ANO_BAUD_SWITCH_DELAY_MS;
+    }
+    return true;
+}
+
+static void schedule_parameter_save(void)
+{
+    parameter_save_pending = 1U;
+    parameter_save_at_ms = HAL_GetTick() + ANO_PARAMETER_SAVE_DELAY_MS;
+}
+
+static void process_parameter_save(void)
+{
+    if (parameter_save_pending == 0U ||
+        (int32_t)(HAL_GetTick() - parameter_save_at_ms) < 0 || tx_active ||
+        response_count != 0U || rx_head != rx_tail)
+    {
+        return;
+    }
+    parameter_save_pending = 0U;
+    (void)save_all_parameters();
+}
+
+static bool parameter_session_active(void)
+{
+    return parameter_save_pending != 0U ||
+           (int32_t)(HAL_GetTick() - parameter_session_until_ms) < 0;
+}
+
+static void restore_parameter_defaults(void)
+{
+    reset_local_defaults();
+    requested_baud_rate = ANO_DEFAULT_BAUD_RATE;
+    if (host_baud_rate != ANO_DEFAULT_BAUD_RATE)
+    {
+        pending_baud_rate = ANO_DEFAULT_BAUD_RATE;
+        baud_switch_at_ms = HAL_GetTick() + ANO_BAUD_SWITCH_DELAY_MS;
+    }
+    if (App_Role_Get() == APP_ROLE_CAR) (void)apply_car_config();
+    else if (zdt_stepper_motors[0] != NULL) invalidate_arm_reference();
+}
 static void send_param(uint16_t id)
 {
     uint8_t d[6]; uint16_t i = 0U; float *v = parameter(id);
-    if (id == HOST_BAUD) { put_u16(d, &i, id); put_float(d, &i, (float)host_baud_rate); send_frame(ANO_ID_PARAM_VALUE, d, i); return; }
+    if (id == HOST_BAUD) { put_u16(d, &i, id); put_float(d, &i, (float)(requested_baud_rate != 0U ? requested_baud_rate : host_baud_rate)); send_frame(ANO_ID_PARAM_VALUE, d, i); return; }
     if (v == NULL) return;
     put_u16(d, &i, id); put_float(d, &i, *v); send_frame(ANO_ID_PARAM_VALUE, d, i);
 }
@@ -1516,7 +1755,8 @@ static void send_param_info(uint16_t id)
         "循迹方向倒置", "偏差滤波时间", "目标转向斜率", "小车惯导来源",
         "光电初始权重", "光电权重增长时间", "光电释放时间", "光电航向推进速度", "航向误差限幅",
         "半圈目标角度", "半圈角度窗口", "半圈确认时间", "横线确认时间",
-        "内侧光电位置权重", "外侧光电位置权重", "时间权重曲线指数", "光电融合权重", "惯导融合权重"
+        "内侧光电位置权重", "外侧光电位置权重", "时间权重曲线指数", "光电融合权重", "惯导融合权重",
+        "Z轴角速度反馈倒置"
     };
     static const char *const infos[ANO_PARAM_COUNT] = {
         "四驱速度环比例系数", "四驱速度环积分系数", "四驱速度环微分系数",
@@ -1544,7 +1784,8 @@ static void send_param_info(uint16_t id)
         "半圈目标允许窗口，单位度", "Yaw位于半圈窗口内的确认时间，单位毫秒",
         "终点横线连续有效确认时间，单位毫秒", "内侧两路光电位置权重，不得大于外侧权重",
         "最外侧两路光电位置权重，用作位置归一化基准", "时间幂曲线指数，大于1时短时修正更柔和",
-        "光电航向参考修正总权重，0关闭光电修正", "惯导航向外环输出权重，0关闭航向保持"
+        "光电航向参考修正总权重，0关闭光电修正", "惯导航向外环输出权重，0关闭航向保持",
+        "0原方向，1倒置，仅作用于Z轴角速度反馈"
     };
     uint8_t d[ANO_DATA_MAX] = {0}; uint16_t i = 0U;
     if (id >= ANO_PARAM_COUNT) return;
@@ -2279,38 +2520,46 @@ static void handle(uint8_t source, uint8_t id, const uint8_t *d, uint16_t n, uin
 {
     if (id == ANO_ID_PARAM_COMMAND && n == 3U) {
         uint16_t v = get_u16(&d[1]);
+        parameter_session_until_ms = HAL_GetTick() + ANO_PARAMETER_SESSION_MS;
         if (d[0] == 0U) send_device_info();
         else if (d[0] == 1U) { uint8_t count[3] = {1U, ANO_PARAM_COUNT, 0U}; send_frame(ANO_ID_PARAM_COMMAND, count, 3U); }
         else if (d[0] == 2U) send_param(v);
         else if (d[0] == 3U) send_param_info(v);
-        else if (d[0] == 0x10U && v == 0x00AAU && restore_defaults()) send_check(source, id, sum, add);
-        else if (d[0] == 0x10U && v == 0x00ABU && storage_ready && save_storage(host_baud_rate)) send_check(source, id, sum, add);
+        else if (d[0] == 0x10U && v == 0x00AAU) {
+            send_check(source, id, sum, add);
+            restore_parameter_defaults();
+        }
+        else if (d[0] == 0x10U && v == 0x00ABU) {
+            schedule_parameter_save();
+            send_check(source, id, sum, add);
+        }
     }
     else if (id == ANO_ID_PARAM_VALUE && n == 6U) {
         bool accepted = false;
         uint16_t parameter_id = get_u16(d); float value = get_float(&d[2]); float *v = parameter(parameter_id);
-        if (App_Role_Get() == APP_ROLE_ARM &&
-            (parameter_id <= CAR_KD || (parameter_id >= CAR_TYPE && parameter_id <= STEP_ANGLE_FEEDBACK_INVERTED) ||
-             parameter_id == CAR_LAP_STOP_DELAY_MS || parameter_id == CAR_LAP_COUNTS_PER_METER ||
-             (parameter_id >= TRACKING_DIRECTION_INVERTED && parameter_id < ANO_PARAM_COUNT))) return;
-        if (App_Role_Get() == APP_ROLE_CAR &&
-            ((parameter_id >= YAW_KP && parameter_id <= PITCH_KD) ||
-             (parameter_id >= ARM_LIMIT_MIN && parameter_id <= ARM_HOME_MODE) ||
-             parameter_id == ARM_BALANCE_POSITION)) return;
-        if (parameter_id == HOST_BAUD && isfinite(value) && value == (float)(uint32_t)value &&
-            baud_rate_is_valid((uint32_t)value) && storage_ready) {
-            uint32_t requested_baud_rate = (uint32_t)value;
+        parameter_session_until_ms = HAL_GetTick() + ANO_PARAMETER_SESSION_MS;
+        bool inactive_for_role =
+            (App_Role_Get() == APP_ROLE_ARM &&
+             (parameter_id <= CAR_KD ||
+              (parameter_id >= CAR_TYPE && parameter_id <= STEP_ANGLE_FEEDBACK_INVERTED) ||
+              parameter_id == CAR_LAP_STOP_DELAY_MS || parameter_id == CAR_LAP_COUNTS_PER_METER ||
+              (parameter_id >= TRACKING_DIRECTION_INVERTED && parameter_id < ANO_PARAM_COUNT))) ||
+            (App_Role_Get() == APP_ROLE_CAR &&
+             ((parameter_id >= YAW_KP && parameter_id <= PITCH_KD) ||
+              (parameter_id >= STEPPER_FF_ENABLE && parameter_id <= STEPPER_FF_OUTPUT_LIMIT) ||
+              (parameter_id >= ARM_LIMIT_MIN && parameter_id <= ARM_HOME_MODE) ||
+              parameter_id == ARM_BALANCE_POSITION));
 
-            if (requested_baud_rate == host_baud_rate) {
-                accepted = true;
-            } else {
-                /* Queue the ACK before the blocking flash transaction exceeds the host timeout. */
-                send_check(source, id, sum, add);
-                if (save_storage(requested_baud_rate)) {
-                    pending_baud_rate = requested_baud_rate;
-                    baud_switch_at_ms = HAL_GetTick() + ANO_BAUD_SWITCH_DELAY_MS;
-                }
-            }
+        if (parameter_id == HOST_BAUD && isfinite(value) && value == (float)(uint32_t)value &&
+            baud_rate_is_valid((uint32_t)value)) {
+            requested_baud_rate = (uint32_t)value;
+            accepted = true;
+        } else if (parameter_id == BOARD_ROLE && isfinite(value) && value == floorf(value) &&
+                   value >= (float)APP_ROLE_CAR && value <= (float)APP_ROLE_ARM) {
+            board_role = value;
+            accepted = true;
+        } else if (inactive_for_role) {
+            accepted = write_inactive_parameter(parameter_id, value);
         } else if (parameter_id <= CAR_KD || (parameter_id >= CAR_TYPE && parameter_id < HOST_BAUD)) {
             accepted = write_car_parameter(parameter_id, value);
         } else if (parameter_id == CAR_DEBUG_CONTROL_MODE && isfinite(value) && (value == 0.0f || value == 1.0f)) {
@@ -2327,7 +2576,8 @@ static void handle(uint8_t source, uint8_t id, const uint8_t *d, uint16_t n, uin
         } else if ((parameter_id == CAR_M1_DIRECTION || parameter_id == CAR_M2_DIRECTION) &&
                    isfinite(value) && (value == 0.0f || value == 1.0f)) {
             accepted = write_car_parameter(parameter_id, value);
-        } else if (parameter_id >= ATTITUDE_MODE && parameter_id <= STEP_ANGLE_FEEDBACK_INVERTED) {
+        } else if ((parameter_id >= ATTITUDE_MODE && parameter_id <= STEP_ANGLE_FEEDBACK_INVERTED) ||
+                   parameter_id == IMU_RATE_Z_INVERTED) {
             accepted = write_attitude_parameter(parameter_id, value);
         } else if (parameter_id >= STEPPER_FF_ENABLE && parameter_id <= STEPPER_FF_OUTPUT_LIMIT) {
             accepted = write_feedforward_parameter(parameter_id, value);
@@ -2353,15 +2603,15 @@ static void handle(uint8_t source, uint8_t id, const uint8_t *d, uint16_t n, uin
             if (accepted) car_lap_counts_per_meter = value;
         } else if (parameter_id >= LAP_HALF_TURN_ANGLE && parameter_id <= LAP_CROSS_CONFIRM_MS) {
             accepted = write_lap_parameter(parameter_id, value);
-        } else if (parameter_id == BOARD_ROLE && isfinite(value) && value == floorf(value) &&
-                   value >= (float)APP_ROLE_CAR && value <= (float)APP_ROLE_ARM) {
-            accepted = App_Role_Set_Persisted((app_role_t)(uint8_t)value);
-            if (accepted) board_role = value;
         } else if (v != NULL && isfinite(value) && value >= -1000.0f && value <= 1000.0f) {
             *v = value;
             accepted = true;
         }
-        if (accepted) send_check(source, id, sum, add);
+        if (accepted) {
+            send_check(source, id, sum, add);
+            if (!inactive_for_role && parameter_id != HOST_BAUD && parameter_id != BOARD_ROLE)
+                apply_parameter_after_ack(parameter_id);
+        }
     }
     else if (id == ANO_ID_COMMAND && command(d, n)) send_check(source, id, sum, add);
     else if (id == ANO_ID_COMMAND_QUERY) handle_command_query(d, n);
@@ -2402,8 +2652,78 @@ void ANO_Host_Init(void)
     if (host_baud_rate != huart1.Init.BaudRate) apply_baud_rate(host_baud_rate);
     else HAL_UART_Receive_IT(&huart1, &rx_byte, 1U);
 }
-void ANO_Host_Process(void) { while (rx_head != rx_tail) { uint8_t b = rx_queue[rx_head]; rx_head = (rx_head + 1U) % ANO_RX_QUEUE_SIZE; feed(b); } if (App_Role_Get() == APP_ROLE_ARM) process_arm_debug(); if (pending_baud_rate != 0U && (int32_t)(HAL_GetTick() - baud_switch_at_ms) >= 0 && !tx_active && tx_count == 0U) { uint32_t baud_rate = pending_baud_rate; pending_baud_rate = 0U; apply_baud_rate(baud_rate); } if (App_Role_Get() == APP_ROLE_CAR && HAL_GetTick() - last_imu_ms >= ANO_IMU_PERIOD_MS) { last_imu_ms = HAL_GetTick(); send_imu(); } if (HAL_GetTick() - last_control_telemetry_ms >= 20U) { last_control_telemetry_ms = HAL_GetTick(); if (App_Role_Get() == APP_ROLE_CAR) { send_control_telemetry(); send_tracking_diagnostic(); } else { send_stepper_feedforward_diagnostic(); send_arm_debug_diagnostic(); } } if (App_Role_Get() == APP_ROLE_CAR && HAL_GetTick() - last_telemetry_ms >= 100U) { last_telemetry_ms = HAL_GetTick(); send_telemetry(); } if (HAL_GetTick() - last_diagnostic_ms >= 500U) { last_diagnostic_ms = HAL_GetTick(); send_storage_diagnostic(); } }
+void ANO_Host_Process(void)
+{
+    while (rx_head != rx_tail)
+    {
+        uint8_t b = rx_queue[rx_head];
+        rx_head = (rx_head + 1U) % ANO_RX_QUEUE_SIZE;
+        feed(b);
+    }
+    if (App_Role_Get() == APP_ROLE_ARM) process_arm_debug();
+    start_tx();
+    process_parameter_save();
+    if (pending_baud_rate != 0U && (int32_t)(HAL_GetTick() - baud_switch_at_ms) >= 0 &&
+        !tx_active && response_count == 0U && tx_count == 0U)
+    {
+        uint32_t baud_rate = pending_baud_rate;
+        pending_baud_rate = 0U;
+        apply_baud_rate(baud_rate);
+    }
+    if (parameter_session_active()) return;
+    if (App_Role_Get() == APP_ROLE_CAR && HAL_GetTick() - last_imu_ms >= ANO_IMU_PERIOD_MS)
+    {
+        last_imu_ms = HAL_GetTick();
+        send_imu();
+    }
+    if (HAL_GetTick() - last_control_telemetry_ms >= 20U)
+    {
+        last_control_telemetry_ms = HAL_GetTick();
+        if (App_Role_Get() == APP_ROLE_CAR)
+        {
+            send_control_telemetry();
+            send_tracking_diagnostic();
+        }
+        else
+        {
+            send_stepper_feedforward_diagnostic();
+            send_arm_debug_diagnostic();
+        }
+    }
+    if (App_Role_Get() == APP_ROLE_CAR && HAL_GetTick() - last_telemetry_ms >= 100U)
+    {
+        last_telemetry_ms = HAL_GetTick();
+        send_telemetry();
+    }
+    if (HAL_GetTick() - last_diagnostic_ms >= 500U)
+    {
+        last_diagnostic_ms = HAL_GetTick();
+        send_storage_diagnostic();
+    }
+}
 void ANO_Host_UART_RxCplt_Callback(void) { uint8_t next = (rx_tail + 1U) % ANO_RX_QUEUE_SIZE; if (next != rx_head) { rx_queue[rx_tail] = rx_byte; rx_tail = next; } HAL_UART_Receive_IT(&huart1, &rx_byte, 1U); }
-void ANO_Host_UART_TxCplt_Callback(void) { if (tx_active && tx_count) { tx_head = (tx_head + 1U) % ANO_TX_QUEUE_DEPTH; tx_count--; } tx_active = 0U; start_tx(); }
-void ANO_Host_UART_Error_Callback(void) { tx_active = 0U; HAL_UART_Receive_IT(&huart1, &rx_byte, 1U); }
+void ANO_Host_UART_TxCplt_Callback(void)
+{
+    if (tx_active)
+    {
+        if (tx_active_response && response_count != 0U)
+        {
+            response_head = (response_head + 1U) % ANO_RESPONSE_QUEUE_DEPTH;
+            response_count--;
+        }
+        else if (!tx_active_response && tx_count != 0U)
+        {
+            tx_head = (tx_head + 1U) % ANO_TX_QUEUE_DEPTH;
+            tx_count--;
+        }
+    }
+    tx_active = 0U;
+    start_tx();
+}
+void ANO_Host_UART_Error_Callback(void)
+{
+    tx_active = 0U;
+    start_tx();
+    HAL_UART_Receive_IT(&huart1, &rx_byte, 1U);
+}
 uint32_t ANO_Host_Get_BaudRate(void) { return host_baud_rate; }

@@ -210,6 +210,7 @@ void Car_Attitude_Control_Reset_Defaults(void)
     config.step_angle_amplitude = 45.0f;
     config.step_hold_ms = 2000.0f;
     config.step_angle_feedback_inverted = 1.0f;
+    config.rate_feedback_inverted = 1.0f;
     tracking_config.direction_inverted = 0.0f;
     tracking_config.error_filter_time_s = 0.10f;
     tracking_config.target_rate_slew_deg_s2 = 600.0f;
@@ -274,6 +275,7 @@ bool Car_Attitude_Control_Apply_Config(const car_attitude_control_config_t *next
         !isfinite(next->ladrc_plant_gain) || !isfinite(next->max_rate) || !isfinite(next->max_differential) ||
         !isfinite(next->step_rate_amplitude) || !isfinite(next->step_angle_amplitude) ||
         !isfinite(next->step_hold_ms) || !isfinite(next->step_angle_feedback_inverted) ||
+        !isfinite(next->rate_feedback_inverted) ||
         (next->mode != 0.0f && next->mode != 1.0f) || next->base_speed < 0.0f || next->base_speed > 1000.0f ||
         next->heading_kp < 0.0f || next->heading_ki < 0.0f || next->heading_kd < 0.0f ||
         next->rate_kp < 0.0f || next->rate_ki < 0.0f || next->rate_kd < 0.0f ||
@@ -287,7 +289,8 @@ bool Car_Attitude_Control_Apply_Config(const car_attitude_control_config_t *next
         next->step_angle_amplitude < -180.0f || next->step_angle_amplitude > 180.0f ||
         next->step_hold_ms < 100.0f || next->step_hold_ms > 30000.0f ||
         next->step_hold_ms != floorf(next->step_hold_ms) ||
-        (next->step_angle_feedback_inverted != 0.0f && next->step_angle_feedback_inverted != 1.0f))
+        (next->step_angle_feedback_inverted != 0.0f && next->step_angle_feedback_inverted != 1.0f) ||
+        (next->rate_feedback_inverted != 0.0f && next->rate_feedback_inverted != 1.0f))
     {
         return false;
     }
@@ -594,7 +597,8 @@ void Car_Attitude_Control_Process(void)
     }
     clear_debug_output();
     const float measured_heading = apply_axis_direction(imu.angle_rad.z, config.invert_z) * CAR_CONTROL_RAD_TO_DEG;
-    const float measured_rate = apply_axis_direction(imu.angular_velocity_rad_s.z, config.invert_z) * CAR_CONTROL_RAD_TO_DEG;
+    const float measured_rate = apply_axis_direction(imu.angular_velocity_rad_s.z,
+                                                     config.rate_feedback_inverted) * CAR_CONTROL_RAD_TO_DEG;
     if (step_mode == CAR_ATTITUDE_STEP_NONE && !update_tracking_target(now, measured_heading))
     {
         stop_output();

@@ -32,6 +32,7 @@
 #include "ANO_Host.h"
 #include "JY61P.h"
 #include "WheelTec.h"
+#include "Car_IMU.h"
 #include "Stepper_PID.h"
 #include "lcd_driver.h"
 #include "lcd_wegui_driver.h"
@@ -146,7 +147,9 @@ static void App_Peripheral_Init(void)
     Car_Lap_Task_Init();
 #endif
     Gray_Sensor_Init();
+    JY61P_Init();
     WheelTec_Init();
+    Car_IMU_Init();
   }
   else
   {
@@ -178,6 +181,7 @@ static void App_Process(void)
     Car_Lap_Task_Process();
     Car_Attitude_Control_Process();
 #endif
+    JY61P_Process();
   }
   else
   {
