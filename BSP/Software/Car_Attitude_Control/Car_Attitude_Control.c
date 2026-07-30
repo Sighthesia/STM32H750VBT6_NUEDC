@@ -1,9 +1,9 @@
 #include "Car_Attitude_Control.h"
 
 #include "Car_Motor_USART.h"
+#include "Car_IMU.h"
 #include "Gray_Sensor.h"
 #include "PID.h"
-#include "WheelTec.h"
 #include "main.h"
 
 #include <math.h>
@@ -374,21 +374,18 @@ static bool update_tracking_target(uint32_t now)
 
 bool Car_Attitude_Control_Start_Step(car_attitude_step_mode_t mode)
 {
-    wheeltec_status_t imu_status;
-    wheeltec_ahrs_data_t ahrs;
-
-    WheelTec_Get_Status(&imu_status);
+    car_imu_sample_t imu;
 
     if ((mode != CAR_ATTITUDE_STEP_RATE && mode != CAR_ATTITUDE_STEP_ANGLE) ||
-        !imu_status.online || !WheelTec_Get_AHRS(&ahrs))
+        !Car_IMU_Get_Sample(&imu))
     {
         return false;
     }
     step_mode = mode;
     step_return_phase = 0U;
     step_phase_started_ms = HAL_GetTick();
-    step_start_heading = apply_axis_direction(ahrs.angle.z, config.invert_z) * CAR_CONTROL_RAD_TO_DEG;
-    last_sequence = ahrs.sequence;
+    step_start_heading = apply_axis_direction(imu.angle_rad.z, config.invert_z) * CAR_CONTROL_RAD_TO_DEG;
+    last_sequence = imu.sequence;
     last_sample_ms = step_phase_started_ms;
     enabled = 1U;
     stopped = 0U;
@@ -433,13 +430,11 @@ const car_attitude_control_debug_t *Car_Attitude_Control_Get_Debug(void)
 
 void Car_Attitude_Control_Process(void)
 {
-    wheeltec_status_t imu_status;
-    wheeltec_ahrs_data_t ahrs;
+    car_imu_sample_t imu;
     uint32_t now = HAL_GetTick();
 
-    WheelTec_Get_Status(&imu_status);
-    bool sample_valid = imu_status.online && WheelTec_Get_AHRS(&ahrs);
-    bool new_sample = sample_valid && ahrs.sequence != last_sequence;
+    bool sample_valid = Car_IMU_Get_Sample(&imu);
+    bool new_sample = sample_valid && imu.sequence != last_sequence;
 
     debug.status = 0U;
     if (enabled) debug.status |= CAR_ATTITUDE_STATUS_ENABLED;
@@ -459,7 +454,7 @@ void Car_Attitude_Control_Process(void)
     }
     if (new_sample)
     {
-        last_sequence = ahrs.sequence;
+        last_sequence = imu.sequence;
         last_sample_ms = now;
         debug.status |= CAR_ATTITUDE_STATUS_IMU_VALID;
     }
@@ -485,8 +480,8 @@ void Car_Attitude_Control_Process(void)
         reset_controllers();
         return;
     }
-    const float measured_heading = apply_axis_direction(ahrs.angle.z, config.invert_z) * CAR_CONTROL_RAD_TO_DEG;
-    const float measured_rate = apply_axis_direction(ahrs.angular_velocity.z, config.invert_z) * CAR_CONTROL_RAD_TO_DEG;
+    const float measured_heading = apply_axis_direction(imu.angle_rad.z, config.invert_z) * CAR_CONTROL_RAD_TO_DEG;
+    const float measured_rate = apply_axis_direction(imu.angular_velocity_rad_s.z, config.invert_z) * CAR_CONTROL_RAD_TO_DEG;
     float target_heading = 0.0f;
     float heading_error = 0.0f;
 

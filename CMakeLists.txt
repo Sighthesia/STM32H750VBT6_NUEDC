@@ -50,6 +50,7 @@ target_link_directories(${CMAKE_PROJECT_NAME} PRIVATE
 file(GLOB_RECURSE BSP_SOURCES CONFIGURE_DEPENDS
     "BSP/Hardware/ZDT_Step_Motor/*.c"
     "BSP/Hardware/Car_Motor_USART/*.c"
+    "BSP/Hardware/Car_IMU/*.c"
     "BSP/Hardware/Encoder_EXTI/*.c"
     "BSP/Hardware/WeGUI/*.c"
     "BSP/Hardware/ANO_Host/*.c"

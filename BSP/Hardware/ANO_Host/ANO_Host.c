@@ -3,9 +3,9 @@
 #include "Car_Motor_USART.h"
 #include "Car_Attitude_Control.h"
 #include "Car_Lap_Task.h"
+#include "Car_IMU.h"
 #include "Gray_Sensor.h"
 #include "JY61P.h"
-#include "WheelTec.h"
 #include "Stepper_PID.h"
 #include "Tracking_Link.h"
 #include "W25Qxx.h"
@@ -46,7 +46,7 @@
 #define ANO_BAUD_SWITCH_DELAY_MS 50U
 #define ANO_STORAGE_ADDRESS 0U
 #define ANO_STORAGE_MAGIC 0x414E4F57UL
-#define ANO_STORAGE_VERSION 10U
+#define ANO_STORAGE_VERSION 11U
 #define ARM_DEBUG_POSITION_PERIOD_MS 20U
 #define ARM_DEBUG_POSITION_STALE_MS 100U
 #define ARM_HOME_STATUS_PERIOD_MS 50U
@@ -120,6 +120,7 @@ enum {
     TRACKING_DIRECTION_INVERTED,
     TRACKING_ERROR_FILTER_TIME,
     TRACKING_TARGET_RATE_SLEW,
+    IMU_SOURCE,
     ANO_PARAM_COUNT
 };
 
@@ -180,7 +181,6 @@ static uint32_t last_control_telemetry_ms;
 static uint32_t last_diagnostic_ms;
 static uint32_t last_imu_ms;
 static uint32_t last_imu_sequence;
-static uint32_t last_ahrs_sequence;
 static uint32_t host_baud_rate = ANO_DEFAULT_BAUD_RATE;
 static uint32_t pending_baud_rate;
 static uint32_t baud_switch_at_ms;
@@ -199,6 +199,7 @@ static float arm_home_mode;
 static float car_lap_stop_delay_ms;
 static float arm_balance_position;
 static float car_lap_counts_per_meter = 285053.625f;
+static float imu_source;
 static uint8_t arm_debug_active;
 static uint8_t arm_zero_valid;
 static uint8_t arm_motion_active;
@@ -260,8 +261,26 @@ typedef struct
     ano_arm_debug_config_t arm_debug;
     float car_lap_counts_per_meter;
     car_tracking_config_t tracking;
+    uint8_t imu_source;
+    uint8_t reserved_2[3];
     uint32_t checksum;
 } ano_storage_record_t;
+
+typedef struct
+{
+    uint32_t magic;
+    uint8_t version;
+    uint32_t baud_rate;
+    uint8_t reserved[3];
+    float values[HOST_BAUD];
+    float directions[2];
+    car_attitude_control_config_t attitude;
+    stepper_feedforward_config_t feedforward;
+    ano_arm_debug_config_t arm_debug;
+    float car_lap_counts_per_meter;
+    car_tracking_config_t tracking;
+    uint32_t checksum;
+} ano_storage_record_v10_t;
 
 typedef struct
 {
@@ -456,6 +475,8 @@ static void reset_local_defaults(void)
     arm_balance_position = 0.0f;
     car_lap_stop_delay_ms = 0.0f;
     car_lap_counts_per_meter = 285053.625f;
+    imu_source = (float)CAR_IMU_SOURCE_JY61P;
+    (void)Car_IMU_Set_Source(CAR_IMU_SOURCE_JY61P);
     (void)Car_Lap_Task_Set_Stop_Delay(0U);
     (void)Car_Lap_Task_Set_Counts_Per_Meter(car_lap_counts_per_meter);
     arm_debug_active = 0U;
@@ -572,6 +593,14 @@ static uint32_t storage_record_v9_checksum(const ano_storage_record_v9_t *record
     return checksum;
 }
 
+static uint32_t storage_record_v10_checksum(const ano_storage_record_v10_t *record)
+{
+    const uint8_t *data = (const uint8_t *)record;
+    uint32_t checksum = 0x6D2B79F5U;
+    for (uint16_t i = 0U; i < sizeof(*record) - sizeof(record->checksum); i++) checksum = (checksum << 5U) ^ (checksum >> 27U) ^ data[i];
+    return checksum;
+}
+
 static float *parameter(uint16_t id);
 static bool write_car_parameter(uint16_t parameter_id, float value);
 static bool stop_arm_debug(bool exit_debug);
@@ -612,6 +641,7 @@ static bool save_storage(uint32_t baud_rate)
     record.arm_debug.home_mode = arm_home_mode;
     record.arm_debug.balance_position = arm_balance_position;
     record.car_lap_counts_per_meter = car_lap_counts_per_meter;
+    record.imu_source = (uint8_t)Car_IMU_Get_Source();
     record.checksum = storage_record_checksum(&record);
     if (!W25Qxx_EraseSector(ANO_STORAGE_ADDRESS) ||
         !W25Qxx_Write(ANO_STORAGE_ADDRESS, (const uint8_t *)&record, sizeof(record)) ||
@@ -667,6 +697,35 @@ static void load_storage(void)
             car_lap_counts_per_meter = record.car_lap_counts_per_meter;
         }
         (void)Car_Attitude_Control_Apply_Tracking_Config(&record.tracking);
+        if (record.imu_source <= (uint8_t)CAR_IMU_SOURCE_WHEELTEC)
+        {
+            imu_source = (float)record.imu_source;
+            (void)Car_IMU_Set_Source((car_imu_source_t)record.imu_source);
+        }
+    }
+    else if (record.version == 10U)
+    {
+        ano_storage_record_v10_t legacy = {0};
+        if (!W25Qxx_Read(ANO_STORAGE_ADDRESS, (uint8_t *)&legacy, sizeof(legacy)) ||
+            legacy.checksum != storage_record_v10_checksum(&legacy))
+        {
+            return;
+        }
+        for (uint16_t id = 0U; id < HOST_BAUD; id++)
+        {
+            float *target = parameter(id);
+            if (target != NULL && isfinite(legacy.values[id])) *target = legacy.values[id];
+        }
+        if (legacy.directions[0] == 0.0f || legacy.directions[0] == 1.0f) car_m1_direction = legacy.directions[0];
+        if (legacy.directions[1] == 0.0f || legacy.directions[1] == 1.0f) car_m2_direction = legacy.directions[1];
+        if (isfinite(legacy.car_lap_counts_per_meter) &&
+            Car_Lap_Task_Set_Counts_Per_Meter(legacy.car_lap_counts_per_meter))
+        {
+            car_lap_counts_per_meter = legacy.car_lap_counts_per_meter;
+        }
+        (void)Car_Attitude_Control_Apply_Config(&legacy.attitude);
+        (void)Car_Attitude_Control_Apply_Tracking_Config(&legacy.tracking);
+        (void)Stepper_Feedforward_Apply_Config(&legacy.feedforward);
     }
     else if (record.version == 9U)
     {
@@ -954,7 +1013,7 @@ static float *parameter(uint16_t id)
         &arm_debug_direction, &arm_debug_accel, &arm_driver_microstep,
         &arm_debug_timeout_ms, &arm_home_mode, &car_lap_stop_delay_ms,
         &arm_balance_position, &car_lap_counts_per_meter,
-        NULL, NULL, NULL
+        NULL, NULL, NULL, &imu_source
     };
     if (id >= ATTITUDE_MODE && id <= STEP_ANGLE_FEEDBACK_INVERTED)
     {
@@ -1233,7 +1292,7 @@ static void send_param_info(uint16_t id)
         "滚球前馈使能", "前后X轴增益", "左右Y轴增益", "前馈滤波常数", "前馈加速度死区", "前馈转速限幅", "控制板角色",
         "臂杆最左点", "臂杆最右点", "臂杆调试速度", "臂杆目标位置", "臂杆调试方向",
         "臂杆加速度", "驱动细分", "调试超时时间", "驱动回零模式", "一圈停车补偿", "臂杆平衡点", "里程每米计数",
-        "循迹方向倒置", "偏差滤波时间", "目标转向斜率"
+        "循迹方向倒置", "偏差滤波时间", "目标转向斜率", "小车惯导来源"
     };
     static const char *const infos[ANO_PARAM_COUNT] = {
         "四驱速度环比例系数", "四驱速度环积分系数", "四驱速度环微分系数",
@@ -1254,7 +1313,7 @@ static void send_param_info(uint16_t id)
         "检测到A点十字后继续行驶时间，单位毫秒，范围0至2000", "上电回零后自动到达的绝对角度，必须严格位于左右点之间",
         "单轮前进一米对应的累计编码器计数，用于里程标定",
         "0为当前修正方向，1为反向", "归一化循迹偏差一阶低通时间常数，单位秒，0为关闭",
-        "目标转向角速度最大变化率，单位度每二次方秒"
+        "目标转向角速度最大变化率，单位度每二次方秒", "0使用JY61P，1使用WheelTec；保存后保持"
     };
     uint8_t d[ANO_DATA_MAX] = {0}; uint16_t i = 0U;
     if (id >= ANO_PARAM_COUNT) return;
@@ -1843,57 +1902,52 @@ static int16_t float_to_i16(float value)
 
 static void send_imu(void)
 {
-    wheeltec_status_t imu_status;
-    wheeltec_imu_data_t imu;
-    wheeltec_ahrs_data_t ahrs;
+    car_imu_sample_t imu;
     uint8_t d[14];
     uint16_t i;
 
-    WheelTec_Get_Status(&imu_status);
-    if (!imu_status.online || !WheelTec_Get_IMU(&imu) || !WheelTec_Get_AHRS(&ahrs) ||
-        (imu.sequence == last_imu_sequence && ahrs.sequence == last_ahrs_sequence) ||
+    if (!Car_IMU_Get_Sample(&imu) || imu.sequence == last_imu_sequence ||
         !tx_has_capacity(4U))
     {
         return;
     }
 
     i = 0U;
-    put_i16(d, &i, float_to_i16(imu.acceleration.x * (32768.0f / (16.0f * 9.80665f))));
-    put_i16(d, &i, float_to_i16(imu.acceleration.y * (32768.0f / (16.0f * 9.80665f))));
-    put_i16(d, &i, float_to_i16(imu.acceleration.z * (32768.0f / (16.0f * 9.80665f))));
-    put_i16(d, &i, float_to_i16(imu.angular_velocity.x * (32768.0f / 34.906585f)));
-    put_i16(d, &i, float_to_i16(imu.angular_velocity.y * (32768.0f / 34.906585f)));
-    put_i16(d, &i, float_to_i16(imu.angular_velocity.z * (32768.0f / 34.906585f)));
+    put_i16(d, &i, float_to_i16(imu.acceleration_mps2.x * (32768.0f / (16.0f * 9.80665f))));
+    put_i16(d, &i, float_to_i16(imu.acceleration_mps2.y * (32768.0f / (16.0f * 9.80665f))));
+    put_i16(d, &i, float_to_i16(imu.acceleration_mps2.z * (32768.0f / (16.0f * 9.80665f))));
+    put_i16(d, &i, float_to_i16(imu.angular_velocity_rad_s.x * (32768.0f / 34.906585f)));
+    put_i16(d, &i, float_to_i16(imu.angular_velocity_rad_s.y * (32768.0f / 34.906585f)));
+    put_i16(d, &i, float_to_i16(imu.angular_velocity_rad_s.z * (32768.0f / 34.906585f)));
     d[i++] = 0U;
     send_frame(ANO_ID_SENSOR_BASIC, d, i);
 
     i = 0U;
-    put_i16(d, &i, float_to_i16(imu.magnetic_field.x));
-    put_i16(d, &i, float_to_i16(imu.magnetic_field.y));
-    put_i16(d, &i, float_to_i16(imu.magnetic_field.z));
-    put_i32(d, &i, (int32_t)imu.pressure);
-    put_i16(d, &i, float_to_i16(imu.imu_temperature * 10.0f));
+    put_i16(d, &i, float_to_i16(imu.magnetic_field_mg.x));
+    put_i16(d, &i, float_to_i16(imu.magnetic_field_mg.y));
+    put_i16(d, &i, float_to_i16(imu.magnetic_field_mg.z));
+    put_i32(d, &i, (int32_t)imu.pressure_pa);
+    put_i16(d, &i, float_to_i16(imu.temperature_c * 10.0f));
     d[i++] = 0U;
     d[i++] = 1U;
     send_frame(ANO_ID_SENSOR_EXTENDED, d, i);
 
     i = 0U;
-    put_i16(d, &i, float_to_i16(ahrs.angle.x * 5729.57795f));
-    put_i16(d, &i, float_to_i16(ahrs.angle.y * 5729.57795f));
-    put_i16(d, &i, float_to_i16(ahrs.angle.z * 5729.57795f));
+    put_i16(d, &i, float_to_i16(imu.angle_rad.x * 5729.57795f));
+    put_i16(d, &i, float_to_i16(imu.angle_rad.y * 5729.57795f));
+    put_i16(d, &i, float_to_i16(imu.angle_rad.z * 5729.57795f));
     d[i++] = 1U;
     send_frame(ANO_ID_ATTITUDE_EULER, d, i);
 
     i = 0U;
-    put_i16(d, &i, float_to_i16(ahrs.quaternion_w * 10000.0f));
-    put_i16(d, &i, float_to_i16(ahrs.quaternion_x * 10000.0f));
-    put_i16(d, &i, float_to_i16(ahrs.quaternion_y * 10000.0f));
-    put_i16(d, &i, float_to_i16(ahrs.quaternion_z * 10000.0f));
+    put_i16(d, &i, float_to_i16(imu.quaternion_w * 10000.0f));
+    put_i16(d, &i, float_to_i16(imu.quaternion_x * 10000.0f));
+    put_i16(d, &i, float_to_i16(imu.quaternion_y * 10000.0f));
+    put_i16(d, &i, float_to_i16(imu.quaternion_z * 10000.0f));
     d[i++] = 1U;
     send_frame(ANO_ID_ATTITUDE_QUATERNION, d, i);
 
     last_imu_sequence = imu.sequence;
-    last_ahrs_sequence = ahrs.sequence;
 }
 
 static void send_storage_diagnostic(void)
@@ -1998,7 +2052,7 @@ static void handle(uint8_t source, uint8_t id, const uint8_t *d, uint16_t n, uin
         if (App_Role_Get() == APP_ROLE_ARM &&
             (parameter_id <= CAR_KD || (parameter_id >= CAR_TYPE && parameter_id <= STEP_ANGLE_FEEDBACK_INVERTED) ||
              parameter_id == CAR_LAP_STOP_DELAY_MS || parameter_id == CAR_LAP_COUNTS_PER_METER ||
-             (parameter_id >= TRACKING_DIRECTION_INVERTED && parameter_id <= TRACKING_TARGET_RATE_SLEW))) return;
+             (parameter_id >= TRACKING_DIRECTION_INVERTED && parameter_id <= IMU_SOURCE))) return;
         if (App_Role_Get() == APP_ROLE_CAR &&
             ((parameter_id >= YAW_KP && parameter_id <= PITCH_KD) ||
              (parameter_id >= ARM_LIMIT_MIN && parameter_id <= ARM_HOME_MODE) ||
@@ -2039,6 +2093,11 @@ static void handle(uint8_t source, uint8_t id, const uint8_t *d, uint16_t n, uin
             accepted = write_feedforward_parameter(parameter_id, value);
         } else if (parameter_id >= TRACKING_DIRECTION_INVERTED && parameter_id <= TRACKING_TARGET_RATE_SLEW) {
             accepted = write_tracking_parameter(parameter_id, value);
+        } else if (parameter_id == IMU_SOURCE && App_Role_Get() == APP_ROLE_CAR &&
+                   isfinite(value) && (value == 0.0f || value == 1.0f)) {
+            (void)Car_Attitude_Control_Set_Enabled(false);
+            accepted = Car_IMU_Set_Source((car_imu_source_t)(uint8_t)value);
+            if (accepted) { imu_source = value; last_imu_sequence = 0U; }
         } else if (parameter_id >= ARM_LIMIT_MIN && parameter_id <= ARM_HOME_MODE) {
             accepted = write_arm_parameter(parameter_id, value);
         } else if (parameter_id == ARM_BALANCE_POSITION) {
