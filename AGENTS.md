@@ -37,6 +37,10 @@ Load the relevant skill before specialized work:
 - Keep application behavior in `Core/Src/main.c` and BSP modules; do not add a second entrypoint.
 - `CMakeLists.txt` uses `GLOB_RECURSE ... CONFIGURE_DEPENDS` only for the listed BSP directories, not for every file under `BSP/`.
 
+## 系统
+
+电赛 车载平衡滚球运动控制系统 题目小车。使用两块本工程的STM32H750VBT6开发板作为主控和协控，分别控制小车的运动和闭环步进电机运动控制臂杆管道控制小球保持在指定位置。视觉识别使用 Jetson Nano。
+
 ## Azure A1 网表
 
 ## 1. 电源与地网络 (Power & Ground Nets)
