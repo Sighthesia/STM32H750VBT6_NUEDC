@@ -51,6 +51,11 @@ typedef struct
     float line_release_time_s;
     float line_heading_rate_deg_s;
     float heading_error_limit_deg;
+    float line_inner_position_weight;
+    float line_outer_position_weight;
+    float line_time_curve_exponent;
+    float optical_fusion_weight;
+    float imu_fusion_weight;
 } car_tracking_config_t;
 
 enum
@@ -76,6 +81,9 @@ typedef struct
     float line_offset;
     float line_weight;
     float line_heading_rate;
+    float line_position_weight;
+    float line_time_weight;
+    float imu_fusion_weight;
     float commanded_base_speed;
     float target_rate;
     float measured_rate;

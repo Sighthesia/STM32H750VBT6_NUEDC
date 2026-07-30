@@ -218,6 +218,11 @@ void Car_Attitude_Control_Reset_Defaults(void)
     tracking_config.line_release_time_s = 0.15f;
     tracking_config.line_heading_rate_deg_s = 100.0f;
     tracking_config.heading_error_limit_deg = 25.0f;
+    tracking_config.line_inner_position_weight = 0.35f;
+    tracking_config.line_outer_position_weight = 1.0f;
+    tracking_config.line_time_curve_exponent = 2.0f;
+    tracking_config.optical_fusion_weight = 0.35f;
+    tracking_config.imu_fusion_weight = 1.0f;
     configure_pid();
     reset_controllers();
     reset_tracking_state();
@@ -233,6 +238,11 @@ bool Car_Attitude_Control_Apply_Tracking_Config(const car_tracking_config_t *nex
         !isfinite(next->line_release_time_s) ||
         !isfinite(next->line_heading_rate_deg_s) ||
         !isfinite(next->heading_error_limit_deg) ||
+        !isfinite(next->line_inner_position_weight) ||
+        !isfinite(next->line_outer_position_weight) ||
+        !isfinite(next->line_time_curve_exponent) ||
+        !isfinite(next->optical_fusion_weight) ||
+        !isfinite(next->imu_fusion_weight) ||
         (next->direction_inverted != 0.0f && next->direction_inverted != 1.0f) ||
         next->error_filter_time_s < 0.0f || next->error_filter_time_s > 2.0f ||
         next->target_rate_slew_deg_s2 <= 0.0f || next->target_rate_slew_deg_s2 > 20000.0f ||
@@ -240,7 +250,13 @@ bool Car_Attitude_Control_Apply_Tracking_Config(const car_tracking_config_t *nex
         next->line_weight_ramp_time_s < 0.01f || next->line_weight_ramp_time_s > 5.0f ||
         next->line_release_time_s < 0.0f || next->line_release_time_s > 2.0f ||
         next->line_heading_rate_deg_s <= 0.0f || next->line_heading_rate_deg_s > 720.0f ||
-        next->heading_error_limit_deg <= 0.0f || next->heading_error_limit_deg > 90.0f)
+        next->heading_error_limit_deg <= 0.0f || next->heading_error_limit_deg > 90.0f ||
+        next->line_inner_position_weight < 0.0f || next->line_inner_position_weight > 2.0f ||
+        next->line_outer_position_weight < 0.01f || next->line_outer_position_weight > 2.0f ||
+        next->line_inner_position_weight > next->line_outer_position_weight ||
+        next->line_time_curve_exponent < 0.25f || next->line_time_curve_exponent > 8.0f ||
+        next->optical_fusion_weight < 0.0f || next->optical_fusion_weight > 2.0f ||
+        next->imu_fusion_weight < 0.0f || next->imu_fusion_weight > 2.0f)
     {
         return false;
     }
@@ -312,9 +328,14 @@ bool Car_Attitude_Control_Set_Enabled(bool state)
 
 static bool update_tracking_target(uint32_t now, float measured_heading)
 {
-    static const int8_t position_weight[4] = {-3, -1, 1, 3};
     const uint8_t sensor_state = Gray_Sensor_Get_Stable() & 0x0FU;
-    int8_t weighted_position = 0;
+    const float position_weight[4] = {
+        -tracking_config.line_outer_position_weight,
+        -tracking_config.line_inner_position_weight,
+        tracking_config.line_inner_position_weight,
+        tracking_config.line_outer_position_weight
+    };
+    float weighted_position = 0.0f;
     uint8_t active_count = 0U;
 
     if (tracking_heading_initialized == 0U)
@@ -353,6 +374,9 @@ static bool update_tracking_target(uint32_t now, float measured_heading)
         debug.line_offset = line_error_filtered;
         debug.line_weight = 0.0f;
         debug.line_heading_rate = line_heading_rate;
+        debug.line_position_weight = 0.0f;
+        debug.line_time_weight = 0.0f;
+        debug.imu_fusion_weight = tracking_config.imu_fusion_weight;
         return true;
     }
     if (sensor_state == 0U)
@@ -371,15 +395,20 @@ static bool update_tracking_target(uint32_t now, float measured_heading)
             const float direction = tracking_config.direction_inverted != 0.0f ? -1.0f : 1.0f;
             const float desired_rate = direction * (float)last_line_sign *
                                        tracking_config.line_heading_rate_deg_s *
-                                       CAR_CONTROL_SEARCH_RATE_SCALE;
+                                       CAR_CONTROL_SEARCH_RATE_SCALE *
+                                       tracking_config.optical_fusion_weight;
             line_heading_rate += CAR_CONTROL_PERIOD_S /
                                  (tracking_config.line_release_time_s + CAR_CONTROL_PERIOD_S) *
                                  (desired_rate - line_heading_rate);
             tracking_target_heading += line_heading_rate * CAR_CONTROL_PERIOD_S;
             tracking_base_speed = config.base_speed * CAR_CONTROL_SEARCH_SPEED_SCALE;
             debug.line_offset = line_error_filtered;
-            debug.line_weight = CAR_CONTROL_SEARCH_RATE_SCALE;
+            debug.line_weight = CAR_CONTROL_SEARCH_RATE_SCALE *
+                                tracking_config.optical_fusion_weight;
             debug.line_heading_rate = line_heading_rate;
+            debug.line_position_weight = (float)last_line_sign;
+            debug.line_time_weight = CAR_CONTROL_SEARCH_RATE_SCALE;
+            debug.imu_fusion_weight = tracking_config.imu_fusion_weight;
             debug.status |= CAR_ATTITUDE_STATUS_LINE_SEARCH;
             return true;
         }
@@ -395,7 +424,8 @@ static bool update_tracking_target(uint32_t now, float measured_heading)
             active_count++;
         }
     }
-    const float raw_error = (float)weighted_position / (3.0f * (float)active_count);
+    const float raw_error = weighted_position /
+                            (tracking_config.line_outer_position_weight * (float)active_count);
     const float filter_alpha = CAR_CONTROL_PERIOD_S /
                                (tracking_config.error_filter_time_s + CAR_CONTROL_PERIOD_S);
     line_error_filtered += filter_alpha * (raw_error - line_error_filtered);
@@ -429,14 +459,17 @@ static bool update_tracking_target(uint32_t now, float measured_heading)
         line_direction_started_ms = 0U;
     }
     float line_weight = 0.0f;
+    float time_weight = 0.0f;
     if (current_direction != 0)
     {
         const float held_s = (float)(now - line_direction_started_ms) * 0.001f;
         const float ramp = clampf(held_s / tracking_config.line_weight_ramp_time_s, 0.0f, 1.0f);
+        time_weight = powf(ramp, tracking_config.line_time_curve_exponent);
         line_weight = tracking_config.line_initial_weight +
-                      (1.0f - tracking_config.line_initial_weight) * ramp;
+                      (1.0f - tracking_config.line_initial_weight) * time_weight;
     }
-    const float desired_heading_rate = direction * error * line_weight *
+    const float fused_line_weight = line_weight * tracking_config.optical_fusion_weight;
+    const float desired_heading_rate = direction * error * fused_line_weight *
                                        tracking_config.line_heading_rate_deg_s;
     line_heading_rate += CAR_CONTROL_PERIOD_S /
                          (tracking_config.line_release_time_s + CAR_CONTROL_PERIOD_S) *
@@ -450,8 +483,11 @@ static bool update_tracking_target(uint32_t now, float measured_heading)
         0.20f * fabsf(line_heading_rate) / config.max_rate,
         CAR_CONTROL_MIN_SPEED_SCALE, 1.0f);
     debug.line_offset = error;
-    debug.line_weight = line_weight;
+    debug.line_weight = fused_line_weight;
     debug.line_heading_rate = line_heading_rate;
+    debug.line_position_weight = raw_error;
+    debug.line_time_weight = time_weight;
+    debug.imu_fusion_weight = tracking_config.imu_fusion_weight;
     return true;
 }
 
@@ -612,8 +648,10 @@ void Car_Attitude_Control_Process(void)
     float target_rate;
     if (step_mode == CAR_ATTITUDE_STEP_NONE)
     {
-        target_rate = slew_target_rate(PIDController_Update(&heading_pid, 0.0f, heading_error));
-        debug.heading_p = heading_pid.Kp * -heading_error;
+        const float fused_heading_error = tracking_config.imu_fusion_weight * heading_error;
+        target_rate = slew_target_rate(PIDController_Update(&heading_pid, 0.0f,
+                                                            fused_heading_error));
+        debug.heading_p = heading_pid.Kp * -fused_heading_error;
         debug.heading_i = heading_pid.integrator;
         debug.heading_d = heading_pid.differentiator;
     }
