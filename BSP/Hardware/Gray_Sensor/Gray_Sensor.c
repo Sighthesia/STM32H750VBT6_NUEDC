@@ -2,6 +2,14 @@
 
 #include "main.h"
 
+#define GRAY_SENSOR_SAMPLE_PERIOD_MS 5U
+#define GRAY_SENSOR_DEBOUNCE_COUNT   3U
+
+static volatile uint8_t stable_value;
+static uint8_t debounce_count[4];
+static uint32_t last_sample_ms;
+static uint8_t initialized;
+
 void Gray_Sensor_Init(void)
 {
     GPIO_InitTypeDef gpio = {0};
@@ -23,6 +31,39 @@ void Gray_Sensor_Init(void)
     HAL_GPIO_Init(GPIOB, &gpio);
     gpio.Pin = GPIO_PIN_8;
     HAL_GPIO_Init(GPIOA, &gpio);
+
+    stable_value = Gray_Sensor_Read();
+    for (uint8_t bit = 0U; bit < 4U; bit++)
+    {
+        debounce_count[bit] = (stable_value & (1U << bit)) != 0U ?
+                              GRAY_SENSOR_DEBOUNCE_COUNT : 0U;
+    }
+    last_sample_ms = HAL_GetTick();
+    initialized = 1U;
+}
+
+void Gray_Sensor_Process(void)
+{
+    if (initialized == 0U) return;
+    uint32_t now = HAL_GetTick();
+    if ((uint32_t)(now - last_sample_ms) < GRAY_SENSOR_SAMPLE_PERIOD_MS) return;
+    last_sample_ms = now;
+
+    uint8_t raw = Gray_Sensor_Read();
+    for (uint8_t bit = 0U; bit < 4U; bit++)
+    {
+        uint8_t mask = (uint8_t)(1U << bit);
+        if ((raw & mask) != 0U)
+        {
+            if (debounce_count[bit] < GRAY_SENSOR_DEBOUNCE_COUNT) debounce_count[bit]++;
+            if (debounce_count[bit] == GRAY_SENSOR_DEBOUNCE_COUNT) stable_value |= mask;
+        }
+        else
+        {
+            if (debounce_count[bit] > 0U) debounce_count[bit]--;
+            if (debounce_count[bit] == 0U) stable_value &= (uint8_t)~mask;
+        }
+    }
 }
 
 uint8_t Gray_Sensor_Read(void)
@@ -34,4 +75,9 @@ uint8_t Gray_Sensor_Read(void)
     value |= HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_0) == GPIO_PIN_SET ? 0x04U : 0U;
     value |= HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_8) == GPIO_PIN_SET ? 0x08U : 0U;
     return value;
+}
+
+uint8_t Gray_Sensor_Get_Stable(void)
+{
+    return stable_value;
 }

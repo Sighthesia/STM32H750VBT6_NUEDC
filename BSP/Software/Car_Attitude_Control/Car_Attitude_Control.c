@@ -1,9 +1,9 @@
 #include "Car_Attitude_Control.h"
 
 #include "Car_Motor_USART.h"
+#include "Gray_Sensor.h"
 #include "JY61P.h"
 #include "PID.h"
-#include "Tracking_Link.h"
 #include "main.h"
 
 #include <math.h>
@@ -36,8 +36,6 @@ static PIDController rate_pid;
 static car_ladrc_t rate_ladrc;
 static uint32_t last_sequence;
 static uint32_t last_sample_ms;
-static uint8_t last_tracking_sequence;
-static uint8_t tracking_sequence_valid;
 static float line_error_previous;
 static float line_derivative_filtered;
 static float tracking_target_rate;
@@ -93,7 +91,6 @@ static void reset_controllers(void)
 
 static void reset_tracking_state(void)
 {
-    tracking_sequence_valid = 0U;
     line_error_previous = 0.0f;
     line_derivative_filtered = 0.0f;
     tracking_target_rate = 0.0f;
@@ -256,54 +253,25 @@ bool Car_Attitude_Control_Set_Enabled(bool state)
 
 static bool update_tracking_target(uint32_t now)
 {
-    tracking_link_sample_t sample;
-    bool first_sample;
+    static const int8_t position_weight[4] = {-3, -1, 1, 3};
+    const uint8_t sensor_state = Gray_Sensor_Get_Stable() & 0x0FU;
+    int8_t weighted_position = 0;
+    uint8_t active_count = 0U;
 
-    if (!Tracking_Link_Get_Sample(&sample)) return false;
     debug.status |= CAR_ATTITUDE_STATUS_TRACKING_ONLINE;
-    first_sample = tracking_sequence_valid == 0U;
-
-    if (sample.pattern == TRACKING_PATTERN_LINE)
+    if (sensor_state == 0x0FU)
     {
-        if (!first_sample && sample.sequence == last_tracking_sequence) return true;
-        last_tracking_sequence = sample.sequence;
-        tracking_sequence_valid = 1U;
-        const float error = (float)sample.offset_x1000 * 0.001f;
-        const float derivative = first_sample || line_lost_active != 0U ? 0.0f :
-                                 (error - line_error_previous) / CAR_CONTROL_LINE_PERIOD_S;
-        const float magnitude = fabsf(error);
-
-        if (line_lost_active != 0U)
-        {
-            line_derivative_filtered = 0.0f;
-            rate_pid_initialized = 0U;
-            PIDController_Init(&rate_pid);
-        }
+        line_error_previous = 0.0f;
+        line_derivative_filtered = 0.0f;
         line_lost_active = 0U;
         line_stop_latched = 0U;
-        if (magnitude > 0.02f) last_line_sign = error < 0.0f ? -1 : 1;
-        line_derivative_filtered += CAR_CONTROL_LINE_D_FILTER *
-                                    (derivative - line_derivative_filtered);
-        line_error_previous = error;
-        tracking_target_rate = -(config.heading_kp * error * 30.0f +
-                                 config.heading_kd * line_derivative_filtered * 30.0f);
-        tracking_target_rate = clampf(tracking_target_rate, -config.max_rate, config.max_rate);
-        tracking_base_speed = config.base_speed * clampf(
-            1.0f - CAR_CONTROL_CURVE_SPEED_REDUCTION * magnitude -
-            0.20f * fabsf(tracking_target_rate) / config.max_rate,
-            CAR_CONTROL_MIN_SPEED_SCALE, 1.0f);
-        debug.tracking_angle = (float)sample.angle_x10 * 0.1f;
-        debug.line_offset = error;
-        debug.heading_p = -config.heading_kp * error * 30.0f;
-        debug.heading_i = 0.0f;
-        debug.heading_d = -config.heading_kd * line_derivative_filtered * 30.0f;
+        tracking_target_rate = 0.0f;
+        tracking_base_speed = config.base_speed;
+        debug.line_offset = 0.0f;
         return true;
     }
-
-    if (sample.pattern == TRACKING_PATTERN_LOST)
+    if (sensor_state == 0U)
     {
-        last_tracking_sequence = sample.sequence;
-        tracking_sequence_valid = 1U;
         if (line_stop_latched != 0U) return false;
         if (line_lost_active == 0U)
         {
@@ -324,9 +292,43 @@ static bool update_tracking_target(uint32_t now)
         return false;
     }
 
-    debug.status |= CAR_ATTITUDE_STATUS_PATTERN_INVALID;
-    line_stop_latched = 1U;
-    return false;
+    for (uint8_t bit = 0U; bit < 4U; bit++)
+    {
+        if ((sensor_state & (1U << bit)) != 0U)
+        {
+            weighted_position += position_weight[bit];
+            active_count++;
+        }
+    }
+    const float error = (float)weighted_position / (3.0f * (float)active_count);
+    const float derivative = line_lost_active != 0U ? 0.0f :
+                             (error - line_error_previous) / CAR_CONTROL_LINE_PERIOD_S;
+    const float magnitude = fabsf(error);
+
+    if (line_lost_active != 0U)
+    {
+        line_derivative_filtered = 0.0f;
+        rate_pid_initialized = 0U;
+        PIDController_Init(&rate_pid);
+    }
+    line_lost_active = 0U;
+    line_stop_latched = 0U;
+    if (magnitude > 0.02f) last_line_sign = error < 0.0f ? -1 : 1;
+    line_derivative_filtered += CAR_CONTROL_LINE_D_FILTER *
+                                (derivative - line_derivative_filtered);
+    line_error_previous = error;
+    tracking_target_rate = -(config.heading_kp * error * 30.0f +
+                             config.heading_kd * line_derivative_filtered * 30.0f);
+    tracking_target_rate = clampf(tracking_target_rate, -config.max_rate, config.max_rate);
+    tracking_base_speed = config.base_speed * clampf(
+        1.0f - CAR_CONTROL_CURVE_SPEED_REDUCTION * magnitude -
+        0.20f * fabsf(tracking_target_rate) / config.max_rate,
+        CAR_CONTROL_MIN_SPEED_SCALE, 1.0f);
+    debug.line_offset = error;
+    debug.heading_p = -config.heading_kp * error * 30.0f;
+    debug.heading_i = 0.0f;
+    debug.heading_d = -config.heading_kd * line_derivative_filtered * 30.0f;
+    return true;
 }
 
 bool Car_Attitude_Control_Start_Step(car_attitude_step_mode_t mode)
@@ -392,7 +394,7 @@ void Car_Attitude_Control_Process(void)
     {
         debug.status |= CAR_ATTITUDE_STATUS_IMU_VALID;
     }
-    if (Tracking_Link_Is_Online()) debug.status |= CAR_ATTITUDE_STATUS_TRACKING_ONLINE;
+    if (Gray_Sensor_Get_Stable() != 0U) debug.status |= CAR_ATTITUDE_STATUS_TRACKING_ONLINE;
     if (step_mode != CAR_ATTITUDE_STEP_NONE) debug.status |= CAR_ATTITUDE_STATUS_STEP_ACTIVE;
     if (step_mode == CAR_ATTITUDE_STEP_ANGLE) debug.status |= CAR_ATTITUDE_STATUS_ANGLE_STEP;
 
