@@ -136,6 +136,30 @@ extern float error_deadzone_threshold;    // 误差死区阈值（单位：像�
 extern uint32_t min_update_interval_ms;   // 最小更新间隔（单位：ms）
 extern float min_output_change_threshold; // 最小输出变化阈值
 
+typedef struct
+{
+    float enabled;
+    float pitch_gain;
+    float yaw_gain;
+    float filter_time_constant_s;
+    float deadzone_g;
+    float output_limit_rpm;
+} stepper_feedforward_config_t;
+
+typedef struct
+{
+    float raw_x_g;
+    float raw_y_g;
+    float filtered_x_g;
+    float filtered_y_g;
+    float pitch_output_rpm;
+    float yaw_output_rpm;
+    float pitch_total_rpm;
+    float yaw_total_rpm;
+    uint8_t imu_valid;
+    uint8_t calibrated;
+} stepper_feedforward_debug_t;
+
 void Yaw_Stepper_Position_Update(float pid_output);
 
 void Pitch_Stepper_Position_Update(float pid_output);
@@ -143,5 +167,14 @@ void Pitch_Stepper_Position_Update(float pid_output);
 void Stepper_PID_Parameters_Init(PIDController *pid);
 
 void sync_pid_slider_to_float(void);
+
+void Stepper_Feedforward_Reset_Defaults(void);
+void Stepper_Feedforward_Process(void);
+void Stepper_Feedforward_Reset_Bias(void);
+bool Stepper_Feedforward_Apply_Config(const stepper_feedforward_config_t *config);
+stepper_feedforward_config_t *Stepper_Feedforward_Get_Config(void);
+const stepper_feedforward_debug_t *Stepper_Feedforward_Get_Debug(void);
+void Stepper_Feedforward_Get_Output(float *yaw_rpm, float *pitch_rpm);
+void Stepper_Feedforward_Set_Total_Output(float yaw_rpm, float pitch_rpm);
 
 #endif /* __STEPPER_PID_H */

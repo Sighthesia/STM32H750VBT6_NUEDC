@@ -12,7 +12,13 @@
  */
 
 #include "Stepper_PID.h"
+#include "JY61P.h"
 #include <math.h> // 用于 fabsf 函数
+#include <string.h>
+
+#define JY61P_ACCEL_RAW_TO_G       (16.0f / 32768.0f)
+#define STEPPER_FF_IMU_TIMEOUT_MS  50U
+#define STEPPER_FF_BIAS_SAMPLES    100U
 
 _Bool menu_stepper_tracking_enable;
 _Bool menu_uart_data_receive_enable;
@@ -69,6 +75,17 @@ static _Bool yaw_stepper_running = 0;
 static _Bool pitch_stepper_running = 0;
 static uint8_t last_yaw_direction = ZDT_STEPPER_CCW;
 static uint8_t last_pitch_direction = ZDT_STEPPER_CCW;
+static stepper_feedforward_config_t feedforward_config;
+static stepper_feedforward_debug_t feedforward_debug;
+static uint32_t feedforward_last_sequence;
+static uint32_t feedforward_last_sample_ms;
+static uint32_t feedforward_bias_samples;
+static float feedforward_bias_sum_x;
+static float feedforward_bias_sum_y;
+static float feedforward_bias_x;
+static float feedforward_bias_y;
+static volatile float feedforward_yaw_output_rpm;
+static volatile float feedforward_pitch_output_rpm;
 /* --------------------------------- 自定义部分结束 -------------------------------- */
 
 // 中间变量
@@ -91,6 +108,167 @@ int16_t yaw_pid_target_slider_val = 10;   // 航向轴目标值滑块值（0.0f 
 // PID激光控制滑块变量定义
 int16_t pid_laser_threshold_slider_val = 50; // PID激光阈值滑块值（5.0f -> 50*0.1）
 int16_t pid_laser_duration_slider_val = 50;  // PID激光持续时间滑块值（50ms -> 50*1）
+
+static float clampf(float value, float minimum, float maximum)
+{
+    if (value < minimum) return minimum;
+    if (value > maximum) return maximum;
+    return value;
+}
+
+void Stepper_Feedforward_Reset_Bias(void)
+{
+    uint32_t primask;
+
+    feedforward_bias_samples = 0U;
+    feedforward_bias_sum_x = 0.0f;
+    feedforward_bias_sum_y = 0.0f;
+    feedforward_bias_x = 0.0f;
+    feedforward_bias_y = 0.0f;
+    feedforward_debug.calibrated = 0U;
+    feedforward_debug.filtered_x_g = 0.0f;
+    feedforward_debug.filtered_y_g = 0.0f;
+    feedforward_debug.pitch_output_rpm = 0.0f;
+    feedforward_debug.yaw_output_rpm = 0.0f;
+    primask = __get_PRIMASK();
+    __disable_irq();
+    feedforward_yaw_output_rpm = 0.0f;
+    feedforward_pitch_output_rpm = 0.0f;
+    __set_PRIMASK(primask);
+}
+
+void Stepper_Feedforward_Reset_Defaults(void)
+{
+    memset(&feedforward_config, 0, sizeof(feedforward_config));
+    feedforward_config.filter_time_constant_s = 0.10f;
+    feedforward_config.deadzone_g = 0.02f;
+    feedforward_config.output_limit_rpm = 1.0f;
+    memset(&feedforward_debug, 0, sizeof(feedforward_debug));
+    feedforward_last_sequence = 0U;
+    feedforward_last_sample_ms = 0U;
+    Stepper_Feedforward_Reset_Bias();
+}
+
+bool Stepper_Feedforward_Apply_Config(const stepper_feedforward_config_t *config)
+{
+    if (config == NULL || !isfinite(config->enabled) ||
+        (config->enabled != 0.0f && config->enabled != 1.0f) ||
+        !isfinite(config->pitch_gain) || fabsf(config->pitch_gain) > 1000.0f ||
+        !isfinite(config->yaw_gain) || fabsf(config->yaw_gain) > 1000.0f ||
+        !isfinite(config->filter_time_constant_s) || config->filter_time_constant_s < 0.0f || config->filter_time_constant_s > 10.0f ||
+        !isfinite(config->deadzone_g) || config->deadzone_g < 0.0f || config->deadzone_g > 2.0f ||
+        !isfinite(config->output_limit_rpm) || config->output_limit_rpm < 0.0f || config->output_limit_rpm > 100.0f)
+    {
+        return false;
+    }
+    if (feedforward_config.enabled != config->enabled)
+    {
+        Stepper_Feedforward_Reset_Bias();
+    }
+    feedforward_config = *config;
+    return true;
+}
+
+stepper_feedforward_config_t *Stepper_Feedforward_Get_Config(void)
+{
+    return &feedforward_config;
+}
+
+const stepper_feedforward_debug_t *Stepper_Feedforward_Get_Debug(void)
+{
+    return &feedforward_debug;
+}
+
+void Stepper_Feedforward_Process(void)
+{
+    const jy61p_status_t *status = JY61P_Get_Status();
+    uint32_t now = HAL_GetTick();
+
+    if (!status->sample_valid || status->sequence == feedforward_last_sequence)
+    {
+        if ((uint32_t)(now - feedforward_last_sample_ms) > STEPPER_FF_IMU_TIMEOUT_MS)
+        {
+            uint32_t primask = __get_PRIMASK();
+            feedforward_debug.imu_valid = 0U;
+            feedforward_debug.pitch_output_rpm = 0.0f;
+            feedforward_debug.yaw_output_rpm = 0.0f;
+            __disable_irq();
+            feedforward_yaw_output_rpm = 0.0f;
+            feedforward_pitch_output_rpm = 0.0f;
+            __set_PRIMASK(primask);
+        }
+        return;
+    }
+
+    const jy61p_sample_t *sample = JY61P_Get_Sample();
+    float raw_x = (float)sample->acceleration.x * JY61P_ACCEL_RAW_TO_G;
+    float raw_y = (float)sample->acceleration.y * JY61P_ACCEL_RAW_TO_G;
+    float dt = feedforward_last_sample_ms == 0U ? 0.01f : (float)(now - feedforward_last_sample_ms) * 0.001f;
+
+    feedforward_last_sequence = status->sequence;
+    feedforward_last_sample_ms = now;
+    feedforward_debug.imu_valid = 1U;
+    feedforward_debug.raw_x_g = raw_x;
+    feedforward_debug.raw_y_g = raw_y;
+
+    if (feedforward_debug.calibrated == 0U)
+    {
+        feedforward_bias_sum_x += raw_x;
+        feedforward_bias_sum_y += raw_y;
+        feedforward_bias_samples++;
+        if (feedforward_bias_samples >= STEPPER_FF_BIAS_SAMPLES)
+        {
+            feedforward_bias_x = feedforward_bias_sum_x / (float)feedforward_bias_samples;
+            feedforward_bias_y = feedforward_bias_sum_y / (float)feedforward_bias_samples;
+            feedforward_debug.calibrated = 1U;
+        }
+        feedforward_debug.pitch_output_rpm = 0.0f;
+        feedforward_debug.yaw_output_rpm = 0.0f;
+        return;
+    }
+
+    float alpha = feedforward_config.filter_time_constant_s <= 0.0f ? 1.0f :
+                  dt / (feedforward_config.filter_time_constant_s + dt);
+    feedforward_debug.filtered_x_g += alpha * (raw_x - feedforward_bias_x - feedforward_debug.filtered_x_g);
+    feedforward_debug.filtered_y_g += alpha * (raw_y - feedforward_bias_y - feedforward_debug.filtered_y_g);
+
+    float x = fabsf(feedforward_debug.filtered_x_g) > feedforward_config.deadzone_g ? feedforward_debug.filtered_x_g : 0.0f;
+    float y = fabsf(feedforward_debug.filtered_y_g) > feedforward_config.deadzone_g ? feedforward_debug.filtered_y_g : 0.0f;
+    if (feedforward_config.enabled == 0.0f)
+    {
+        uint32_t primask = __get_PRIMASK();
+        feedforward_debug.pitch_output_rpm = 0.0f;
+        feedforward_debug.yaw_output_rpm = 0.0f;
+        __disable_irq();
+        feedforward_yaw_output_rpm = 0.0f;
+        feedforward_pitch_output_rpm = 0.0f;
+        __set_PRIMASK(primask);
+        return;
+    }
+    feedforward_debug.pitch_output_rpm = clampf(feedforward_config.pitch_gain * x,
+                                                 -feedforward_config.output_limit_rpm,
+                                                 feedforward_config.output_limit_rpm);
+    feedforward_debug.yaw_output_rpm = clampf(feedforward_config.yaw_gain * y,
+                                               -feedforward_config.output_limit_rpm,
+                                               feedforward_config.output_limit_rpm);
+    uint32_t primask = __get_PRIMASK();
+    __disable_irq();
+    feedforward_yaw_output_rpm = feedforward_debug.yaw_output_rpm;
+    feedforward_pitch_output_rpm = feedforward_debug.pitch_output_rpm;
+    __set_PRIMASK(primask);
+}
+
+void Stepper_Feedforward_Get_Output(float *yaw_rpm, float *pitch_rpm)
+{
+    if (yaw_rpm != NULL) *yaw_rpm = feedforward_yaw_output_rpm;
+    if (pitch_rpm != NULL) *pitch_rpm = feedforward_pitch_output_rpm;
+}
+
+void Stepper_Feedforward_Set_Total_Output(float yaw_rpm, float pitch_rpm)
+{
+    feedforward_debug.yaw_total_rpm = yaw_rpm;
+    feedforward_debug.pitch_total_rpm = pitch_rpm;
+}
 
 /** ***************************************************************************
  * @brief  初始化步进电机PID参数

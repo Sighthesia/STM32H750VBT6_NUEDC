@@ -165,9 +165,18 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
         {
             if (stepper_update_pending)
             {
+                float yaw_feedforward;
+                float pitch_feedforward;
+                float yaw_total;
+                float pitch_total;
+
+                Stepper_Feedforward_Get_Output(&yaw_feedforward, &pitch_feedforward);
+                yaw_total = fminf(fmaxf(yaw_pid_output + yaw_feedforward, yaw_pid.limMin), yaw_pid.limMax);
+                pitch_total = fminf(fmaxf(pitch_pid_output + pitch_feedforward, pitch_pid.limMin), pitch_pid.limMax);
+                Stepper_Feedforward_Set_Total_Output(yaw_total, pitch_total);
                 // 更新步进电机位置
-                Yaw_Stepper_Position_Update(yaw_pid_output);
-                Pitch_Stepper_Position_Update(pitch_pid_output);
+                Yaw_Stepper_Position_Update(yaw_total);
+                Pitch_Stepper_Position_Update(pitch_total);
 
                 if (menu_pid_calculation_debug)
                 {
