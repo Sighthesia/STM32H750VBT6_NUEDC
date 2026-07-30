@@ -58,10 +58,6 @@
 #define ARM_STARTUP_HOME_TIMEOUT_MS 22000U
 #define ARM_STARTUP_MOVE_TIMEOUT_MS 10000U
 #define ARM_BALANCE_TOLERANCE_DEG 0.5f
-#define CAR_B0_PULSE_MS 250U
-#define CAR_B0_SETTLE_MS 800U
-#define CAR_B0_SEQUENCE_COUNT 6U
-
 enum {
     CAR_KP,
     CAR_KI,
@@ -144,6 +140,12 @@ enum {
     TRACKING_IMU_FUSION_WEIGHT,
     IMU_RATE_Z_INVERTED,
     GRAY_SENSOR_ACTIVE_LOW,
+    CAR_B0_START_DIFFERENTIAL,
+    CAR_B0_DIFFERENTIAL_STEP,
+    CAR_B0_LEVEL_COUNT,
+    CAR_B0_PULSE_DURATION_MS,
+    CAR_B0_SETTLE_DURATION_MS,
+    CAR_B0_REPEAT_COUNT,
     ANO_PARAM_COUNT
 };
 
@@ -168,7 +170,7 @@ static const ano_command_desc_t commands[] = {
     {{0x03U, ANO_COMMAND_CAR_LAP_START, 0x00U}, "启动一圈停车", "启用循迹并计时，返回A点十字后按补偿停车"},
     {{0x03U, ANO_COMMAND_CAR_LAP_STOP, 0x00U}, "停止一圈任务", "立即停止循迹并冻结本圈时间、里程和平均速度"},
     {{0x03U, ANO_COMMAND_CAR_LAP_CLEAR, 0x00U}, "清除一圈记录", "清除本圈状态、时间、里程和平均速度"},
-    {{0x03U, ANO_COMMAND_CAR_B0_CALIBRATE, 0x00U}, "b0开环标定", "依次执行正反20、30、40差速脉冲并上传标定遥测"},
+    {{0x03U, ANO_COMMAND_CAR_B0_CALIBRATE, 0x00U}, "b0开环标定", "按b0标定参数执行正反差速脉冲并上传标定遥测"},
     {{0x03U, ANO_COMMAND_ARM_DEBUG_ENTER, 0x00U}, "进入臂杆调试", "停止闭环输出并开放受限的臂杆调试命令"},
     {{0x03U, ANO_COMMAND_ARM_DEBUG_EXIT, 0x00U}, "退出臂杆调试", "立即停止电机并退出臂杆调试模式"},
     {{0x03U, ANO_COMMAND_ARM_HOME, 0x00U}, "臂杆电机回零", "按回零模式触发驱动器回零，完成后需确认零点"},
@@ -202,6 +204,12 @@ static float car_debug_m2_value;
 static float car_debug_m2_direction;
 static float car_m1_direction;
 static float car_m2_direction = 1.0f;
+static float car_b0_start_differential = 100.0f;
+static float car_b0_differential_step = 50.0f;
+static float car_b0_level_count = 3.0f;
+static float car_b0_pulse_duration_ms = 300.0f;
+static float car_b0_settle_duration_ms = 1000.0f;
+static float car_b0_repeat_count = 3.0f;
 static uint8_t car_debug_active;
 static uint8_t car_b0_calibration_active;
 static uint8_t car_b0_calibration_phase;
@@ -272,10 +280,6 @@ typedef enum
 } arm_startup_state_t;
 
 static arm_startup_state_t arm_startup_state;
-
-static const int16_t car_b0_calibration_sequence[CAR_B0_SEQUENCE_COUNT] = {
-    20, -20, 30, -30, 40, -40
-};
 
 typedef struct
 {
@@ -605,6 +609,12 @@ static void reset_local_defaults(void)
     car_debug_m2_direction = 0.0f;
     car_m1_direction = 0.0f;
     car_m2_direction = 1.0f;
+    car_b0_start_differential = 100.0f;
+    car_b0_differential_step = 50.0f;
+    car_b0_level_count = 3.0f;
+    car_b0_pulse_duration_ms = 300.0f;
+    car_b0_settle_duration_ms = 1000.0f;
+    car_b0_repeat_count = 3.0f;
     (void)Car_Motor_Set_Direction(0U, false);
     (void)Car_Motor_Set_Direction(1U, true);
     car_debug_active = 0U;
@@ -783,6 +793,7 @@ static void apply_legacy_attitude_config(const ano_attitude_config_v13_t *legacy
 
 static float *parameter(uint16_t id);
 static bool write_car_parameter(uint16_t parameter_id, float value);
+static bool write_car_b0_calibration_parameter(uint16_t parameter_id, float value);
 static bool apply_car_config(void);
 static bool stop_arm_debug(bool exit_debug);
 static bool arm_points_valid(void);
@@ -1377,7 +1388,9 @@ static float *parameter(uint16_t id)
         &arm_debug_direction, &arm_debug_accel, &arm_driver_microstep,
         &arm_debug_timeout_ms, &arm_home_mode, &car_lap_stop_delay_ms,
         &arm_balance_position, &car_lap_counts_per_meter,
-        NULL, NULL, NULL, &imu_source, &gray_sensor_active_low
+        NULL, NULL, NULL, &imu_source, &gray_sensor_active_low,
+        &car_b0_start_differential, &car_b0_differential_step, &car_b0_level_count,
+        &car_b0_pulse_duration_ms, &car_b0_settle_duration_ms, &car_b0_repeat_count
     };
     if (id >= ATTITUDE_MODE && id <= STEP_ANGLE_FEEDBACK_INVERTED)
     {
@@ -1665,6 +1678,51 @@ static bool write_car_parameter(uint16_t parameter_id, float value)
     return false;
 }
 
+static bool write_car_b0_calibration_parameter(uint16_t parameter_id, float value)
+{
+    float *target = parameter(parameter_id);
+
+    if (App_Role_Get() != APP_ROLE_CAR || car_b0_calibration_active != 0U ||
+        target == NULL || !isfinite(value) || value != floorf(value))
+    {
+        return false;
+    }
+
+    switch (parameter_id)
+    {
+    case CAR_B0_START_DIFFERENTIAL:
+        if (value < 20.0f || value > 500.0f) return false;
+        break;
+    case CAR_B0_DIFFERENTIAL_STEP:
+        if (value < 0.0f || value > 100.0f) return false;
+        break;
+    case CAR_B0_LEVEL_COUNT:
+        if (value < 1.0f || value > 5.0f) return false;
+        break;
+    case CAR_B0_PULSE_DURATION_MS:
+        if (value < 100.0f || value > 1000.0f) return false;
+        break;
+    case CAR_B0_SETTLE_DURATION_MS:
+        if (value < 200.0f || value > 3000.0f) return false;
+        break;
+    case CAR_B0_REPEAT_COUNT:
+        if (value < 1.0f || value > 5.0f) return false;
+        break;
+    default:
+        return false;
+    }
+
+    if ((parameter_id == CAR_B0_START_DIFFERENTIAL ? value : car_b0_start_differential) +
+        ((parameter_id == CAR_B0_LEVEL_COUNT ? value : car_b0_level_count) - 1.0f) *
+        (parameter_id == CAR_B0_DIFFERENTIAL_STEP ? value : car_b0_differential_step) > 1000.0f)
+    {
+        return false;
+    }
+
+    *target = value;
+    return true;
+}
+
 static bool write_inactive_parameter(uint16_t parameter_id, float value)
 {
     float *target = parameter(parameter_id);
@@ -1791,7 +1849,8 @@ static void send_param_info(uint16_t id)
         "光电初始权重", "光电权重增长时间", "光电释放时间", "光电航向推进速度", "航向误差限幅",
         "半圈目标角度", "半圈角度窗口", "半圈确认时间", "横线确认时间",
         "内侧光电位置权重", "外侧光电位置权重", "时间权重曲线指数", "光电融合权重", "惯导融合权重",
-        "Z轴角速度反馈倒置", "光电低电平有效"
+        "Z轴角速度反馈倒置", "光电低电平有效",
+        "b0起始差速", "b0差速步进", "b0档位数量", "b0脉冲时长", "b0停稳时长", "b0重复次数"
     };
     static const char *const infos[ANO_PARAM_COUNT] = {
         "四驱速度环比例系数", "四驱速度环积分系数", "四驱速度环微分系数",
@@ -1820,7 +1879,10 @@ static void send_param_info(uint16_t id)
         "终点横线连续有效确认时间，单位毫秒", "内侧两路光电位置权重，不得大于外侧权重",
         "最外侧两路光电位置权重，用作位置归一化基准", "时间幂曲线指数，大于1时短时修正更柔和",
         "光电航向参考修正总权重，0关闭光电修正", "惯导航向外环输出权重，0关闭航向保持",
-        "0原方向，1倒置，仅作用于Z轴角速度反馈", "0为高电平黑线有效，1为低电平黑线有效"
+        "0原方向，1倒置，仅作用于Z轴角速度反馈", "0为高电平黑线有效，1为低电平黑线有效",
+        "第一档逻辑差速，范围20至500", "相邻档逻辑差速增量，范围0至100", "正幅值档位数量，范围1至5",
+        "每个激励脉冲时长，单位毫秒，范围100至1000", "相邻脉冲停稳时长，单位毫秒，范围200至3000",
+        "每个档位的正反激励重复次数，范围1至5"
     };
     uint8_t d[ANO_DATA_MAX] = {0}; uint16_t i = 0U;
     if (id >= ANO_PARAM_COUNT) return;
@@ -2372,33 +2434,38 @@ static bool start_car_b0_calibration(void)
 static void process_car_b0_calibration(void)
 {
     const uint32_t now = HAL_GetTick();
-    const car_motor_telemetry_t *motor = Car_Motor_Get_Telemetry();
 
     if (car_b0_calibration_active == 0U) return;
     if (car_b0_calibration_phase == 0U)
     {
         int16_t differential;
+        const uint8_t level_count = (uint8_t)car_b0_level_count;
+        const uint8_t repeat_count = (uint8_t)car_b0_repeat_count;
+        const uint8_t pulse_count = (uint8_t)(level_count * repeat_count * 2U);
 
-        if ((uint32_t)(now - car_b0_phase_started_ms) < CAR_B0_SETTLE_MS) return;
-        if (car_b0_calibration_index >= CAR_B0_SEQUENCE_COUNT)
+        if ((uint32_t)(now - car_b0_phase_started_ms) < (uint32_t)car_b0_settle_duration_ms) return;
+        if (car_b0_calibration_index >= pulse_count)
         {
             stop_car_b0_calibration(2U);
             return;
         }
-        differential = car_b0_calibration_sequence[car_b0_calibration_index];
+        differential = (int16_t)(car_b0_start_differential +
+                                 (float)(car_b0_calibration_index / (repeat_count * 2U)) *
+                                 car_b0_differential_step);
+        if ((car_b0_calibration_index & 1U) != 0U) differential = (int16_t)-differential;
         if (!Car_Motor_Set_Speed((int16_t)-differential, differential, 0, 0))
         {
             stop_car_b0_calibration(3U);
             return;
         }
         car_b0_requested_differential = differential;
-        car_b0_applied_differential = (int16_t)((motor->applied_speed[1] - motor->applied_speed[0]) / 2);
+        car_b0_applied_differential = differential;
         car_b0_calibration_phase = 1U;
         car_b0_phase_started_ms = now;
         return;
     }
 
-    if ((uint32_t)(now - car_b0_phase_started_ms) < CAR_B0_PULSE_MS) return;
+    if ((uint32_t)(now - car_b0_phase_started_ms) < (uint32_t)car_b0_pulse_duration_ms) return;
     if (!Car_Motor_Set_Speed(0, 0, 0, 0))
     {
         stop_car_b0_calibration(3U);
@@ -2688,10 +2755,10 @@ static void handle(uint8_t source, uint8_t id, const uint8_t *d, uint16_t n, uin
         parameter_session_until_ms = HAL_GetTick() + ANO_PARAMETER_SESSION_MS;
         bool inactive_for_role =
             (App_Role_Get() == APP_ROLE_ARM &&
-             (parameter_id <= CAR_KD ||
+              (parameter_id <= CAR_KD ||
               (parameter_id >= CAR_TYPE && parameter_id <= STEP_ANGLE_FEEDBACK_INVERTED) ||
               parameter_id == CAR_LAP_STOP_DELAY_MS || parameter_id == CAR_LAP_COUNTS_PER_METER ||
-              (parameter_id >= TRACKING_DIRECTION_INVERTED && parameter_id < ANO_PARAM_COUNT))) ||
+              (parameter_id >= TRACKING_DIRECTION_INVERTED && parameter_id <= GRAY_SENSOR_ACTIVE_LOW))) ||
             (App_Role_Get() == APP_ROLE_CAR &&
              ((parameter_id >= YAW_KP && parameter_id <= PITCH_KD) ||
               (parameter_id >= STEPPER_FF_ENABLE && parameter_id <= STEPPER_FF_OUTPUT_LIMIT) ||
@@ -2724,6 +2791,8 @@ static void handle(uint8_t source, uint8_t id, const uint8_t *d, uint16_t n, uin
         } else if ((parameter_id == CAR_M1_DIRECTION || parameter_id == CAR_M2_DIRECTION) &&
                    isfinite(value) && (value == 0.0f || value == 1.0f)) {
             accepted = write_car_parameter(parameter_id, value);
+        } else if (parameter_id >= CAR_B0_START_DIFFERENTIAL && parameter_id <= CAR_B0_REPEAT_COUNT) {
+            accepted = write_car_b0_calibration_parameter(parameter_id, value);
         } else if ((parameter_id >= ATTITUDE_MODE && parameter_id <= STEP_ANGLE_FEEDBACK_INVERTED) ||
                    parameter_id == IMU_RATE_Z_INVERTED) {
             accepted = write_attitude_parameter(parameter_id, value);
