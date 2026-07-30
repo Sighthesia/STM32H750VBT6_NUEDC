@@ -49,12 +49,11 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
                 printf("[Auto Zero] Target lost for %lums, triggering auto zero return\r\n",
                        current_time - target_lost_start_time);
 
-                // 触发双轴回零
-                ZDT_Stepper_trigger_zero_return(zdt_stepper_motors[0], 0, 0); // Yaw轴回零
-                ZDT_Stepper_trigger_zero_return(zdt_stepper_motors[1], 0, 0); // Pitch轴回零
+                // 触发唯一PITCH轴回零
+                ZDT_Stepper_trigger_zero_return(zdt_stepper_motors[0], 0, 0);
 
                 auto_zero_return_triggered = 1; // 设置已触发标志，避免重复触发
-                printf("[Auto Zero] Zero return command sent to both motors\r\n");
+                printf("[Auto Zero] Zero return command sent to pitch motor\r\n");
             }
         }
 

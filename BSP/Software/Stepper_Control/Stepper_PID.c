@@ -395,7 +395,7 @@ void Pitch_Stepper_Position_Update(float pid_output)
     {
         if (pitch_stepper_running)
         {
-            ZDT_Stepper_stop(zdt_stepper_motors[1], ZDT_STEPPER_SYNC_DISABLE);
+            ZDT_Stepper_stop(zdt_stepper_motors[0], ZDT_STEPPER_SYNC_DISABLE);
             pitch_stepper_running = 0;
             if (menu_stepper_command_debug)
             {
@@ -420,7 +420,7 @@ void Pitch_Stepper_Position_Update(float pid_output)
     }
 
     pid_pitch_angle = pid_output;
-    ZDT_Stepper_Set_Speed(zdt_stepper_motors[1], dir, speed,
+    ZDT_Stepper_Set_Speed(zdt_stepper_motors[0], dir, speed,
                           ZDT_STEPPER_SPEED_ACCEL, ZDT_STEPPER_SYNC_DISABLE);
     pitch_stepper_running = 1;
     last_pitch_direction = dir;

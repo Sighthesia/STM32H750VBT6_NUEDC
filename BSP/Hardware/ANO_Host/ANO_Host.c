@@ -7,13 +7,13 @@
 #include "Tracking_Link.h"
 #include "W25Qxx.h"
 #include "ZDT_Stepper.h"
+#include "App_Role.h"
 #include "usart.h"
 
 #include <math.h>
 #include <string.h>
 
 #define ANO_HEAD 0xABU
-#define ANO_DEVICE_ADDRESS 0x05U
 #define ANO_HOST_ADDRESS 0xFEU
 #define ANO_BROADCAST_ADDRESS 0xFFU
 #define ANO_ID_CHECK 0x00U
@@ -93,6 +93,7 @@ enum {
     STEPPER_FF_FILTER_TAU,
     STEPPER_FF_DEADZONE,
     STEPPER_FF_OUTPUT_LIMIT,
+    BOARD_ROLE,
     ANO_PARAM_COUNT
 };
 
@@ -101,7 +102,7 @@ typedef struct { uint8_t cid[3]; const char *name; const char *info; } ano_comma
 
 static const ano_command_desc_t commands[] = {
     {{0x03U, 0x03U, 0x00U}, "四驱停止", "将四路电机速度设为零"},
-    {{0x02U, 0x12U, 0xFFU}, "ZDT双轴停止", "立即停止两个ZDT闭环步进电机"},
+    {{0x02U, 0x12U, 0xFFU}, "ZDT电机停止", "立即停止臂杆PITCH轴ZDT闭环步进电机"},
     {{0x03U, ANO_COMMAND_CAR_READ_FLASH, 0x00U}, "读取四驱配置", "请求四路电机驱动读取保存的配置"},
     {{0x03U, ANO_COMMAND_CAR_FACTORY_RESET, 0x00U}, "四驱恢复出厂", "请求四路电机驱动恢复出厂配置"},
     {{0x03U, ANO_COMMAND_CAR_APPLY_CONFIG, 0x00U}, "下发四驱配置", "按类型、死区、相位线、减速比、轮径和PID下发当前配置"},
@@ -145,6 +146,7 @@ static uint32_t pending_baud_rate;
 static uint32_t baud_switch_at_ms;
 static uint8_t storage_ready;
 static uint8_t storage_operation;
+static float board_role;
 
 typedef struct
 {
@@ -254,6 +256,7 @@ static bool baud_rate_is_valid(uint32_t baud_rate)
 
 static void reset_local_defaults(void)
 {
+    board_role = (float)App_Role_Get();
     car_pid[0] = 0.8f;
     car_pid[1] = 0.06f;
     car_pid[2] = 0.5f;
@@ -533,7 +536,7 @@ static void send_frame_to(uint8_t destination, uint8_t id, const uint8_t *data, 
     primask = __get_PRIMASK(); __disable_irq();
     if (tx_count >= ANO_TX_QUEUE_DEPTH) { __set_PRIMASK(primask); return; }
     uint8_t *frame = tx_queue[tx_tail];
-    frame[index++] = ANO_HEAD; frame[index++] = ANO_DEVICE_ADDRESS; frame[index++] = destination; frame[index++] = id; frame[index++] = (uint8_t)length; frame[index++] = (uint8_t)(length >> 8U);
+    frame[index++] = ANO_HEAD; frame[index++] = App_Role_Get_ANO_Address(); frame[index++] = destination; frame[index++] = id; frame[index++] = (uint8_t)length; frame[index++] = (uint8_t)(length >> 8U);
     if (length != 0U)
     {
         memcpy(&frame[index], data, length);
@@ -562,7 +565,7 @@ static float *parameter(uint16_t id)
         NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
         NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
         NULL, NULL, NULL, NULL,
-        NULL, NULL, NULL, NULL, NULL, NULL
+        NULL, NULL, NULL, NULL, NULL, NULL, &board_role
     };
     if (id >= ATTITUDE_MODE && id <= STEP_ANGLE_FEEDBACK_INVERTED)
     {
@@ -714,10 +717,12 @@ static void send_param(uint16_t id)
 }
 static void send_device_info(void)
 {
-    static const char name[] = "STM32H750_MOTOR";
+    const char *name = App_Role_Get_Name();
     uint8_t d[32] = {0}; uint16_t i = 0U;
-    d[i++] = ANO_DEVICE_ADDRESS; put_u16(d, &i, 1U); put_u16(d, &i, 1U); put_u16(d, &i, 0U); put_u16(d, &i, 810U);
-    memcpy(&d[i], name, sizeof(name) - 1U); i += sizeof(name) - 1U;
+    size_t name_length = strlen(name);
+    if (name_length > sizeof(d) - i - 9U) name_length = sizeof(d) - i - 9U;
+    d[i++] = App_Role_Get_ANO_Address(); put_u16(d, &i, 1U); put_u16(d, &i, 1U); put_u16(d, &i, 0U); put_u16(d, &i, 810U);
+    memcpy(&d[i], name, name_length); i += (uint16_t)name_length;
     send_frame(ANO_ID_DEVICE_INFO, d, i);
 }
 static void send_param_info(uint16_t id)
@@ -731,7 +736,7 @@ static void send_param_info(uint16_t id)
         "双环控制模式", "基础轮速", "航向Kp", "航向Ki", "航向Kd", "角速度Kp", "角速度Ki", "角速度Kd",
         "LADRC观测带宽", "LADRC控制带宽", "LADRC对象增益", "最大角速度", "最大差速", "IMU X轴倒置", "IMU Y轴倒置", "IMU Z轴倒置",
         "角速度阶跃幅度", "航向角阶跃幅度", "阶跃保持时间", "航向角反馈倒置",
-        "滚球前馈使能", "前后X轴增益", "左右Y轴增益", "前馈滤波常数", "前馈加速度死区", "前馈转速限幅"
+        "滚球前馈使能", "前后X轴增益", "左右Y轴增益", "前馈滤波常数", "前馈加速度死区", "前馈转速限幅", "控制板角色"
     };
     static const char *const infos[ANO_PARAM_COUNT] = {
         "四驱速度环比例系数", "四驱速度环积分系数", "四驱速度环微分系数",
@@ -745,7 +750,7 @@ static void send_param_info(uint16_t id)
         "被控对象输入增益，必须大于零", "航向外环目标角速度限幅", "左右轮速度差限幅", "0正常，1倒置", "0正常，1倒置", "0正常，1倒置",
         "角速度阶跃幅度，单位度每秒", "相对Z轴航向阶跃幅度，单位度", "正阶跃和回零各自保持毫秒数", "0原方向，1倒置，仅作用于航向角阶跃",
         "0关闭，1启用；启用后先静止校准", "JY61P X轴到Pitch转速增益，可为负", "JY61P Y轴到Yaw转速增益，可为负",
-        "一阶低通时间常数，单位秒", "滤波加速度死区，单位g", "单轴前馈最大转速，单位RPM"
+        "一阶低通时间常数，单位秒", "滤波加速度死区，单位g", "单轴前馈最大转速，单位RPM", "0小车控制板，1臂杆电机板；保存后重启生效"
     };
     uint8_t d[ANO_DATA_MAX] = {0}; uint16_t i = 0U;
     if (id >= ANO_PARAM_COUNT) return;
@@ -797,9 +802,12 @@ static bool apply_car_config(void)
 static bool restore_defaults(void)
 {
     storage_operation = 3U;
-    (void)Car_Attitude_Control_Set_Enabled(false);
+    if (App_Role_Get() == APP_ROLE_CAR)
+    {
+        (void)Car_Attitude_Control_Set_Enabled(false);
+    }
     if (!storage_ready || !W25Qxx_EraseSector(ANO_STORAGE_ADDRESS) ||
-        !Car_Motor_Restore_Defaults())
+        (App_Role_Get() == APP_ROLE_CAR && !Car_Motor_Restore_Defaults()))
     {
         return false;
     }
@@ -1017,8 +1025,18 @@ static void send_stepper_feedforward_diagnostic(void)
 
 static bool command(const uint8_t *d, uint16_t n)
 {
+    if (App_Role_Get() == APP_ROLE_CAR && n != 0U &&
+        (d[0] == 0x10U || d[0] == 0x11U || d[0] == 0x12U || (n == 3U && d[0] == 0x02U))) return false;
+    if (App_Role_Get() == APP_ROLE_ARM && n != 0U &&
+        ((n == 9U && (d[0] == 1U || d[0] == 2U)) || (n == 1U && d[0] == 3U) ||
+         (n == 3U && d[0] == 0x03U) || d[0] == ANO_COMMAND_CAR_READ_FLASH ||
+         d[0] == ANO_COMMAND_CAR_FACTORY_RESET || d[0] == ANO_COMMAND_CAR_APPLY_CONFIG ||
+         d[0] == ANO_COMMAND_CAR_DEBUG_ENTER || d[0] == ANO_COMMAND_CAR_DEBUG_START ||
+         d[0] == ANO_COMMAND_CAR_DEBUG_STOP || d[0] == ANO_COMMAND_CAR_RESTORE_DEFAULTS ||
+         d[0] == ANO_COMMAND_ATTITUDE_ENABLE || d[0] == ANO_COMMAND_ATTITUDE_DISABLE ||
+         d[0] == ANO_COMMAND_RATE_STEP_TEST || d[0] == ANO_COMMAND_ANGLE_STEP_TEST)) return false;
     if (n == 3U && d[0] == 0x03U && d[1] == 0x03U && d[2] == 0x00U) { (void)Car_Attitude_Control_Set_Enabled(false); return car_debug_active ? stop_car_debug() : Car_Motor_Set_Speed(0, 0, 0, 0); }
-    if (n == 3U && d[0] == 0x02U && d[1] == 0x12U && d[2] == 0xFFU) { ZDT_Stepper_stop(zdt_stepper_motors[0], 0U); ZDT_Stepper_stop(zdt_stepper_motors[1], 0U); return true; }
+    if (n == 3U && d[0] == 0x02U && d[1] == 0x12U && d[2] == 0xFFU) { ZDT_Stepper_stop(zdt_stepper_motors[0], 0U); return true; }
     if (n == 3U && d[0] == 0x03U && d[1] == ANO_COMMAND_CAR_READ_FLASH && d[2] == 0x00U) return Car_Motor_Read_Flash();
     if (n == 3U && d[0] == 0x03U && d[1] == ANO_COMMAND_CAR_FACTORY_RESET && d[2] == 0x00U) return Car_Motor_Factory_Reset();
     if (n == 3U && d[0] == 0x03U && d[1] == ANO_COMMAND_CAR_APPLY_CONFIG && d[2] == 0x00U) return apply_car_config();
@@ -1034,9 +1052,9 @@ static bool command(const uint8_t *d, uint16_t n)
     if (n == 9U && d[0] == 1U && !car_debug_active && !Car_Attitude_Control_Is_Enabled()) return Car_Motor_Set_Speed(get_i16(&d[1]), get_i16(&d[3]), get_i16(&d[5]), get_i16(&d[7]));
     if (n == 9U && d[0] == 2U && !car_debug_active && !Car_Attitude_Control_Is_Enabled()) return Car_Motor_Set_PWM(get_i16(&d[1]), get_i16(&d[3]), get_i16(&d[5]), get_i16(&d[7]));
     if (n == 1U && d[0] == 3U) { (void)Car_Attitude_Control_Set_Enabled(false); return car_debug_active ? stop_car_debug() : Car_Motor_Set_Speed(0, 0, 0, 0); }
-    if (n == 7U && d[0] == 0x10U && d[1] < 2U) { float s = get_float(&d[3]); if (s >= 0.0f && s <= 1000.0f) { ZDT_Stepper_Set_Speed(zdt_stepper_motors[d[1]], d[2] ? ZDT_STEPPER_CCW : ZDT_STEPPER_CW, s, 0U, 0U); return true; } }
-    if (n == 12U && d[0] == 0x11U && d[1] < 2U) { float s = get_float(&d[3]), p = get_float(&d[7]); if (s >= 0.0f && s <= 1000.0f && p >= 0.0f && p <= 3600.0f) { ZDT_Stepper_Set_position(zdt_stepper_motors[d[1]], d[2] ? ZDT_STEPPER_CCW : ZDT_STEPPER_CW, s, p, d[11] ? ZDT_STEPPER_ABS_POS_MODE : ZDT_STEPPER_REL_POS_MODE, 0U); return true; } }
-    if (n == 2U && d[0] == 0x12U) { if (d[1] == 0xFFU) { ZDT_Stepper_stop(zdt_stepper_motors[0], 0U); ZDT_Stepper_stop(zdt_stepper_motors[1], 0U); return true; } if (d[1] < 2U) { ZDT_Stepper_stop(zdt_stepper_motors[d[1]], 0U); return true; } }
+    if (n == 7U && d[0] == 0x10U && d[1] == 0U) { float s = get_float(&d[3]); if (s >= 0.0f && s <= 1000.0f) { ZDT_Stepper_Set_Speed(zdt_stepper_motors[0], d[2] ? ZDT_STEPPER_CCW : ZDT_STEPPER_CW, s, 0U, 0U); return true; } }
+    if (n == 12U && d[0] == 0x11U && d[1] == 0U) { float s = get_float(&d[3]), p = get_float(&d[7]); if (s >= 0.0f && s <= 1000.0f && p >= 0.0f && p <= 3600.0f) { ZDT_Stepper_Set_position(zdt_stepper_motors[0], d[2] ? ZDT_STEPPER_CCW : ZDT_STEPPER_CW, s, p, d[11] ? ZDT_STEPPER_ABS_POS_MODE : ZDT_STEPPER_REL_POS_MODE, 0U); return true; } }
+    if (n == 2U && d[0] == 0x12U && (d[1] == 0xFFU || d[1] == 0U)) { ZDT_Stepper_stop(zdt_stepper_motors[0], 0U); return true; }
     if (n == 1U && d[0] == ANO_COMMAND_CAR_READ_FLASH) return Car_Motor_Read_Flash();
     if (n == 1U && d[0] == ANO_COMMAND_CAR_FACTORY_RESET) return Car_Motor_Factory_Reset();
     if (n == 1U && d[0] == ANO_COMMAND_CAR_APPLY_CONFIG) return apply_car_config();
@@ -1066,6 +1084,9 @@ static void handle(uint8_t source, uint8_t id, const uint8_t *d, uint16_t n, uin
     else if (id == ANO_ID_PARAM_VALUE && n == 6U) {
         bool accepted = false;
         uint16_t parameter_id = get_u16(d); float value = get_float(&d[2]); float *v = parameter(parameter_id);
+        if (App_Role_Get() == APP_ROLE_ARM &&
+            (parameter_id <= CAR_KD || (parameter_id >= CAR_TYPE && parameter_id <= STEP_ANGLE_FEEDBACK_INVERTED))) return;
+        if (App_Role_Get() == APP_ROLE_CAR && parameter_id >= YAW_KP && parameter_id <= PITCH_KD) return;
         if (parameter_id == HOST_BAUD && isfinite(value) && value == (float)(uint32_t)value &&
             baud_rate_is_valid((uint32_t)value) && storage_ready) {
             uint32_t requested_baud_rate = (uint32_t)value;
@@ -1100,6 +1121,10 @@ static void handle(uint8_t source, uint8_t id, const uint8_t *d, uint16_t n, uin
             accepted = write_attitude_parameter(parameter_id, value);
         } else if (parameter_id >= STEPPER_FF_ENABLE && parameter_id <= STEPPER_FF_OUTPUT_LIMIT) {
             accepted = write_feedforward_parameter(parameter_id, value);
+        } else if (parameter_id == BOARD_ROLE && isfinite(value) && value == floorf(value) &&
+                   value >= (float)APP_ROLE_CAR && value <= (float)APP_ROLE_ARM) {
+            accepted = App_Role_Set_Persisted((app_role_t)(uint8_t)value);
+            if (accepted) board_role = value;
         } else if (v != NULL && isfinite(value) && value >= -1000.0f && value <= 1000.0f) {
             *v = value;
             accepted = true;
@@ -1123,7 +1148,7 @@ static void feed(uint8_t b)
     case 6U: parser.data[parser.index++] = b; parser.sum += b; if (parser.index == parser.length) parser.state++; break;
     case 7U: if (b == parser.sum) { parser.checksum = b; parser.state = 8U; } else parser.state = 0U; break;
     case 8U:
-        if (parser.destination == ANO_DEVICE_ADDRESS || parser.destination == ANO_BROADCAST_ADDRESS) {
+        if (parser.destination == App_Role_Get_ANO_Address() || parser.destination == ANO_BROADCAST_ADDRESS) {
             uint8_t rolling = 0U, add = 0U;
             uint8_t header[6] = {ANO_HEAD, parser.source, parser.destination, parser.id, (uint8_t)parser.length, (uint8_t)(parser.length >> 8U)};
             for (uint8_t i = 0U; i < sizeof(header); i++) { rolling += header[i]; add += rolling; }
@@ -1144,7 +1169,7 @@ void ANO_Host_Init(void)
     if (host_baud_rate != huart1.Init.BaudRate) apply_baud_rate(host_baud_rate);
     else HAL_UART_Receive_IT(&huart1, &rx_byte, 1U);
 }
-void ANO_Host_Process(void) { while (rx_head != rx_tail) { uint8_t b = rx_queue[rx_head]; rx_head = (rx_head + 1U) % ANO_RX_QUEUE_SIZE; feed(b); } if (pending_baud_rate != 0U && (int32_t)(HAL_GetTick() - baud_switch_at_ms) >= 0 && !tx_active && tx_count == 0U) { uint32_t baud_rate = pending_baud_rate; pending_baud_rate = 0U; apply_baud_rate(baud_rate); } if (HAL_GetTick() - last_imu_ms >= ANO_IMU_PERIOD_MS) { last_imu_ms = HAL_GetTick(); send_imu(); } if (HAL_GetTick() - last_control_telemetry_ms >= 20U) { last_control_telemetry_ms = HAL_GetTick(); send_control_telemetry(); send_tracking_diagnostic(); send_stepper_feedforward_diagnostic(); } if (HAL_GetTick() - last_telemetry_ms >= 100U) { last_telemetry_ms = HAL_GetTick(); send_telemetry(); } if (HAL_GetTick() - last_diagnostic_ms >= 500U) { last_diagnostic_ms = HAL_GetTick(); send_storage_diagnostic(); } }
+void ANO_Host_Process(void) { while (rx_head != rx_tail) { uint8_t b = rx_queue[rx_head]; rx_head = (rx_head + 1U) % ANO_RX_QUEUE_SIZE; feed(b); } if (pending_baud_rate != 0U && (int32_t)(HAL_GetTick() - baud_switch_at_ms) >= 0 && !tx_active && tx_count == 0U) { uint32_t baud_rate = pending_baud_rate; pending_baud_rate = 0U; apply_baud_rate(baud_rate); } if (App_Role_Get() == APP_ROLE_CAR && HAL_GetTick() - last_imu_ms >= ANO_IMU_PERIOD_MS) { last_imu_ms = HAL_GetTick(); send_imu(); } if (HAL_GetTick() - last_control_telemetry_ms >= 20U) { last_control_telemetry_ms = HAL_GetTick(); if (App_Role_Get() == APP_ROLE_CAR) { send_control_telemetry(); send_tracking_diagnostic(); } else { send_stepper_feedforward_diagnostic(); } } if (App_Role_Get() == APP_ROLE_CAR && HAL_GetTick() - last_telemetry_ms >= 100U) { last_telemetry_ms = HAL_GetTick(); send_telemetry(); } if (HAL_GetTick() - last_diagnostic_ms >= 500U) { last_diagnostic_ms = HAL_GetTick(); send_storage_diagnostic(); } }
 void ANO_Host_UART_RxCplt_Callback(void) { uint8_t next = (rx_tail + 1U) % ANO_RX_QUEUE_SIZE; if (next != rx_head) { rx_queue[rx_tail] = rx_byte; rx_tail = next; } HAL_UART_Receive_IT(&huart1, &rx_byte, 1U); }
 void ANO_Host_UART_TxCplt_Callback(void) { if (tx_active && tx_count) { tx_head = (tx_head + 1U) % ANO_TX_QUEUE_DEPTH; tx_count--; } tx_active = 0U; start_tx(); }
 void ANO_Host_UART_Error_Callback(void) { tx_active = 0U; HAL_UART_Receive_IT(&huart1, &rx_byte, 1U); }

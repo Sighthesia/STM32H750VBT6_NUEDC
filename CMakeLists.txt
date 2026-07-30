@@ -57,10 +57,13 @@ file(GLOB_RECURSE BSP_SOURCES CONFIGURE_DEPENDS
     "BSP/Hardware/AT24C02/*.c"
     "BSP/Hardware/W25Qxx/*.c"
     "BSP/Hardware/Tracking_Link/*.c"
+    "BSP/Hardware/Gray_Sensor/*.c"
+    "BSP/Hardware/Board_Link/*.c"
     "BSP/Software/PID/*.c"
     "BSP/Software/Car_Attitude_Control/*.c"
     "BSP/Software/Stepper_Control/Stepper_PID.c"
     "BSP/Software/G030_I2C_Link/*.c"
+    "BSP/Software/App_Role/*.c"
 )
 
 # 自动收集BSP目录下的所有头文件目录

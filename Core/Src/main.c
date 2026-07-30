@@ -31,10 +31,16 @@
 #include "Car_Motor_USART.h"
 #include "ANO_Host.h"
 #include "JY61P.h"
+#include "Stepper_PID.h"
 #include "lcd_driver.h"
 #include "lcd_wegui_driver.h"
 #include "wegui_menu_demo.h"
 #include "g030_i2c_link.h"
+#include "Tracking_Link.h"
+#include "Car_Attitude_Control.h"
+#include "App_Role.h"
+#include "Board_Link.h"
+#include "Gray_Sensor.h"
 
 /* USER CODE END Includes */
 
@@ -120,6 +126,7 @@ int main(void)
 static void App_Peripheral_Init(void)
 {
   MX_GPIO_Init();
+  App_Role_Init();
   MX_SPI1_Init();
   MX_DMA_Init();
   MX_I2C1_Init();
@@ -129,15 +136,24 @@ static void App_Peripheral_Init(void)
   MX_UART5_Init();
   MX_USART2_UART_Init();
 
-#if APP_ENABLE_ZDT_STEPPER
-  ZDT_Stepper_Init();
-  ZDT_Stepper_Enable(zdt_stepper_motors[0], ZDT_STEPPER_ENABLE, ZDT_STEPPER_SYNC_DISABLE);
-  ZDT_Stepper_Enable(zdt_stepper_motors[1], ZDT_STEPPER_ENABLE, ZDT_STEPPER_SYNC_DISABLE);
-#endif
+  if (App_Role_Get() == APP_ROLE_CAR)
+  {
 #if APP_ENABLE_CAR_MOTOR
-  Car_Motor_Init();
+    Car_Motor_Init();
+    Car_Attitude_Control_Init();
 #endif
-  JY61P_Init();
+    Gray_Sensor_Init();
+    JY61P_Init();
+  }
+  else
+  {
+#if APP_ENABLE_ZDT_STEPPER
+    ZDT_Stepper_Init();
+    ZDT_Stepper_Enable(zdt_stepper_motors[0], ZDT_STEPPER_ENABLE, ZDT_STEPPER_SYNC_DISABLE);
+#endif
+    Tracking_Link_Init();
+  }
+  Board_Link_Init();
   ANO_Host_Init();
   lcd_driver_init();
 #if WEGUI_PANEL_SELF_TEST
@@ -151,10 +167,15 @@ static void App_Peripheral_Init(void)
 
 static void App_Process(void)
 {
+  if (App_Role_Get() == APP_ROLE_CAR)
+  {
 #if APP_ENABLE_CAR_MOTOR
-  Car_Motor_Process();
+    Car_Motor_Process();
+    Car_Attitude_Control_Process();
 #endif
-  JY61P_Process();
+    JY61P_Process();
+  }
+  Board_Link_Process();
   ANO_Host_Process();
   G030_I2C_Link_Process();
 #if !WEGUI_PANEL_SELF_TEST

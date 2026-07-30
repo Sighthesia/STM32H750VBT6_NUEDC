@@ -22,7 +22,7 @@
 #define ZDT_STEPPER_NO_STORE 0 // 不存储标
 
 // 最大支持的串口数量
-#define ZDT_STEPPER_MAX_UART 2
+#define ZDT_STEPPER_MAX_UART 1
 // 每个串口最大支持的电机数量
 #define ZDT_STEPPER_PER_UART_MAX_MOTORS 1
 
