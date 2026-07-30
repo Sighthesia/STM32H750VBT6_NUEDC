@@ -4,6 +4,7 @@
 #include "Car_Attitude_Control.h"
 #include "JY61P.h"
 #include "Stepper_PID.h"
+#include "Tracking_Link.h"
 #include "W25Qxx.h"
 #include "ZDT_Stepper.h"
 #include "usart.h"
@@ -30,7 +31,9 @@
 #define ANO_ID_TELEMETRY 0xF1U
 #define ANO_ID_CONTROL_PID 0xF2U
 #define ANO_ID_CONTROL_OUTPUT 0xF3U
+#define ANO_ID_TRACKING_DIAGNOSTIC 0xF4U
 #define ANO_ID_DIAGNOSTIC 0xF5U
+#define ANO_ID_STEPPER_FF_DIAGNOSTIC 0xF6U
 #define ANO_RX_QUEUE_SIZE 128U
 #define ANO_DATA_MAX 96U
 #define ANO_TX_QUEUE_DEPTH 8U
@@ -39,7 +42,7 @@
 #define ANO_BAUD_SWITCH_DELAY_MS 50U
 #define ANO_STORAGE_ADDRESS 0U
 #define ANO_STORAGE_MAGIC 0x414E4F57UL
-#define ANO_STORAGE_VERSION 5U
+#define ANO_STORAGE_VERSION 6U
 
 enum {
     CAR_KP,
@@ -84,6 +87,12 @@ enum {
     STEP_ANGLE_AMPLITUDE,
     STEP_HOLD_MS,
     STEP_ANGLE_FEEDBACK_INVERTED,
+    STEPPER_FF_ENABLE,
+    STEPPER_FF_PITCH_GAIN,
+    STEPPER_FF_YAW_GAIN,
+    STEPPER_FF_FILTER_TAU,
+    STEPPER_FF_DEADZONE,
+    STEPPER_FF_OUTPUT_LIMIT,
     ANO_PARAM_COUNT
 };
 
@@ -103,7 +112,8 @@ static const ano_command_desc_t commands[] = {
     {{0x03U, ANO_COMMAND_ATTITUDE_ENABLE, 0x00U}, "启动陀螺仪控制", "启动航向和角速度双环控制"},
     {{0x03U, ANO_COMMAND_ATTITUDE_DISABLE, 0x00U}, "停止陀螺仪控制", "停止双环控制并将M1和M2速度置零"},
     {{0x03U, ANO_COMMAND_RATE_STEP_TEST, 0x00U}, "角速度阶跃测试", "按配置幅度执行角速度正阶跃和回零响应"},
-    {{0x03U, ANO_COMMAND_ANGLE_STEP_TEST, 0x00U}, "航向角阶跃测试", "按配置幅度执行相对航向角正阶跃和回零响应"}
+    {{0x03U, ANO_COMMAND_ANGLE_STEP_TEST, 0x00U}, "航向角阶跃测试", "按配置幅度执行相对航向角正阶跃和回零响应"},
+    {{0x03U, ANO_COMMAND_STEPPER_FF_CALIBRATE, 0x00U}, "前馈零偏校准", "保持小车静止并重新采集一秒IMU加速度零偏"}
 };
 
 static uint8_t rx_byte;
@@ -145,8 +155,21 @@ typedef struct
     float values[HOST_BAUD];
     float directions[2];
     car_attitude_control_config_t attitude;
+    stepper_feedforward_config_t feedforward;
     uint32_t checksum;
 } ano_storage_record_t;
+
+typedef struct
+{
+    uint32_t magic;
+    uint8_t version;
+    uint32_t baud_rate;
+    uint8_t reserved[3];
+    float values[HOST_BAUD];
+    float directions[2];
+    car_attitude_control_config_t attitude;
+    uint32_t checksum;
+} ano_storage_record_v5_t;
 
 typedef struct
 {
@@ -250,6 +273,7 @@ static void reset_local_defaults(void)
     (void)Car_Motor_Set_Direction(1U, true);
     car_debug_active = 0U;
     Car_Attitude_Control_Reset_Defaults();
+    Stepper_Feedforward_Reset_Defaults();
 
     pid_kp = 3.0f;
     pid_ki = 1.0f;
@@ -306,6 +330,14 @@ static uint32_t storage_record_v4_checksum(const ano_storage_record_v4_t *record
     return checksum;
 }
 
+static uint32_t storage_record_v5_checksum(const ano_storage_record_v5_t *record)
+{
+    const uint8_t *data = (const uint8_t *)record;
+    uint32_t checksum = 0x6D2B79F5U;
+    for (uint16_t i = 0U; i < sizeof(*record) - sizeof(record->checksum); i++) checksum = (checksum << 5U) ^ (checksum >> 27U) ^ data[i];
+    return checksum;
+}
+
 static float *parameter(uint16_t id);
 static bool write_car_parameter(uint16_t parameter_id, float value);
 
@@ -330,6 +362,7 @@ static bool save_storage(uint32_t baud_rate)
     record.directions[0] = car_m1_direction;
     record.directions[1] = car_m2_direction;
     record.attitude = *Car_Attitude_Control_Get_Config();
+    record.feedforward = *Stepper_Feedforward_Get_Config();
     record.checksum = storage_record_checksum(&record);
     if (!W25Qxx_EraseSector(ANO_STORAGE_ADDRESS) ||
         !W25Qxx_Write(ANO_STORAGE_ADDRESS, (const uint8_t *)&record, sizeof(record)) ||
@@ -362,6 +395,23 @@ static void load_storage(void)
         }
         if (record.directions[0] == 0.0f || record.directions[0] == 1.0f) car_m1_direction = record.directions[0];
         if (record.directions[1] == 0.0f || record.directions[1] == 1.0f) car_m2_direction = record.directions[1];
+    }
+    else if (record.version == 5U)
+    {
+        ano_storage_record_v5_t legacy = {0};
+        if (!W25Qxx_Read(ANO_STORAGE_ADDRESS, (uint8_t *)&legacy, sizeof(legacy)) ||
+            legacy.checksum != storage_record_v5_checksum(&legacy))
+        {
+            return;
+        }
+        for (uint16_t id = 0U; id < HOST_BAUD; id++)
+        {
+            float *target = parameter(id);
+            if (target != NULL && isfinite(legacy.values[id])) *target = legacy.values[id];
+        }
+        if (legacy.directions[0] == 0.0f || legacy.directions[0] == 1.0f) car_m1_direction = legacy.directions[0];
+        if (legacy.directions[1] == 0.0f || legacy.directions[1] == 1.0f) car_m2_direction = legacy.directions[1];
+        (void)Car_Attitude_Control_Apply_Config(&legacy.attitude);
     }
     else if (record.version == 4U)
     {
@@ -442,6 +492,7 @@ static void load_storage(void)
     if (record.version == ANO_STORAGE_VERSION)
     {
         (void)Car_Attitude_Control_Apply_Config(&record.attitude);
+        (void)Stepper_Feedforward_Apply_Config(&record.feedforward);
     }
     storage_operation = 0U;
 }
@@ -500,6 +551,7 @@ static void send_frame(uint8_t id, const uint8_t *data, uint16_t length)
 static float *parameter(uint16_t id)
 {
     car_attitude_control_config_t *attitude = Car_Attitude_Control_Get_Config();
+    stepper_feedforward_config_t *feedforward = Stepper_Feedforward_Get_Config();
     static float *const values[ANO_PARAM_COUNT] = {
         &car_pid[0], &car_pid[1], &car_pid[2],
         &yaw_pid.Kp, &yaw_pid.Ki, &yaw_pid.Kd,
@@ -509,7 +561,8 @@ static float *parameter(uint16_t id)
         &car_debug_m2_value, &car_debug_m2_direction, &car_m1_direction, &car_m2_direction,
         NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
         NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
-        NULL, NULL, NULL, NULL
+        NULL, NULL, NULL, NULL,
+        NULL, NULL, NULL, NULL, NULL, NULL
     };
     if (id >= ATTITUDE_MODE && id <= STEP_ANGLE_FEEDBACK_INVERTED)
     {
@@ -525,7 +578,34 @@ static float *parameter(uint16_t id)
         };
         return attitude_values[id - ATTITUDE_MODE];
     }
+    if (id >= STEPPER_FF_ENABLE && id <= STEPPER_FF_OUTPUT_LIMIT)
+    {
+        float *const feedforward_values[] = {
+            &feedforward->enabled, &feedforward->pitch_gain, &feedforward->yaw_gain,
+            &feedforward->filter_time_constant_s, &feedforward->deadzone_g,
+            &feedforward->output_limit_rpm
+        };
+        return feedforward_values[id - STEPPER_FF_ENABLE];
+    }
     return id < ANO_PARAM_COUNT ? values[id] : NULL;
+}
+
+static bool write_feedforward_parameter(uint16_t parameter_id, float value)
+{
+    stepper_feedforward_config_t next = *Stepper_Feedforward_Get_Config();
+
+    if (!isfinite(value)) return false;
+    switch (parameter_id)
+    {
+    case STEPPER_FF_ENABLE: next.enabled = value; break;
+    case STEPPER_FF_PITCH_GAIN: next.pitch_gain = value; break;
+    case STEPPER_FF_YAW_GAIN: next.yaw_gain = value; break;
+    case STEPPER_FF_FILTER_TAU: next.filter_time_constant_s = value; break;
+    case STEPPER_FF_DEADZONE: next.deadzone_g = value; break;
+    case STEPPER_FF_OUTPUT_LIMIT: next.output_limit_rpm = value; break;
+    default: return false;
+    }
+    return Stepper_Feedforward_Apply_Config(&next);
 }
 
 static bool write_attitude_parameter(uint16_t parameter_id, float value)
@@ -650,7 +730,8 @@ static void send_param_info(uint16_t id)
         "M1M2控制模式", "M1调试数值", "M1调试方向", "M2调试数值", "M2调试方向", "M1方向", "M2方向",
         "双环控制模式", "基础轮速", "航向Kp", "航向Ki", "航向Kd", "角速度Kp", "角速度Ki", "角速度Kd",
         "LADRC观测带宽", "LADRC控制带宽", "LADRC对象增益", "最大角速度", "最大差速", "IMU X轴倒置", "IMU Y轴倒置", "IMU Z轴倒置",
-        "角速度阶跃幅度", "航向角阶跃幅度", "阶跃保持时间", "航向角反馈倒置"
+        "角速度阶跃幅度", "航向角阶跃幅度", "阶跃保持时间", "航向角反馈倒置",
+        "滚球前馈使能", "前后X轴增益", "左右Y轴增益", "前馈滤波常数", "前馈加速度死区", "前馈转速限幅"
     };
     static const char *const infos[ANO_PARAM_COUNT] = {
         "四驱速度环比例系数", "四驱速度环积分系数", "四驱速度环微分系数",
@@ -662,7 +743,9 @@ static void send_param_info(uint16_t id)
         "0为PID，1为LADRC", "M1和M2共同前进速度", "航向外环比例", "航向外环积分", "航向外环微分",
         "角速度内环比例", "角速度内环积分", "角速度内环微分", "线性扩张状态观测器带宽", "角速度控制器带宽",
         "被控对象输入增益，必须大于零", "航向外环目标角速度限幅", "左右轮速度差限幅", "0正常，1倒置", "0正常，1倒置", "0正常，1倒置",
-        "角速度阶跃幅度，单位度每秒", "相对Z轴航向阶跃幅度，单位度", "正阶跃和回零各自保持毫秒数", "0原方向，1倒置，仅作用于航向角阶跃"
+        "角速度阶跃幅度，单位度每秒", "相对Z轴航向阶跃幅度，单位度", "正阶跃和回零各自保持毫秒数", "0原方向，1倒置，仅作用于航向角阶跃",
+        "0关闭，1启用；启用后先静止校准", "JY61P X轴到Pitch转速增益，可为负", "JY61P Y轴到Yaw转速增益，可为负",
+        "一阶低通时间常数，单位秒", "滤波加速度死区，单位g", "单轴前馈最大转速，单位RPM"
     };
     uint8_t d[ANO_DATA_MAX] = {0}; uint16_t i = 0U;
     if (id >= ANO_PARAM_COUNT) return;
@@ -794,7 +877,7 @@ static void send_control_telemetry(void)
     uint8_t d[40];
     uint16_t i = 0U;
 
-    if (!tx_has_capacity(2U)) return;
+    if (!tx_has_capacity(3U)) return;
 
     put_float(d, &i, control->target_heading);
     put_float(d, &i, control->tracking_angle);
@@ -818,6 +901,29 @@ static void send_control_telemetry(void)
     put_float(d, &i, control_config->mode);
     put_float(d, &i, (float)control->status);
     send_frame(ANO_ID_CONTROL_OUTPUT, d, i);
+}
+
+static void send_tracking_diagnostic(void)
+{
+    const car_attitude_control_debug_t *control = Car_Attitude_Control_Get_Debug();
+    tracking_link_sample_t tracking;
+    uint8_t d[48];
+    uint16_t i = 0U;
+    bool valid = Tracking_Link_Get_Sample(&tracking);
+    bool direction_valid = valid && tracking.pattern == TRACKING_PATTERN_LINE;
+
+    if (!tx_has_capacity(1U)) return;
+
+    for (uint8_t bit = 0U; bit < 8U; bit++)
+    {
+        put_float(d, &i, valid ? (float)((tracking.state >> bit) & 0x01U) : 0.0f);
+    }
+    put_float(d, &i, direction_valid ? control->heading_p : 0.0f);
+    put_float(d, &i, direction_valid ? control->heading_d : 0.0f);
+    put_float(d, &i, direction_valid ? control->target_rate : 0.0f);
+    /* Internal tracking angle is left-negative; F4 displays left-positive. */
+    put_float(d, &i, direction_valid ? -(float)tracking.angle_x10 * 0.1f : 0.0f);
+    send_frame(ANO_ID_TRACKING_DIAGNOSTIC, d, i);
 }
 
 static int16_t scale_i16(int16_t value, int32_t numerator, int32_t denominator)
@@ -889,6 +995,26 @@ static void send_storage_diagnostic(void)
     send_frame(ANO_ID_DIAGNOSTIC, d, i);
 }
 
+static void send_stepper_feedforward_diagnostic(void)
+{
+    const stepper_feedforward_debug_t *debug = Stepper_Feedforward_Get_Debug();
+    uint8_t d[40];
+    uint16_t i = 0U;
+
+    if (!tx_has_capacity(1U)) return;
+    put_float(d, &i, debug->raw_x_g);
+    put_float(d, &i, debug->raw_y_g);
+    put_float(d, &i, debug->filtered_x_g);
+    put_float(d, &i, debug->filtered_y_g);
+    put_float(d, &i, debug->pitch_output_rpm);
+    put_float(d, &i, debug->yaw_output_rpm);
+    put_float(d, &i, debug->pitch_total_rpm);
+    put_float(d, &i, debug->yaw_total_rpm);
+    put_float(d, &i, (float)debug->imu_valid);
+    put_float(d, &i, (float)debug->calibrated);
+    send_frame(ANO_ID_STEPPER_FF_DIAGNOSTIC, d, i);
+}
+
 static bool command(const uint8_t *d, uint16_t n)
 {
     if (n == 3U && d[0] == 0x03U && d[1] == 0x03U && d[2] == 0x00U) { (void)Car_Attitude_Control_Set_Enabled(false); return car_debug_active ? stop_car_debug() : Car_Motor_Set_Speed(0, 0, 0, 0); }
@@ -904,6 +1030,7 @@ static bool command(const uint8_t *d, uint16_t n)
     if (n == 3U && d[0] == 0x03U && d[1] == ANO_COMMAND_ATTITUDE_DISABLE && d[2] == 0x00U) return Car_Attitude_Control_Set_Enabled(false);
     if (n == 3U && d[0] == 0x03U && d[1] == ANO_COMMAND_RATE_STEP_TEST && d[2] == 0x00U) return start_attitude_step(CAR_ATTITUDE_STEP_RATE);
     if (n == 3U && d[0] == 0x03U && d[1] == ANO_COMMAND_ANGLE_STEP_TEST && d[2] == 0x00U) return start_attitude_step(CAR_ATTITUDE_STEP_ANGLE);
+    if (n == 3U && d[0] == 0x03U && d[1] == ANO_COMMAND_STEPPER_FF_CALIBRATE && d[2] == 0x00U) { Stepper_Feedforward_Reset_Bias(); return true; }
     if (n == 9U && d[0] == 1U && !car_debug_active && !Car_Attitude_Control_Is_Enabled()) return Car_Motor_Set_Speed(get_i16(&d[1]), get_i16(&d[3]), get_i16(&d[5]), get_i16(&d[7]));
     if (n == 9U && d[0] == 2U && !car_debug_active && !Car_Attitude_Control_Is_Enabled()) return Car_Motor_Set_PWM(get_i16(&d[1]), get_i16(&d[3]), get_i16(&d[5]), get_i16(&d[7]));
     if (n == 1U && d[0] == 3U) { (void)Car_Attitude_Control_Set_Enabled(false); return car_debug_active ? stop_car_debug() : Car_Motor_Set_Speed(0, 0, 0, 0); }
@@ -921,6 +1048,7 @@ static bool command(const uint8_t *d, uint16_t n)
     if (n == 1U && d[0] == ANO_COMMAND_ATTITUDE_DISABLE) return Car_Attitude_Control_Set_Enabled(false);
     if (n == 1U && d[0] == ANO_COMMAND_RATE_STEP_TEST) return start_attitude_step(CAR_ATTITUDE_STEP_RATE);
     if (n == 1U && d[0] == ANO_COMMAND_ANGLE_STEP_TEST) return start_attitude_step(CAR_ATTITUDE_STEP_ANGLE);
+    if (n == 1U && d[0] == ANO_COMMAND_STEPPER_FF_CALIBRATE) { Stepper_Feedforward_Reset_Bias(); return true; }
     return false;
 }
 
@@ -970,6 +1098,8 @@ static void handle(uint8_t source, uint8_t id, const uint8_t *d, uint16_t n, uin
             accepted = write_car_parameter(parameter_id, value);
         } else if (parameter_id >= ATTITUDE_MODE && parameter_id <= STEP_ANGLE_FEEDBACK_INVERTED) {
             accepted = write_attitude_parameter(parameter_id, value);
+        } else if (parameter_id >= STEPPER_FF_ENABLE && parameter_id <= STEPPER_FF_OUTPUT_LIMIT) {
+            accepted = write_feedforward_parameter(parameter_id, value);
         } else if (v != NULL && isfinite(value) && value >= -1000.0f && value <= 1000.0f) {
             *v = value;
             accepted = true;
@@ -1014,7 +1144,7 @@ void ANO_Host_Init(void)
     if (host_baud_rate != huart1.Init.BaudRate) apply_baud_rate(host_baud_rate);
     else HAL_UART_Receive_IT(&huart1, &rx_byte, 1U);
 }
-void ANO_Host_Process(void) { while (rx_head != rx_tail) { uint8_t b = rx_queue[rx_head]; rx_head = (rx_head + 1U) % ANO_RX_QUEUE_SIZE; feed(b); } if (pending_baud_rate != 0U && (int32_t)(HAL_GetTick() - baud_switch_at_ms) >= 0 && !tx_active && tx_count == 0U) { uint32_t baud_rate = pending_baud_rate; pending_baud_rate = 0U; apply_baud_rate(baud_rate); } if (HAL_GetTick() - last_imu_ms >= ANO_IMU_PERIOD_MS) { last_imu_ms = HAL_GetTick(); send_imu(); } if (HAL_GetTick() - last_control_telemetry_ms >= 20U) { last_control_telemetry_ms = HAL_GetTick(); send_control_telemetry(); } if (HAL_GetTick() - last_telemetry_ms >= 100U) { last_telemetry_ms = HAL_GetTick(); send_telemetry(); } if (HAL_GetTick() - last_diagnostic_ms >= 500U) { last_diagnostic_ms = HAL_GetTick(); send_storage_diagnostic(); } }
+void ANO_Host_Process(void) { while (rx_head != rx_tail) { uint8_t b = rx_queue[rx_head]; rx_head = (rx_head + 1U) % ANO_RX_QUEUE_SIZE; feed(b); } if (pending_baud_rate != 0U && (int32_t)(HAL_GetTick() - baud_switch_at_ms) >= 0 && !tx_active && tx_count == 0U) { uint32_t baud_rate = pending_baud_rate; pending_baud_rate = 0U; apply_baud_rate(baud_rate); } if (HAL_GetTick() - last_imu_ms >= ANO_IMU_PERIOD_MS) { last_imu_ms = HAL_GetTick(); send_imu(); } if (HAL_GetTick() - last_control_telemetry_ms >= 20U) { last_control_telemetry_ms = HAL_GetTick(); send_control_telemetry(); send_tracking_diagnostic(); send_stepper_feedforward_diagnostic(); } if (HAL_GetTick() - last_telemetry_ms >= 100U) { last_telemetry_ms = HAL_GetTick(); send_telemetry(); } if (HAL_GetTick() - last_diagnostic_ms >= 500U) { last_diagnostic_ms = HAL_GetTick(); send_storage_diagnostic(); } }
 void ANO_Host_UART_RxCplt_Callback(void) { uint8_t next = (rx_tail + 1U) % ANO_RX_QUEUE_SIZE; if (next != rx_head) { rx_queue[rx_tail] = rx_byte; rx_tail = next; } HAL_UART_Receive_IT(&huart1, &rx_byte, 1U); }
 void ANO_Host_UART_TxCplt_Callback(void) { if (tx_active && tx_count) { tx_head = (tx_head + 1U) % ANO_TX_QUEUE_DEPTH; tx_count--; } tx_active = 0U; start_tx(); }
 void ANO_Host_UART_Error_Callback(void) { tx_active = 0U; HAL_UART_Receive_IT(&huart1, &rx_byte, 1U); }
