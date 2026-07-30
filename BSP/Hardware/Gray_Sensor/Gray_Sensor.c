@@ -9,6 +9,7 @@ static volatile uint8_t stable_value;
 static uint8_t debounce_count[4];
 static uint32_t last_sample_ms;
 static uint8_t initialized;
+static uint8_t active_low = 1U;
 
 void Gray_Sensor_Init(void)
 {
@@ -74,10 +75,29 @@ uint8_t Gray_Sensor_Read(void)
     value |= HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_5) == GPIO_PIN_SET ? 0x02U : 0U;
     value |= HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_0) == GPIO_PIN_SET ? 0x04U : 0U;
     value |= HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_8) == GPIO_PIN_SET ? 0x08U : 0U;
-    return value;
+    return Gray_Sensor_Normalize(value, active_low);
 }
 
 uint8_t Gray_Sensor_Get_Stable(void)
 {
     return stable_value;
+}
+
+void Gray_Sensor_Set_Active_Low(uint8_t state)
+{
+    active_low = state != 0U ? 1U : 0U;
+    if (initialized != 0U)
+    {
+        stable_value = Gray_Sensor_Read();
+        for (uint8_t bit = 0U; bit < 4U; bit++)
+        {
+            debounce_count[bit] = (stable_value & (1U << bit)) != 0U ?
+                                  GRAY_SENSOR_DEBOUNCE_COUNT : 0U;
+        }
+    }
+}
+
+uint8_t Gray_Sensor_Get_Active_Low(void)
+{
+    return active_low;
 }

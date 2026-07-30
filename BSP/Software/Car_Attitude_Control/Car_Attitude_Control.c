@@ -49,6 +49,7 @@ static uint32_t line_direction_started_ms;
 static int8_t line_direction;
 static uint8_t tracking_heading_initialized;
 static int8_t last_line_sign;
+static uint8_t last_line_sign_valid;
 static uint32_t line_lost_started_ms;
 static uint8_t line_lost_active;
 static uint8_t line_stop_latched;
@@ -117,7 +118,8 @@ static void reset_tracking_state(void)
     line_direction_started_ms = 0U;
     line_direction = 0;
     tracking_heading_initialized = 0U;
-    last_line_sign = -1;
+    last_line_sign = 0;
+    last_line_sign_valid = 0U;
     line_lost_started_ms = 0U;
     line_lost_active = 0U;
     line_stop_latched = 0U;
@@ -393,7 +395,8 @@ static bool update_tracking_target(uint32_t now, float measured_heading)
             PIDController_Init(&rate_pid);
             rate_pid_initialized = 0U;
         }
-        if ((uint32_t)(now - line_lost_started_ms) <= CAR_CONTROL_LOST_STOP_MS)
+        if (last_line_sign_valid != 0U &&
+            (uint32_t)(now - line_lost_started_ms) <= CAR_CONTROL_LOST_STOP_MS)
         {
             const float direction = tracking_config.direction_inverted != 0.0f ? -1.0f : 1.0f;
             const float desired_rate = direction * (float)last_line_sign *
@@ -415,8 +418,19 @@ static bool update_tracking_target(uint32_t now, float measured_heading)
             debug.status |= CAR_ATTITUDE_STATUS_LINE_SEARCH;
             return true;
         }
-        line_stop_latched = 1U;
-        return false;
+        if (last_line_sign_valid != 0U)
+        {
+            line_stop_latched = 1U;
+            return false;
+        }
+        tracking_base_speed = config.base_speed;
+        debug.line_offset = 0.0f;
+        debug.line_weight = 0.0f;
+        debug.line_heading_rate = 0.0f;
+        debug.line_position_weight = 0.0f;
+        debug.line_time_weight = 0.0f;
+        debug.imu_fusion_weight = tracking_config.imu_fusion_weight;
+        return true;
     }
 
     for (uint8_t bit = 0U; bit < 4U; bit++)
@@ -446,7 +460,11 @@ static bool update_tracking_target(uint32_t now, float measured_heading)
     }
     line_lost_active = 0U;
     line_stop_latched = 0U;
-    if (magnitude > 0.02f) last_line_sign = error < 0.0f ? -1 : 1;
+    if (magnitude > 0.02f)
+    {
+        last_line_sign = error < 0.0f ? -1 : 1;
+        last_line_sign_valid = 1U;
+    }
     line_derivative_filtered += CAR_CONTROL_LINE_D_FILTER *
                                 (derivative - line_derivative_filtered);
     line_error_previous = error;

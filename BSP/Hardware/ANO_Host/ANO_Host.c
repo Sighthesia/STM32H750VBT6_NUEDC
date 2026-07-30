@@ -139,6 +139,7 @@ enum {
     TRACKING_OPTICAL_FUSION_WEIGHT,
     TRACKING_IMU_FUSION_WEIGHT,
     IMU_RATE_Z_INVERTED,
+    GRAY_SENSOR_ACTIVE_LOW,
     ANO_PARAM_COUNT
 };
 
@@ -225,6 +226,7 @@ static float car_lap_stop_delay_ms;
 static float arm_balance_position;
 static float car_lap_counts_per_meter = 285053.625f;
 static float imu_source;
+static float gray_sensor_active_low = 1.0f;
 static uint8_t arm_debug_active;
 static uint8_t arm_zero_valid;
 static uint8_t arm_motion_active;
@@ -602,6 +604,8 @@ static void reset_local_defaults(void)
     arm_balance_position = 0.0f;
     car_lap_stop_delay_ms = 0.0f;
     car_lap_counts_per_meter = 285053.625f;
+    gray_sensor_active_low = 1.0f;
+    Gray_Sensor_Set_Active_Low(1U);
     imu_source = (float)CAR_IMU_SOURCE_JY61P;
     (void)Car_IMU_Set_Source(CAR_IMU_SOURCE_JY61P);
     (void)Car_Lap_Task_Set_Stop_Delay(0U);
@@ -804,6 +808,8 @@ static bool save_storage(uint32_t baud_rate)
     record.arm_debug.balance_position = arm_balance_position;
     record.car_lap_counts_per_meter = car_lap_counts_per_meter;
     record.imu_source = (uint8_t)Car_IMU_Get_Source();
+    record.reserved[0] = (uint8_t)gray_sensor_active_low;
+    record.reserved[1] = 0xA5U;
     record.checksum = storage_record_checksum(&record);
     if (!W25Qxx_EraseSector(ANO_STORAGE_ADDRESS) ||
         !W25Qxx_Write(ANO_STORAGE_ADDRESS, (const uint8_t *)&record, sizeof(record)) ||
@@ -865,6 +871,11 @@ static void load_storage(void)
         {
             imu_source = (float)record.imu_source;
             (void)Car_IMU_Set_Source((car_imu_source_t)record.imu_source);
+        }
+        if (record.reserved[1] == 0xA5U && record.reserved[0] <= 1U)
+        {
+            gray_sensor_active_low = (float)record.reserved[0];
+            Gray_Sensor_Set_Active_Low(record.reserved[0]);
         }
     }
     else if (record.version == 13U)
@@ -1350,7 +1361,7 @@ static float *parameter(uint16_t id)
         &arm_debug_direction, &arm_debug_accel, &arm_driver_microstep,
         &arm_debug_timeout_ms, &arm_home_mode, &car_lap_stop_delay_ms,
         &arm_balance_position, &car_lap_counts_per_meter,
-        NULL, NULL, NULL, &imu_source
+        NULL, NULL, NULL, &imu_source, &gray_sensor_active_low
     };
     if (id >= ATTITUDE_MODE && id <= STEP_ANGLE_FEEDBACK_INVERTED)
     {
@@ -1560,6 +1571,14 @@ static bool write_tracking_parameter(uint16_t parameter_id, float value)
     return Car_Attitude_Control_Apply_Tracking_Config(&next);
 }
 
+static bool write_gray_sensor_parameter(float value)
+{
+    if (!isfinite(value) || (value != 0.0f && value != 1.0f)) return false;
+    gray_sensor_active_low = value;
+    Gray_Sensor_Set_Active_Low((uint8_t)value);
+    return true;
+}
+
 static bool write_lap_parameter(uint16_t parameter_id, float value)
 {
     car_lap_config_t next = *Car_Lap_Task_Get_Config();
@@ -1756,7 +1775,7 @@ static void send_param_info(uint16_t id)
         "光电初始权重", "光电权重增长时间", "光电释放时间", "光电航向推进速度", "航向误差限幅",
         "半圈目标角度", "半圈角度窗口", "半圈确认时间", "横线确认时间",
         "内侧光电位置权重", "外侧光电位置权重", "时间权重曲线指数", "光电融合权重", "惯导融合权重",
-        "Z轴角速度反馈倒置"
+        "Z轴角速度反馈倒置", "光电低电平有效"
     };
     static const char *const infos[ANO_PARAM_COUNT] = {
         "四驱速度环比例系数", "四驱速度环积分系数", "四驱速度环微分系数",
@@ -1785,7 +1804,7 @@ static void send_param_info(uint16_t id)
         "终点横线连续有效确认时间，单位毫秒", "内侧两路光电位置权重，不得大于外侧权重",
         "最外侧两路光电位置权重，用作位置归一化基准", "时间幂曲线指数，大于1时短时修正更柔和",
         "光电航向参考修正总权重，0关闭光电修正", "惯导航向外环输出权重，0关闭航向保持",
-        "0原方向，1倒置，仅作用于Z轴角速度反馈"
+        "0原方向，1倒置，仅作用于Z轴角速度反馈", "0为高电平黑线有效，1为低电平黑线有效"
     };
     uint8_t d[ANO_DATA_MAX] = {0}; uint16_t i = 0U;
     if (id >= ANO_PARAM_COUNT) return;
@@ -2608,6 +2627,8 @@ static void handle(uint8_t source, uint8_t id, const uint8_t *d, uint16_t n, uin
         } else if (parameter_id == CAR_LAP_COUNTS_PER_METER && isfinite(value)) {
             accepted = Car_Lap_Task_Set_Counts_Per_Meter(value);
             if (accepted) car_lap_counts_per_meter = value;
+        } else if (parameter_id == GRAY_SENSOR_ACTIVE_LOW) {
+            accepted = write_gray_sensor_parameter(value);
         } else if (parameter_id >= LAP_HALF_TURN_ANGLE && parameter_id <= LAP_CROSS_CONFIRM_MS) {
             accepted = write_lap_parameter(parameter_id, value);
         } else if (v != NULL && isfinite(value) && value >= -1000.0f && value <= 1000.0f) {
