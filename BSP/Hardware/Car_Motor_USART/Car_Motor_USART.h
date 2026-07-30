@@ -49,6 +49,7 @@ typedef struct
     uint32_t rx_parse_error_count;
     uint32_t rx_overwrite_count;
     uint32_t uart_error_count;
+    int16_t applied_speed[4];
 } car_motor_telemetry_t;
 
 typedef struct

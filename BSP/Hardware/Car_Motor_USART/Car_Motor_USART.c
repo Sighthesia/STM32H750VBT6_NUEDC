@@ -710,7 +710,11 @@ bool Car_Motor_Set_Speed(int16_t m1, int16_t m2, int16_t m3, int16_t m4)
     {
         /* 零速覆盖尚未发送的闭环差速，使取消控制立即生效。 */
         bool queued = Car_Motor_Queue_Latest_Speed("$spd:0,0,0,0#");
-        if (queued) car_motor_output_stopped = 1U;
+        if (queued)
+        {
+            memset(car_motor_telemetry.applied_speed, 0, sizeof(car_motor_telemetry.applied_speed));
+            car_motor_output_stopped = 1U;
+        }
         return queued;
     }
     if (car_motor_reversed[0]) m1 = (int16_t)-m1;
@@ -720,7 +724,14 @@ bool Car_Motor_Set_Speed(int16_t m1, int16_t m2, int16_t m3, int16_t m4)
     (void)Car_Motor_Ensure_Telemetry_Upload();
     bool queued = length > 0 && (size_t)length < sizeof(command) &&
                   Car_Motor_Queue_Latest_Speed(command);
-    if (queued) car_motor_output_stopped = 0U;
+    if (queued)
+    {
+        car_motor_telemetry.applied_speed[0] = m1;
+        car_motor_telemetry.applied_speed[1] = m2;
+        car_motor_telemetry.applied_speed[2] = m3;
+        car_motor_telemetry.applied_speed[3] = m4;
+        car_motor_output_stopped = 0U;
+    }
     return queued;
 }
 
