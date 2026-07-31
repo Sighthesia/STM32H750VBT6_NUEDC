@@ -24,7 +24,7 @@ void Gray_Sensor_Init(void)
     EXTI->IMR1 &= ~EXTI_IMR1_IM8;
 
     gpio.Mode = GPIO_MODE_INPUT;
-    gpio.Pull = GPIO_PULLUP;
+    gpio.Pull = GPIO_NOPULL;
     gpio.Speed = GPIO_SPEED_FREQ_LOW;
 
     gpio.Pin = GPIO_PIN_4 | GPIO_PIN_5;
