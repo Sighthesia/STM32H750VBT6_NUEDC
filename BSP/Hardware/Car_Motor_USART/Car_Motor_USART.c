@@ -602,15 +602,8 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 
 void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t size)
 {
-#if APP_ENABLE_ZDT_STEPPER
-    if (App_Role_Get() == APP_ROLE_ARM && huart->Instance == USART3)
-    {
-        ZDT_Stepper_USRT_RX_callback(huart, size);
-    }
-#else
     (void)huart;
     (void)size;
-#endif
 }
 
 void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart)
@@ -623,14 +616,7 @@ void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart)
         return;
     }
 #endif
-#if APP_ENABLE_ZDT_STEPPER
-    if (App_Role_Get() == APP_ROLE_ARM && huart->Instance == USART3)
-    {
-        ZDT_Stepper_UART_TxCplt_Callback(huart);
-    }
-#else
     (void)huart;
-#endif
 }
 
 void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart)
@@ -646,14 +632,7 @@ void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart)
         return;
     }
 #endif
-#if APP_ENABLE_ZDT_STEPPER
-    if (App_Role_Get() == APP_ROLE_ARM && huart->Instance == USART3)
-    {
-        ZDT_Stepper_UART_Error_Callback(huart);
-    }
-#else
     (void)huart;
-#endif
 }
 
 bool Car_Motor_Set_Type(car_motor_type_t type)
