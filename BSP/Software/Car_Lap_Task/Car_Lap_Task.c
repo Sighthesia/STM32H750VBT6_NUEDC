@@ -60,9 +60,9 @@ static void update_odometry(void)
     average_speed_mps = elapsed_ms != 0U ? distance_m * 1000.0f / (float)elapsed_ms : 0.0f;
 }
 
-static bool is_cross(void)
+static bool is_cross(uint8_t pattern)
 {
-    return (Gray_Sensor_Get_Stable() & CAR_LAP_CROSS_PATTERN) == CAR_LAP_CROSS_PATTERN;
+    return (Gray_Sensor_Get_Stable() & pattern) == pattern;
 }
 
 void Car_Lap_Task_Init(void)
@@ -192,7 +192,7 @@ void Car_Lap_Task_Process(void)
 
     if (state == CAR_LAP_STATE_WAIT_LEAVE)
     {
-        if (is_cross())
+        if (is_cross(CAR_LAP_CROSS_PATTERN))
         {
             condition_started_ms = 0U;
         }
@@ -219,7 +219,7 @@ void Car_Lap_Task_Process(void)
                 condition_started_ms = 0U;
             }
         }
-        if (!half_turn_armed || !is_cross())
+        if (!half_turn_armed || !is_cross(0x3CU))
         {
             condition_started_ms = 0U;
         }

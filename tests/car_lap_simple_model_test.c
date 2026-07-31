@@ -8,9 +8,9 @@ static int should_arm(float relative_yaw_deg)
     return relative_yaw_deg >= 180.0f;
 }
 
-static int cross_confirmed(int armed, int cross, uint32_t held_ms)
+static int cross_confirmed(int armed, uint8_t gray_state, uint8_t pattern, uint32_t held_ms)
 {
-    return armed && cross && held_ms >= 50U;
+    return armed && (gray_state & pattern) == pattern && held_ms >= 50U;
 }
 
 int main(void)
@@ -18,10 +18,12 @@ int main(void)
     assert(!should_arm(179.9f));
     assert(should_arm(180.0f));
     assert(should_arm(-180.0f));
-    assert(!cross_confirmed(0, 1, 100U));
-    assert(!cross_confirmed(1, 0, 100U));
-    assert(!cross_confirmed(1, 1, 49U));
-    assert(cross_confirmed(1, 1, 50U));
+    assert(!cross_confirmed(0, 0x3CU, 0x3CU, 100U));
+    assert(!cross_confirmed(1, 0x00U, 0x3CU, 100U));
+    assert(!cross_confirmed(1, 0x38U, 0x3CU, 100U));
+    assert(!cross_confirmed(1, 0x3CU, 0x3CU, 49U));
+    assert(cross_confirmed(1, 0x3CU, 0x3CU, 50U));
+    assert(cross_confirmed(1, 0xFFU, 0x3CU, 50U));
 
     puts("car lap simple model tests passed");
     return 0;
