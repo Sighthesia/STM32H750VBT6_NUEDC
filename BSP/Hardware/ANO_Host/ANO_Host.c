@@ -168,6 +168,11 @@ enum {
     ARM_CALIBRATION_BALANCE_PITCH,
     ARM_CALIBRATION_RIGHT_MOTOR,
     ARM_CALIBRATION_RIGHT_PITCH,
+    ARM_MOTOR_CONTROL_MODE,
+    ARM_MOTOR_SPEED_LIMIT,
+    ARM_MOTOR_SPEED_KP,
+    ARM_MOTOR_SPEED_KI,
+    ARM_MOTOR_SPEED_KD,
     CAR_ARC_STRAIGHT_LENGTH,
     CAR_ARC_RADIUS,
     CAR_ARC_LENGTH,
@@ -203,24 +208,14 @@ static const ano_command_desc_t commands[] = {
     {{0x03U, ANO_COMMAND_CAR_LAP_START, 0x00U}, "启动一圈停车", "启用循迹并计时，返回A点十字后按补偿停车"},
     {{0x03U, ANO_COMMAND_CAR_LAP_STOP, 0x00U}, "停止一圈任务", "立即停止循迹并冻结本圈时间、里程和平均速度"},
     {{0x03U, ANO_COMMAND_CAR_B0_CALIBRATE, 0x00U}, "b0开环标定", "按b0标定参数执行正反差速脉冲并上传标定遥测"},
-    {{0x03U, ANO_COMMAND_ARM_DEBUG_ENTER, 0x00U}, "进入臂杆调试", "停止闭环输出并开放受限的臂杆调试命令"},
-    {{0x03U, ANO_COMMAND_ARM_DEBUG_EXIT, 0x00U}, "退出臂杆调试", "立即停止电机并退出臂杆调试模式"},
     {{0x03U, ANO_COMMAND_ARM_HOME, 0x00U}, "臂杆电机回零", "按回零模式触发驱动器回零，完成后需确认零点"},
-    {{0x03U, ANO_COMMAND_ARM_ZERO_CONFIRM, 0x00U}, "确认臂杆零点", "当前位置确认在机械零点后清零，驱动应答成功后开放运动"},
-    {{0x03U, ANO_COMMAND_ARM_RUN_SPEED, 0x00U}, "臂杆速度转动", "按方向和速度转动，达到限位或超时自动停止"},
-    {{0x03U, ANO_COMMAND_ARM_MOVE_ABSOLUTE, 0x00U}, "臂杆绝对定位", "移动到目标绝对角度，越过软件限位时拒绝"},
-    {{0x03U, ANO_COMMAND_ARM_STOP, 0x00U}, "臂杆电机停止", "立即停止臂杆步进电机，重复执行安全"},
-    {{0x03U, ANO_COMMAND_ARM_ENABLE, 0x00U}, "臂杆电机使能", "使能臂杆步进电机驱动"},
-    {{0x03U, ANO_COMMAND_ARM_DISABLE, 0x00U}, "臂杆电机失能", "先停止再关闭臂杆步进电机驱动"},
-    {{0x03U, ANO_COMMAND_ARM_APPLY_DRIVER, 0x00U}, "应用驱动配置", "将当前细分配置写入步进电机驱动器"},
-    {{0x03U, ANO_COMMAND_CAR_ROTATE_ANGLE, 0x00U}, "旋转指定角度", "按指定旋转角度参数执行串级闭环原地旋转，到位后停车且不回零"},
+    {{0x03U, ANO_COMMAND_ARM_ZERO_CONFIRM, 0x00U}, "设置当前位置为零点", "将当前位置清零并确认电机零点"},
+    {{0x03U, ANO_COMMAND_ARM_DISABLE, 0x00U}, "关闭保持力矩", "停止并关闭臂杆电机保持力矩"},
+    {{0x03U, ANO_COMMAND_ARM_ENABLE, 0x00U}, "开启保持力矩", "开启臂杆电机保持力矩"},
     {{0x03U, ANO_COMMAND_ARM_TELEMETRY_ENABLE, 0x00U}, "开启电机遥测", "按配置频率上传臂杆电机实际转速、实际位置和反馈有效状态"},
     {{0x03U, ANO_COMMAND_ARM_TELEMETRY_DISABLE, 0x00U}, "关闭电机遥测", "停止上传臂杆电机状态，电机反馈查询继续用于闭环和安全保护"},
     {{0x03U, ANO_COMMAND_ARM_ANGLE_ENABLE, 0x00U}, "开启角度闭环", "启动JY61P Pitch角度闭环，须已完成上电回零"},
-    {{0x03U, ANO_COMMAND_ARM_ANGLE_DISABLE, 0x00U}, "关闭角度闭环", "立即停止角度闭环和臂杆电机输出"},
-    {{0x03U, ANO_COMMAND_ARM_CALIBRATION_START, 0x00U}, "开始三点标定", "停止角度环，准备依次采集最左、平衡、最右的电机位置和Pitch"},
-    {{0x03U, ANO_COMMAND_ARM_CALIBRATION_CAPTURE, 0x00U}, "采集当前标定点", "臂杆停稳后采集当前点，第三点通过整组校验后自动持久化"},
-    {{0x03U, ANO_COMMAND_ARM_CALIBRATION_CANCEL, 0x00U}, "取消三点标定", "停止电机并丢弃本次临时三点，不覆盖已保存标定"}
+    {{0x03U, ANO_COMMAND_ARM_ANGLE_ENABLE, 0x00U}, "进入臂杆闭环", "启动臂杆位置闭环"}
 };
 
 static uint8_t rx_byte;
@@ -288,6 +283,11 @@ static float arm_debug_timeout_ms = 500.0f;
 static float arm_home_mode;
 static float car_lap_stop_delay_ms;
 static float arm_balance_position;
+static float arm_motor_control_mode;
+static float arm_motor_speed_limit;
+static float arm_motor_speed_kp;
+static float arm_motor_speed_ki;
+static float arm_motor_speed_kd;
 static float car_lap_counts_per_meter = 285053.625f;
 static float gray_sensor_active_low = 1.0f;
 static uint8_t arm_debug_active;
@@ -1227,7 +1227,8 @@ static void send_frame_to(uint8_t destination, uint8_t id, const uint8_t *data, 
 {
     bool response = id == ANO_ID_CHECK ||
                     (id >= ANO_ID_COMMAND_QUERY && id <= ANO_ID_DEVICE_INFO) ||
-                    id == ANO_ID_PARAM_COMMAND;
+                    id == ANO_ID_PARAM_COMMAND || id == ANO_ID_PARAM_VALUE ||
+                    id == ANO_ID_PARAM_INFO;
     uint8_t sum = 0U, add = 0U; uint16_t index = 0U; uint32_t primask;
     uint8_t *frame;
     if (length > ANO_DATA_MAX) return;
@@ -1272,7 +1273,7 @@ static void send_frame(uint8_t id, const uint8_t *data, uint16_t length)
 static float *parameter(uint16_t id)
 {
     if (id <= CAR_REDUCTION_RATIO ||
-        (id > HOST_BAUD && id <= CAR_DEBUG_M2_DIRECTION))
+        (id > HOST_BAUD && id < CAR_M1_DIRECTION))
     {
         return NULL;
     }
@@ -1283,24 +1284,25 @@ static float *parameter(uint16_t id)
         NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
         NULL,
         NULL, NULL, NULL, NULL, NULL,
-        NULL, NULL, NULL, NULL, NULL,
+        NULL,
         &car_m1_direction, &car_m2_direction,
         NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
         NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
         NULL, NULL, NULL, NULL,
         NULL, NULL, NULL, NULL, NULL, NULL, &board_role,
-        &arm_limit_min, &arm_limit_max, &arm_debug_speed, &arm_target_position,
-        &arm_debug_direction, &arm_debug_accel, &arm_driver_microstep,
-        &arm_debug_timeout_ms, &arm_home_mode, &car_lap_stop_delay_ms,
+         &arm_limit_min, &arm_limit_max, &arm_debug_speed, &arm_target_position,
+         &arm_debug_direction, &arm_debug_accel, &arm_driver_microstep,
+         &arm_debug_timeout_ms, &arm_home_mode, &car_lap_stop_delay_ms,
         &arm_balance_position, &car_lap_counts_per_meter,
         NULL, NULL, NULL, NULL, NULL, &gray_sensor_active_low,
         &car_b0_start_differential, &car_b0_differential_step, &car_b0_level_count,
         &car_b0_pulse_duration_ms, &car_b0_settle_duration_ms, &car_b0_repeat_count,
-        &arm_motor_query_hz, &arm_motor_telemetry_hz, &arm_angle_target,
-        NULL, NULL, NULL, NULL, NULL, NULL, NULL,
-        &arm_calibration_values[0], &arm_calibration_values[1],
-        &arm_calibration_values[2], &arm_calibration_values[3],
-         &arm_calibration_values[4], &arm_calibration_values[5]
+         NULL, NULL, &arm_angle_target, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
+         &arm_calibration_values[0], &arm_calibration_values[1],
+         &arm_calibration_values[2], &arm_calibration_values[3],
+         &arm_calibration_values[4], &arm_calibration_values[5],
+         &arm_motor_control_mode, &arm_motor_speed_limit,
+         &arm_motor_speed_kp, &arm_motor_speed_ki, &arm_motor_speed_kd
     };
     if (id >= ATTITUDE_MODE && id <= STEP_ANGLE_FEEDBACK_INVERTED)
     {
@@ -1567,7 +1569,7 @@ static bool write_gray_sensor_parameter(float value)
 static bool write_car_parameter(uint16_t parameter_id, float value)
 {
     if (parameter_id <= CAR_REDUCTION_RATIO ||
-        (parameter_id > HOST_BAUD && parameter_id <= CAR_DEBUG_M2_DIRECTION)) return false;
+        (parameter_id > HOST_BAUD && parameter_id < CAR_M1_DIRECTION)) return false;
     float *target = parameter(parameter_id);
     if (target == NULL || !isfinite(value))
     {
@@ -1822,7 +1824,7 @@ static void send_param_info(uint16_t id)
         return;
     }
     if (id <= CAR_REDUCTION_RATIO ||
-        (id > HOST_BAUD && id <= CAR_DEBUG_M2_DIRECTION)) return;
+        (id > HOST_BAUD && id < CAR_M1_DIRECTION)) return;
 #if 0
     static const char *const names[ANO_PARAM_COUNT] = {
          "", "", "", "", "", "", "", "", "", "", "", "", "", "", "上位机波特率",
@@ -3132,7 +3134,7 @@ static void handle(uint8_t source, uint8_t id, const uint8_t *d, uint16_t n, uin
             accepted = write_inactive_parameter(parameter_id, value);
         } else if (parameter_id >= CAR_M1_DIRECTION && parameter_id <= CAR_M2_DIRECTION) {
             accepted = write_car_parameter(parameter_id, value);
-        } else if (parameter_id > HOST_BAUD && parameter_id <= CAR_DEBUG_M2_DIRECTION) {
+        } else if (parameter_id > HOST_BAUD && parameter_id < CAR_M1_DIRECTION) {
             accepted = false;
         } else if ((parameter_id == CAR_M1_DIRECTION || parameter_id == CAR_M2_DIRECTION) &&
                    isfinite(value) && (value == 0.0f || value == 1.0f)) {
