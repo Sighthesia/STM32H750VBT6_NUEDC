@@ -51,6 +51,7 @@ typedef struct
 void Arm_Angle_Control_Init(void);
 void Arm_Angle_Control_Process(void);
 void Arm_Angle_Control_Set_Authorized(bool authorized);
+void Arm_Angle_Control_Set_Pitch_Inverted(bool inverted);
 bool Arm_Angle_Control_Set_Enabled(bool enabled);
 bool Arm_Angle_Control_Set_Target(float target_deg);
 bool Arm_Angle_Control_Apply_Config(const arm_angle_control_config_t *config);

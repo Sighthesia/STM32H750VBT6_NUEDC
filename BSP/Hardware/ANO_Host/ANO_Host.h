@@ -54,8 +54,8 @@
  * speed RPM (float), position deg (float), speed/position age ms (u16),
  * query/telemetry frequency Hz (u16), target/measured/error angle deg (float),
  * angle output RPM (float), angle status/enabled/authorized/IMU-valid (u8),
- * calibration status/stage/captured-mask/valid (u8), last Emm42 command
- * status (u8). The first 44 bytes retain the v3 layout.
+ * calibration status/stage/captured-mask/valid (u8), last Emm42 control
+ * error status (u8, sticky until reset). The first 44 bytes retain the v3 layout.
  * Multi-byte fields are little-endian. */
 
 void ANO_Host_Init(void);

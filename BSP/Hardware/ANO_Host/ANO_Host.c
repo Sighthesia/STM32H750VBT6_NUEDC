@@ -186,6 +186,7 @@ enum {
     CAR_ARC_DIFFERENTIAL_SLEW,
     ATTITUDE_LADRC_TARGET_RATE_SLEW,
     ATTITUDE_LADRC_DIFFERENTIAL_SLEW,
+    ARM_PITCH_INVERTED,
     ANO_PARAM_COUNT
 };
 
@@ -198,7 +199,8 @@ static const uint16_t arm_parameter_ids[] = {
     ARM_MOTOR_CONTROL_MODE, ARM_MOTOR_POSITION_LIMIT, ARM_MOTOR_SPEED_LIMIT,
     ARM_CALIBRATION_LEFT_MOTOR, ARM_CALIBRATION_LEFT_PITCH,
     ARM_CALIBRATION_BALANCE_MOTOR, ARM_CALIBRATION_BALANCE_PITCH,
-    ARM_CALIBRATION_RIGHT_MOTOR, ARM_CALIBRATION_RIGHT_PITCH
+    ARM_CALIBRATION_RIGHT_MOTOR, ARM_CALIBRATION_RIGHT_PITCH,
+    ARM_PITCH_INVERTED
 };
 
 static const ano_command_desc_t arm_commands[] = {
@@ -261,6 +263,7 @@ static float arm_motor_query_hz = ARM_MOTOR_QUERY_DEFAULT_HZ;
 static float arm_motor_telemetry_hz = ARM_MOTOR_TELEMETRY_DEFAULT_HZ;
 static float arm_angle_target;
 static float arm_calibration_values[6];
+static float arm_pitch_inverted;
 static uint8_t car_debug_active;
 static uint8_t car_b0_calibration_active;
 static uint8_t car_b0_calibration_phase;
@@ -339,6 +342,7 @@ static float arm_calibration_pitch_min;
 static float arm_calibration_pitch_max;
 static float arm_calibration_pitch_samples[ARM_CALIBRATION_SAMPLE_COUNT];
 static float arm_calibration_pending[6];
+static uint8_t arm_calibration_pending_mask;
 
 typedef enum
 {
@@ -494,6 +498,8 @@ static void reset_local_defaults(void)
     arm_motor_query_hz = ARM_MOTOR_QUERY_DEFAULT_HZ;
     arm_motor_telemetry_hz = ARM_MOTOR_TELEMETRY_DEFAULT_HZ;
     arm_angle_target = 0.0f;
+    arm_pitch_inverted = 0.0f;
+    Arm_Angle_Control_Set_Pitch_Inverted(false);
     (void)Arm_Angle_Control_Set_Target(arm_angle_target);
     (void)Car_Motor_Set_Direction(0U, false);
     (void)Car_Motor_Set_Direction(1U, true);
@@ -618,8 +624,36 @@ static void load_arm_calibration(void)
     if (!a_valid && !b_valid) return;
     selected = !b_valid || (a_valid && (int32_t)(a.sequence - b.sequence) > 0) ? &a : &b;
     memcpy(arm_calibration_values, selected->values, sizeof(arm_calibration_values));
+    memcpy(arm_calibration_pending, selected->values, sizeof(arm_calibration_pending));
+    arm_calibration_pending_mask = 0x3FU;
     arm_calibration_sequence = selected->sequence;
     arm_calibration_valid = 1U;
+}
+
+static bool save_arm_calibration(void)
+{
+    ano_arm_calibration_storage_record_t record = {0};
+    ano_arm_calibration_storage_record_t verify = {0};
+    uint32_t address;
+
+    if (!storage_ready || !arm_calibration_points_valid(arm_calibration_values)) return false;
+    record.magic = ANO_ARM_CALIBRATION_STORAGE_MAGIC;
+    record.version = ANO_ARM_CALIBRATION_STORAGE_VERSION;
+    record.valid = 1U;
+    record.sequence = arm_calibration_sequence + 1U;
+    memcpy(record.values, arm_calibration_values, sizeof(record.values));
+    record.checksum = arm_calibration_storage_checksum(&record);
+    address = (record.sequence & 1U) == 0U ? ANO_ARM_CALIBRATION_STORAGE_A :
+                                            ANO_ARM_CALIBRATION_STORAGE_B;
+    if (!W25Qxx_EraseSector(address) ||
+        !W25Qxx_Write(address, (const uint8_t *)&record, sizeof(record)) ||
+        !W25Qxx_Read(address, (uint8_t *)&verify, sizeof(verify)) ||
+        memcmp(&record, &verify, sizeof(record)) != 0)
+    {
+        return false;
+    }
+    arm_calibration_sequence = record.sequence;
+    return true;
 }
 
 static bool save_arm_angle_config(void)
@@ -629,6 +663,7 @@ static bool save_arm_angle_config(void)
 
     record.magic = ANO_ARM_ANGLE_STORAGE_MAGIC;
     record.version = ANO_ARM_ANGLE_STORAGE_VERSION;
+    record.reserved[0] = (uint8_t)arm_pitch_inverted;
     record.config = *Arm_Angle_Control_Get_Config();
     record.checksum = arm_angle_storage_checksum(&record);
     return W25Qxx_Write(ANO_ARM_ANGLE_STORAGE_ADDRESS, (const uint8_t *)&record, sizeof(record)) &&
@@ -644,6 +679,9 @@ static void load_arm_angle_config(void)
         record.magic != ANO_ARM_ANGLE_STORAGE_MAGIC ||
         record.version != ANO_ARM_ANGLE_STORAGE_VERSION ||
         record.checksum != arm_angle_storage_checksum(&record)) return;
+    if (record.reserved[0] > 1U) return;
+    arm_pitch_inverted = (float)record.reserved[0];
+    Arm_Angle_Control_Set_Pitch_Inverted(arm_pitch_inverted != 0.0f);
     (void)Arm_Angle_Control_Apply_Config(&record.config);
 }
 
@@ -1331,6 +1369,7 @@ static float *parameter(uint16_t id)
     if (id == ARM_MOTOR_SPEED_KD) return &arm_angle->motor_speed_kd;
     if (id >= ARM_CALIBRATION_LEFT_MOTOR && id <= ARM_CALIBRATION_RIGHT_PITCH)
         return &arm_calibration_values[id - ARM_CALIBRATION_LEFT_MOTOR];
+    if (id == ARM_PITCH_INVERTED) return &arm_pitch_inverted;
     if (id >= ARM_ANGLE_KP && id <= ARM_ANGLE_DIRECTION_INVERTED)
     {
         float *const arm_angle_values[] = {
@@ -1399,8 +1438,10 @@ static void invalidate_arm_reference(void)
 static bool write_arm_parameter(uint16_t parameter_id, float value)
 {
     float *target = parameter(parameter_id);
+    float previous;
 
     if (target == NULL || !isfinite(value)) return false;
+    previous = *target;
     switch (parameter_id)
     {
     case ARM_LIMIT_MIN:
@@ -1431,10 +1472,57 @@ static bool write_arm_parameter(uint16_t parameter_id, float value)
     case ARM_MOTOR_SPEED_KD:
         if (value < 0.0f || value > 100.0f) return false;
         break;
+    case ARM_PITCH_INVERTED:
+        if (value != 0.0f && value != 1.0f) return false;
+        break;
     default:
         return false;
     }
     *target = value;
+    if (parameter_id == ARM_PITCH_INVERTED && !save_arm_angle_config())
+    {
+        *target = previous;
+        return false;
+    }
+    return true;
+}
+
+static bool write_arm_calibration_parameter(uint16_t parameter_id, float value)
+{
+    float next[6];
+    float previous[6];
+    uint8_t index;
+
+    if (!isfinite(value) || parameter_id < ARM_CALIBRATION_LEFT_MOTOR ||
+        parameter_id > ARM_CALIBRATION_RIGHT_PITCH || arm_calibration_status == ANO_ARM_CALIBRATION_ACTIVE)
+    {
+        return false;
+    }
+    index = (uint8_t)(parameter_id - ARM_CALIBRATION_LEFT_MOTOR);
+    if ((index & 1U) == 0U)
+    {
+        if (value < -3600.0f || value > 3600.0f) return false;
+    }
+    else if (value < -180.0f || value > 180.0f)
+    {
+        return false;
+    }
+
+    memcpy(next, arm_calibration_pending, sizeof(next));
+    next[index] = value;
+    arm_calibration_pending[index] = value;
+    arm_calibration_pending_mask |= (uint8_t)(1U << index);
+    if (arm_calibration_pending_mask != 0x3FU) return true;
+    if (!arm_calibration_points_valid(next)) return false;
+
+    memcpy(previous, arm_calibration_values, sizeof(previous));
+    memcpy(arm_calibration_values, next, sizeof(arm_calibration_values));
+    if (!save_arm_calibration())
+    {
+        memcpy(arm_calibration_values, previous, sizeof(arm_calibration_values));
+        return false;
+    }
+    arm_calibration_valid = 1U;
     return true;
 }
 
@@ -1705,6 +1793,8 @@ static void apply_parameter_after_ack(uint16_t parameter_id)
                  parameter_id == ARM_BALANCE_POSITION) invalidate_arm_reference();
         else if (parameter_id >= ARM_MOTOR_CONTROL_MODE && parameter_id <= ARM_MOTOR_SPEED_KD)
             (void)Arm_Angle_Control_Apply_Config(Arm_Angle_Control_Get_Config());
+        else if (parameter_id == ARM_PITCH_INVERTED)
+            Arm_Angle_Control_Set_Pitch_Inverted(arm_pitch_inverted != 0.0f);
     }
 }
 
@@ -1775,6 +1865,13 @@ static void send_param(uint16_t protocol_index)
     if (id >= ANO_PARAM_COUNT) return;
     v = parameter(id);
     if (id == HOST_BAUD) { put_u16(d, &i, protocol_index); put_float(d, &i, (float)(requested_baud_rate != 0U ? requested_baud_rate : host_baud_rate)); send_frame(ANO_ID_PARAM_VALUE, d, i); return; }
+    if (id >= ARM_CALIBRATION_LEFT_MOTOR && id <= ARM_CALIBRATION_RIGHT_PITCH)
+    {
+        put_u16(d, &i, protocol_index);
+        put_float(d, &i, arm_calibration_pending[id - ARM_CALIBRATION_LEFT_MOTOR]);
+        send_frame(ANO_ID_PARAM_VALUE, d, i);
+        return;
+    }
     if (v == NULL) return;
     put_u16(d, &i, protocol_index); put_float(d, &i, *v); send_frame(ANO_ID_PARAM_VALUE, d, i);
 }
@@ -1799,14 +1896,15 @@ static void send_param_info(uint16_t protocol_index)
             "臂杆位置环Kp", "臂杆位置环Ki", "臂杆位置环Kd",
             "电机控制模式", "电机位置式限幅", "电机速度式限幅",
             "上抬最高电机位置", "上抬最高电机角度", "平衡电机位置",
-            "平衡电机角度", "下压最低电机位置", "下压最低电机角度"
+            "平衡电机角度", "下压最低电机位置", "下压最低电机角度", "Pitch反转"
         };
         static const char *const infos[] = {
             "钢球速度环比例系数", "钢球速度环积分系数", "钢球速度环微分系数",
             "臂杆位置环比例系数", "臂杆位置环积分系数", "臂杆位置环微分系数",
             "0为位置式，1为速度式", "位置式电机位置绝对值限幅，单位度", "速度式电机输出限幅，单位RPM",
-            "三点标定上抬最高位置，只读", "三点标定上抬最高角度，只读", "三点标定平衡位置，只读",
-            "三点标定平衡角度，只读", "三点标定下压最低位置，只读", "三点标定下压最低角度，只读"
+            "三点标定上抬最高位置，合法组合后立即保存", "三点标定上抬最高角度，合法组合后立即保存", "三点标定平衡位置，合法组合后立即保存",
+            "三点标定平衡角度，合法组合后立即保存", "三点标定下压最低位置，合法组合后立即保存", "三点标定下压最低角度，合法组合后立即保存",
+            "0正常，1仅反转臂杆控制和标定的Pitch角度"
         };
         uint8_t d[ANO_DATA_MAX] = {0};
         uint16_t i = 0U;
@@ -2170,6 +2268,7 @@ static void cancel_arm_calibration(uint8_t status)
     arm_calibration_stage = 0U;
     arm_calibration_captured_mask = 0U;
     memset(arm_calibration_pending, 0, sizeof(arm_calibration_pending));
+    arm_calibration_pending_mask = 0U;
     reset_arm_calibration_samples();
 }
 
@@ -2201,6 +2300,7 @@ static void process_arm_calibration(ZDTStepperMotor *motor, uint32_t now)
     if (status->sequence == arm_calibration_last_sequence) return;
     sample = JY61P_Get_Sample();
     pitch = (float)sample->angle.y * (180.0f / 32768.0f);
+    if (arm_pitch_inverted != 0.0f) pitch = -pitch;
     arm_calibration_last_sequence = status->sequence;
     if (arm_calibration_sample_count < ARM_CALIBRATION_SAMPLE_COUNT)
     {
@@ -2648,16 +2748,17 @@ static void send_arm_motor_telemetry(void)
     d[i++] = arm_calibration_stage;
     d[i++] = arm_calibration_captured_mask;
     d[i++] = arm_calibration_valid;
-    d[i++] = motor->data.last_command_status;
+    d[i++] = motor->data.last_control_error_status;
     send_frame(ANO_ID_ARM_MOTOR_TELEMETRY, d, i);
 }
 
 static void send_vision_telemetry(void)
 {
     vision_link_sample_t vision = {0};
+    vision_link_diagnostic_t diagnostic = {0};
     uint32_t now = HAL_GetTick();
     uint16_t age = UINT16_MAX;
-    uint8_t d[11];
+    uint8_t d[39];
     uint16_t i = 0U;
     bool valid = Vision_Link_Get_Last_Sample(&vision);
 
@@ -2666,10 +2767,18 @@ static void send_vision_telemetry(void)
         age = feedback_age_ms(now, vision.received_ms);
         valid = Vision_Link_Is_Online();
     }
+    Vision_Link_Get_Diagnostic(&diagnostic);
     put_float(d, &i, vision.position_cm);
     put_float(d, &i, vision.velocity_cm_s);
     d[i++] = valid ? 1U : 0U;
     put_u16(d, &i, age);
+    put_i32(d, &i, (int32_t)diagnostic.received_bytes);
+    put_i32(d, &i, (int32_t)diagnostic.valid_frames);
+    put_i32(d, &i, (int32_t)diagnostic.parse_errors);
+    put_i32(d, &i, (int32_t)diagnostic.uart_errors);
+    put_i32(d, &i, (int32_t)diagnostic.last_uart_error);
+    put_i32(d, &i, (int32_t)diagnostic.last_uart_isr);
+    put_i32(d, &i, (int32_t)diagnostic.restart_failures);
     send_frame(ANO_ID_VISION_TELEMETRY, d, i);
 }
 
@@ -3052,12 +3161,7 @@ static void handle(uint8_t source, uint8_t id, const uint8_t *d, uint16_t n, uin
         float value = get_float(&d[2]); float *v = parameter(parameter_id);
         parameter_session_until_ms = HAL_GetTick() + ANO_PARAMETER_SESSION_MS;
         if (parameter_id >= ANO_PARAM_COUNT) return;
-        bool calibration_read_only = parameter_id >= ARM_CALIBRATION_LEFT_MOTOR &&
-                                     parameter_id <= ARM_CALIBRATION_RIGHT_PITCH;
-
-        if (calibration_read_only) {
-            accepted = false;
-        } else if (parameter_id == HOST_BAUD && isfinite(value) && value == (float)(uint32_t)value &&
+        if (parameter_id == HOST_BAUD && isfinite(value) && value == (float)(uint32_t)value &&
             baud_rate_is_valid((uint32_t)value)) {
             requested_baud_rate = (uint32_t)value;
             accepted = true;
@@ -3081,11 +3185,16 @@ static void handle(uint8_t source, uint8_t id, const uint8_t *d, uint16_t n, uin
             accepted = write_tracking_parameter(parameter_id, value);
         } else if (parameter_id >= CAR_ARC_STRAIGHT_LENGTH && parameter_id <= CAR_ARC_DIFFERENTIAL_SLEW) {
             accepted = write_arc_parameter(parameter_id, value);
+        } else if (parameter_id >= ARM_CALIBRATION_LEFT_MOTOR &&
+                   parameter_id <= ARM_CALIBRATION_RIGHT_PITCH) {
+            accepted = write_arm_calibration_parameter(parameter_id, value);
         } else if (parameter_id >= ARM_LIMIT_MIN && parameter_id <= ARM_BALANCE_POSITION) {
             accepted = write_arm_parameter(parameter_id, value);
         } else if (parameter_id >= ARM_ANGLE_KP && parameter_id <= ARM_ANGLE_KD) {
             accepted = write_arm_angle_parameter(parameter_id, value);
         } else if (parameter_id >= ARM_MOTOR_CONTROL_MODE && parameter_id <= ARM_MOTOR_SPEED_KD) {
+            accepted = write_arm_parameter(parameter_id, value);
+        } else if (parameter_id == ARM_PITCH_INVERTED) {
             accepted = write_arm_parameter(parameter_id, value);
         } else if (parameter_id == CAR_LAP_STOP_DELAY_MS && isfinite(value) && value == floorf(value) &&
                    value >= 0.0f && value <= 2000.0f) {
@@ -3148,6 +3257,7 @@ void ANO_Host_Init(void)
     arm_calibration_last_sequence = 0U;
     arm_calibration_last_sample_ms = 0U;
     arm_calibration_sequence = 0U;
+    arm_calibration_pending_mask = 0U;
     arm_calibration_pitch_sum = 0.0f;
     arm_calibration_pitch_min = 0.0f;
     arm_calibration_pitch_max = 0.0f;

@@ -19,6 +19,7 @@ static volatile uint8_t vision_ready_length;
 static volatile uint8_t vision_discard_until_newline;
 static volatile uint8_t vision_link_frame_valid;
 static volatile vision_link_sample_t vision_link_sample;
+static volatile vision_link_diagnostic_t vision_link_diagnostic;
 
 static const char *Vision_Link_Skip_Space(const char *text)
 {
@@ -53,14 +54,16 @@ void Vision_Link_Init(void)
     vision_ready_length = 0U;
     vision_discard_until_newline = 0U;
     vision_link_frame_valid = 0U;
+    memset((void *)&vision_link_diagnostic, 0, sizeof(vision_link_diagnostic));
     (void)HAL_UART_Receive_IT(&huart4, &vision_rx_byte, 1U);
 }
 
 void Vision_Link_UART_RxCplt_Callback(void)
 {
     const uint8_t byte = vision_rx_byte;
+    vision_link_diagnostic.received_bytes++;
 
-    if (byte == '\n')
+    if (byte == '\r' || byte == '\n')
     {
         if (vision_discard_until_newline == 0U && vision_rx_length != 0U && vision_ready_length == 0U)
         {
@@ -89,9 +92,18 @@ void Vision_Link_UART_RxCplt_Callback(void)
 
 void Vision_Link_UART_Error_Callback(void)
 {
+    uint32_t error = HAL_UART_GetError(&huart4);
+
+    vision_link_diagnostic.uart_errors++;
+    vision_link_diagnostic.last_uart_error = error;
+    vision_link_diagnostic.last_uart_isr = huart4.Instance->ISR;
     vision_rx_length = 0U;
     vision_discard_until_newline = 0U;
-    (void)HAL_UART_Receive_IT(&huart4, &vision_rx_byte, 1U);
+    if ((error & (HAL_UART_ERROR_ORE | HAL_UART_ERROR_RTO)) != 0U &&
+        HAL_UART_Receive_IT(&huart4, &vision_rx_byte, 1U) != HAL_OK)
+    {
+        vision_link_diagnostic.restart_failures++;
+    }
 }
 
 void Vision_Link_Process(void)
@@ -112,7 +124,11 @@ void Vision_Link_Process(void)
     }
     __set_PRIMASK(primask);
 
-    if (length == 0U || !Vision_Link_Parse_Line(line, &position_cm, &velocity_cm_s)) return;
+    if (length == 0U || !Vision_Link_Parse_Line(line, &position_cm, &velocity_cm_s))
+    {
+        if (length != 0U) vision_link_diagnostic.parse_errors++;
+        return;
+    }
 
     primask = __get_PRIMASK();
     __disable_irq();
@@ -120,6 +136,7 @@ void Vision_Link_Process(void)
     vision_link_sample.velocity_cm_s = velocity_cm_s;
     vision_link_sample.received_ms = HAL_GetTick();
     vision_link_frame_valid = 1U;
+    vision_link_diagnostic.valid_frames++;
     __set_PRIMASK(primask);
 }
 
@@ -162,4 +179,15 @@ bool Vision_Link_Is_Online(void)
 {
     vision_link_sample_t sample;
     return Vision_Link_Get_Sample(&sample);
+}
+
+void Vision_Link_Get_Diagnostic(vision_link_diagnostic_t *diagnostic)
+{
+    uint32_t primask;
+
+    if (diagnostic == NULL) return;
+    primask = __get_PRIMASK();
+    __disable_irq();
+    *diagnostic = vision_link_diagnostic;
+    __set_PRIMASK(primask);
 }

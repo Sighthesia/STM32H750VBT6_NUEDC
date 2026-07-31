@@ -22,6 +22,7 @@ static PIDController motor_speed_controller;
 static uint32_t last_sequence;
 static uint32_t last_sample_ms;
 static uint8_t output_active;
+static uint8_t pitch_inverted;
 
 static void stop_output(arm_angle_status_t status)
 {
@@ -89,6 +90,7 @@ void Arm_Angle_Control_Init(void)
     last_sequence = 0U;
     last_sample_ms = 0U;
     output_active = 0U;
+    pitch_inverted = 0U;
     Arm_Angle_Control_Reset_Defaults();
     debug.enabled = 1U;
     debug.status = ARM_ANGLE_STATUS_WAITING_STARTUP;
@@ -137,6 +139,11 @@ void Arm_Angle_Control_Set_Authorized(bool authorized)
         stop_output(debug.enabled != 0U ? ARM_ANGLE_STATUS_WAITING_STARTUP :
                                          ARM_ANGLE_STATUS_DISABLED);
     }
+}
+
+void Arm_Angle_Control_Set_Pitch_Inverted(bool inverted)
+{
+    pitch_inverted = inverted ? 1U : 0U;
 }
 
 bool Arm_Angle_Control_Set_Enabled(bool enabled)
@@ -203,6 +210,7 @@ void Arm_Angle_Control_Process(void)
     debug.sample_ms = now;
     debug.imu_valid = 1U;
     debug.measured_deg = (float)sample->angle.y * JY61P_ANGLE_RAW_TO_DEG;
+    if (pitch_inverted != 0U) debug.measured_deg = -debug.measured_deg;
     debug.error_deg = debug.target_deg - debug.measured_deg;
 
     if (config.motor_control_mode == 1.0f && debug.vision_valid != 0U)

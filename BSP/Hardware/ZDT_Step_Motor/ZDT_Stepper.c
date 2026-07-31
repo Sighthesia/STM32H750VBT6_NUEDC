@@ -200,6 +200,10 @@ void receive_motor_status(ZDTStepperMotor *motor, uint8_t *data, uint16_t size)
         }
         motor->data.last_command = command_id;
         motor->data.last_command_status = status;
+        if (ZDT_Stepper_Is_Control_Command(command_id) && status != 0x02U)
+        {
+            motor->data.last_control_error_status = status;
+        }
         motor->data.last_command_ms = HAL_GetTick();
         motor->data.pending_command = 0U;
         motor->data.command_lifecycle = status == 0x02U ?

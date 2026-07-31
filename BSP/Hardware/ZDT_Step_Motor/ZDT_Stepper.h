@@ -46,6 +46,7 @@ typedef struct
     uint8_t motor_stall_protection;    // 电机编码器校准标志位
     uint8_t last_command;
     uint8_t last_command_status;
+    uint8_t last_control_error_status;
     uint8_t command_lifecycle;
     uint8_t pending_command;
     uint8_t microstepping;
