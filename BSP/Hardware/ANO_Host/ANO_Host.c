@@ -40,7 +40,6 @@
 #define ANO_ID_TRACKING_DIAGNOSTIC 0xF4U
 #define ANO_ID_DIAGNOSTIC 0xF5U
 #define ANO_ID_STEPPER_FF_DIAGNOSTIC 0xF6U
-#define ANO_ID_ARM_DEBUG_DIAGNOSTIC 0xF7U
 #define ANO_ID_B0_CALIBRATION 0xF8U
 #define ANO_RX_QUEUE_SIZE 128U
 #define ANO_DATA_MAX 96U
@@ -190,25 +189,6 @@ enum {
 
 typedef struct { uint8_t state, source, destination, id, sum, checksum; uint16_t length, index; uint8_t data[ANO_DATA_MAX]; } ano_parser_t;
 typedef struct { uint8_t cid[3]; const char *name; const char *info; } ano_command_desc_t;
-
-static const uint16_t arm_parameter_ids[] = {
-    ARM_MOTOR_SPEED_KP, ARM_MOTOR_SPEED_KI, ARM_MOTOR_SPEED_KD,
-    ARM_ANGLE_KP, ARM_ANGLE_KI, ARM_ANGLE_KD,
-    ARM_MOTOR_CONTROL_MODE, ARM_MOTOR_POSITION_LIMIT, ARM_MOTOR_SPEED_LIMIT,
-    ARM_CALIBRATION_LEFT_MOTOR, ARM_CALIBRATION_LEFT_PITCH,
-    ARM_CALIBRATION_BALANCE_MOTOR, ARM_CALIBRATION_BALANCE_PITCH,
-    ARM_CALIBRATION_RIGHT_MOTOR, ARM_CALIBRATION_RIGHT_PITCH
-};
-
-static const ano_command_desc_t arm_commands[] = {
-    {{0x03U, ANO_COMMAND_ARM_HOME, 0x00U}, "归零", "触发臂杆电机回零"},
-    {{0x03U, ANO_COMMAND_ARM_DISABLE, 0x00U}, "关闭保持力矩", "停止并关闭臂杆电机保持力矩"},
-    {{0x03U, ANO_COMMAND_ARM_ENABLE, 0x00U}, "开启保持力矩", "开启臂杆电机保持力矩"},
-    {{0x03U, ANO_COMMAND_ARM_ZERO_CONFIRM, 0x00U}, "设置当前位置为零点", "将当前位置清零并确认电机零点"},
-    {{0x03U, ANO_COMMAND_ARM_ANGLE_ENABLE, 0x00U}, "进入臂杆闭环", "启动臂杆位置闭环"},
-    {{0x03U, ANO_COMMAND_ARM_TELEMETRY_ENABLE, 0x00U}, "开启遥测", "上传臂杆电机实际转速、实际位置和反馈有效状态"},
-    {{0x03U, ANO_COMMAND_ARM_TELEMETRY_DISABLE, 0x00U}, "关闭遥测", "停止上传臂杆电机状态"}
-};
 
 static const ano_command_desc_t car_commands[] = {
     {{0x03U, 0x03U, 0x00U}, "四驱停止", "将四路电机速度设为零"},
@@ -1634,15 +1614,6 @@ static bool write_car_b0_calibration_parameter(uint16_t parameter_id, float valu
 
 static bool parameter_is_visible(uint16_t parameter_id)
 {
-    if (App_Role_Get() == APP_ROLE_ARM)
-    {
-        for (size_t i = 0U; i < sizeof(arm_parameter_ids) / sizeof(arm_parameter_ids[0]); i++)
-        {
-            if (parameter_id == arm_parameter_ids[i]) return true;
-        }
-        return false;
-    }
-
     if (parameter_id == BOARD_ROLE ||
         (parameter_id >= ARM_LIMIT_MIN && parameter_id <= ARM_HOME_MODE) ||
         parameter_id == ARM_BALANCE_POSITION ||
@@ -1655,12 +1626,6 @@ static bool parameter_is_visible(uint16_t parameter_id)
 
 static uint16_t parameter_id_from_protocol_index(uint16_t index)
 {
-    if (App_Role_Get() == APP_ROLE_ARM)
-    {
-        return index < sizeof(arm_parameter_ids) / sizeof(arm_parameter_ids[0]) ?
-               arm_parameter_ids[index] : ANO_PARAM_COUNT;
-    }
-
     for (uint16_t id = 0U; id < ANO_PARAM_COUNT; id++)
     {
         if (!parameter_is_visible(id)) continue;
@@ -1672,11 +1637,6 @@ static uint16_t parameter_id_from_protocol_index(uint16_t index)
 
 static uint16_t parameter_protocol_count(void)
 {
-    if (App_Role_Get() == APP_ROLE_ARM)
-    {
-        return (uint16_t)(sizeof(arm_parameter_ids) / sizeof(arm_parameter_ids[0]));
-    }
-
     uint16_t count = 0U;
     for (uint16_t id = 0U; id < ANO_PARAM_COUNT; id++)
     {
@@ -1790,35 +1750,6 @@ static void send_param_info(uint16_t protocol_index)
 {
     uint16_t id = parameter_id_from_protocol_index(protocol_index);
     if (id >= ANO_PARAM_COUNT) return;
-    if (App_Role_Get() == APP_ROLE_ARM)
-    {
-        static const char *const names[] = {
-            "臂杆钢球速度环Kp", "臂杆钢球速度环Ki", "臂杆钢球速度环Kd",
-            "臂杆位置环Kp", "臂杆位置环Ki", "臂杆位置环Kd",
-            "电机控制模式", "电机位置式限幅", "电机速度式限幅",
-            "上抬最高电机位置", "上抬最高电机角度", "平衡电机位置",
-            "平衡电机角度", "下压最低电机位置", "下压最低电机角度"
-        };
-        static const char *const infos[] = {
-            "钢球速度环比例系数", "钢球速度环积分系数", "钢球速度环微分系数",
-            "臂杆位置环比例系数", "臂杆位置环积分系数", "臂杆位置环微分系数",
-            "0为位置式，1为速度式", "位置式电机位置绝对值限幅，单位度", "速度式电机输出限幅，单位RPM",
-            "三点标定上抬最高位置，只读", "三点标定上抬最高角度，只读", "三点标定平衡位置，只读",
-            "三点标定平衡角度，只读", "三点标定下压最低位置，只读", "三点标定下压最低角度，只读"
-        };
-        uint8_t d[ANO_DATA_MAX] = {0};
-        uint16_t i = 0U;
-        size_t index;
-        for (index = 0U; index < sizeof(arm_parameter_ids) / sizeof(arm_parameter_ids[0]); index++)
-            if (arm_parameter_ids[index] == id) break;
-        if (index == sizeof(arm_parameter_ids) / sizeof(arm_parameter_ids[0])) return;
-        put_u16(d, &i, protocol_index); d[i++] = 8U;
-        strncpy((char *)&d[i], names[index], 20U); i += 20U;
-        strncpy((char *)&d[i], infos[index], sizeof(d) - i - 1U);
-        i += (uint16_t)strlen((const char *)&d[i]);
-        send_frame(ANO_ID_PARAM_INFO, d, i);
-        return;
-    }
     if (id == ATTITUDE_LADRC_TARGET_RATE_SLEW ||
         id == ATTITUDE_LADRC_DIFFERENTIAL_SLEW)
     {
@@ -1992,9 +1923,7 @@ static void send_param_info(uint16_t protocol_index)
 
 static void send_command_count(void)
 {
-    size_t count = App_Role_Get() == APP_ROLE_ARM ?
-                   sizeof(arm_commands) / sizeof(arm_commands[0]) :
-                   sizeof(car_commands) / sizeof(car_commands[0]);
+    size_t count = sizeof(car_commands) / sizeof(car_commands[0]);
     uint8_t d[3] = {0x00U, (uint8_t)count, 0U};
     send_frame(ANO_ID_COMMAND_QUERY, d, sizeof(d));
 }
@@ -2002,10 +1931,8 @@ static void send_command_count(void)
 static void send_command_info(uint16_t command_id)
 {
     uint8_t d[ANO_DATA_MAX] = {0}; uint16_t i = 0U;
-    const ano_command_desc_t *table = App_Role_Get() == APP_ROLE_ARM ? arm_commands : car_commands;
-    size_t count = App_Role_Get() == APP_ROLE_ARM ?
-                   sizeof(arm_commands) / sizeof(arm_commands[0]) :
-                   sizeof(car_commands) / sizeof(car_commands[0]);
+    const ano_command_desc_t *table = car_commands;
+    size_t count = sizeof(car_commands) / sizeof(car_commands[0]);
     if (command_id >= (uint16_t)count) return;
     put_u16(d, &i, command_id);
     memcpy(&d[i], table[command_id].cid, sizeof(table[command_id].cid)); i += sizeof(table[command_id].cid);
@@ -2246,37 +2173,6 @@ static bool stop_arm_debug(bool exit_debug)
     return true;
 }
 
-static bool start_arm_home(void)
-{
-    if (arm_motion_active || arm_home_active ||
-        arm_calibration_status == ANO_ARM_CALIBRATION_ACTIVE ||
-        !arm_limits_valid() || zdt_stepper_motors[0] == NULL) return false;
-    arm_zero_valid = 0U;
-    Arm_Angle_Control_Set_Authorized(false);
-    arm_zero_confirm_pending = 0U;
-    arm_home_active = 1U;
-    arm_home_complete = 0U;
-    arm_home_seen_active = 0U;
-    arm_home_idle_samples = 0U;
-    ZDT_Stepper_trigger_zero_return(zdt_stepper_motors[0], (uint8_t)arm_home_mode, ZDT_STEPPER_SYNC_DISABLE);
-    arm_zero_confirm_issued_ms = HAL_GetTick();
-    return true;
-}
-
-static bool confirm_arm_zero(void)
-{
-    ZDTStepperMotor *motor = zdt_stepper_motors[0];
-
-    if (!arm_home_complete || !arm_limits_valid() || motor == NULL)
-    {
-        return false;
-    }
-    ZDT_Stepper_clear_current_position(motor);
-    arm_zero_confirm_pending = 1U;
-    arm_zero_confirm_issued_ms = HAL_GetTick();
-    return true;
-}
-
 static void fail_arm_startup(void)
 {
     Arm_Angle_Control_Set_Authorized(false);
@@ -2439,37 +2335,6 @@ static void process_arm_startup(ZDTStepperMotor *motor, uint32_t now)
     }
 }
 
-static bool handle_arm_command(uint8_t command_id)
-{
-    switch (command_id)
-    {
-    case ANO_COMMAND_ARM_HOME: return start_arm_home();
-    case ANO_COMMAND_ARM_ZERO_CONFIRM: return confirm_arm_zero();
-    case ANO_COMMAND_ARM_ENABLE:
-        if (zdt_stepper_motors[0] == NULL) return false;
-        ZDT_Stepper_Enable(zdt_stepper_motors[0], ZDT_STEPPER_ENABLE, ZDT_STEPPER_SYNC_DISABLE);
-        return true;
-    case ANO_COMMAND_ARM_DISABLE:
-        if (zdt_stepper_motors[0] == NULL) return false;
-        Arm_Angle_Control_Set_Authorized(false);
-        (void)stop_arm_debug(false);
-        ZDT_Stepper_Enable(zdt_stepper_motors[0], ZDT_STEPPER_DISABLE, ZDT_STEPPER_SYNC_DISABLE);
-        return true;
-    case ANO_COMMAND_ARM_TELEMETRY_ENABLE:
-        arm_motor_telemetry_enabled = 1U;
-        arm_last_motor_telemetry_ms = 0U;
-        return true;
-    case ANO_COMMAND_ARM_TELEMETRY_DISABLE:
-        arm_motor_telemetry_enabled = 0U;
-        return true;
-    case ANO_COMMAND_ARM_ANGLE_ENABLE:
-        if (!arm_angle_ready() || arm_calibration_status == ANO_ARM_CALIBRATION_ACTIVE) return false;
-        Arm_Angle_Control_Set_Authorized(true);
-        return Arm_Angle_Control_Set_Enabled(true);
-    default: return false;
-    }
-}
-
 static void process_arm_debug(void)
 {
     ZDTStepperMotor *motor = zdt_stepper_motors[0];
@@ -2584,69 +2449,6 @@ process_feedback:
             (void)stop_arm_debug(true);
         }
     }
-}
-
-static void send_arm_debug_diagnostic(void)
-{
-    ZDTStepperMotor *motor = zdt_stepper_motors[0];
-    uint8_t d[8];
-    uint16_t i = 0U;
-
-    if (motor == NULL || !tx_has_capacity(1U)) return;
-    put_float(d, &i, motor->data.current_position);
-    put_float(d, &i, motor->data.current_speed);
-    send_frame(ANO_ID_ARM_DEBUG_DIAGNOSTIC, d, i);
-}
-
-static uint16_t feedback_age_ms(uint32_t now, uint32_t updated_ms)
-{
-    uint32_t age;
-
-    if (updated_ms == 0U) return UINT16_MAX;
-    age = now - updated_ms;
-    return age > UINT16_MAX ? UINT16_MAX : (uint16_t)age;
-}
-
-static void send_arm_motor_telemetry(void)
-{
-    ZDTStepperMotor *motor = zdt_stepper_motors[0];
-    const arm_angle_control_debug_t *angle = Arm_Angle_Control_Get_Debug();
-    uint32_t now = HAL_GetTick();
-    uint16_t speed_age;
-    uint16_t position_age;
-    uint8_t valid = 0U;
-    uint8_t d[44];
-    uint16_t i = 0U;
-
-    if (motor == NULL || !tx_has_capacity(1U)) return;
-    speed_age = feedback_age_ms(now, motor->data.current_speed_ms);
-    position_age = feedback_age_ms(now, motor->data.current_position_ms);
-    if (speed_age <= ARM_MOTOR_FEEDBACK_TIMEOUT_MS) valid |= ANO_ARM_MOTOR_SPEED_VALID;
-    if (position_age <= ARM_MOTOR_FEEDBACK_TIMEOUT_MS) valid |= ANO_ARM_MOTOR_POSITION_VALID;
-
-    d[i++] = 3U;
-    d[i++] = motor->id;
-    d[i++] = valid;
-    d[i++] = motor->data.motor_status_flags;
-    put_float(d, &i, motor->data.current_speed);
-    put_float(d, &i, motor->data.current_position);
-    put_u16(d, &i, speed_age);
-    put_u16(d, &i, position_age);
-    put_u16(d, &i, (uint16_t)arm_motor_query_hz);
-    put_u16(d, &i, (uint16_t)arm_motor_telemetry_hz);
-    put_float(d, &i, angle->target_deg);
-    put_float(d, &i, angle->measured_deg);
-    put_float(d, &i, angle->error_deg);
-    put_float(d, &i, angle->output_rpm);
-    d[i++] = angle->status;
-    d[i++] = angle->enabled;
-    d[i++] = angle->authorized;
-    d[i++] = angle->imu_valid;
-    d[i++] = arm_calibration_status;
-    d[i++] = arm_calibration_stage;
-    d[i++] = arm_calibration_captured_mask;
-    d[i++] = arm_calibration_valid;
-    send_frame(ANO_ID_ARM_MOTOR_TELEMETRY, d, i);
 }
 
 static void stop_car_b0_calibration(uint8_t status)
@@ -2922,28 +2724,6 @@ static void send_stepper_feedforward_diagnostic(void)
 
 static bool command(const uint8_t *d, uint16_t n)
 {
-    if (App_Role_Get() == APP_ROLE_ARM)
-    {
-        if (n == 3U && d[0] == 0x03U && d[2] == 0x00U) {
-            return d[1] == ANO_COMMAND_ARM_HOME ||
-                   d[1] == ANO_COMMAND_ARM_DISABLE ||
-                   d[1] == ANO_COMMAND_ARM_ENABLE ||
-                   d[1] == ANO_COMMAND_ARM_ZERO_CONFIRM ||
-                   d[1] == ANO_COMMAND_ARM_ANGLE_ENABLE ||
-                   d[1] == ANO_COMMAND_ARM_TELEMETRY_ENABLE ||
-                   d[1] == ANO_COMMAND_ARM_TELEMETRY_DISABLE ? handle_arm_command(d[1]) : false;
-        }
-        if (n == 1U) {
-            return d[0] == ANO_COMMAND_ARM_HOME ||
-                   d[0] == ANO_COMMAND_ARM_DISABLE ||
-                   d[0] == ANO_COMMAND_ARM_ENABLE ||
-                   d[0] == ANO_COMMAND_ARM_ZERO_CONFIRM ||
-                   d[0] == ANO_COMMAND_ARM_ANGLE_ENABLE ||
-                   d[0] == ANO_COMMAND_ARM_TELEMETRY_ENABLE ||
-                   d[0] == ANO_COMMAND_ARM_TELEMETRY_DISABLE ? handle_arm_command(d[0]) : false;
-        }
-        return false;
-    }
     if (n == 3U && d[0] == 0x03U && d[1] == 0x03U && d[2] == 0x00U) { (void)Car_Lap_Task_Stop(); if (car_b0_calibration_active != 0U) { stop_car_b0_calibration(4U); return true; } return car_debug_active ? stop_car_debug() : Car_Motor_Set_Speed(0, 0, 0, 0); }
     if (n == 3U && d[0] == 0x03U && d[1] == ANO_COMMAND_CAR_READ_FLASH && d[2] == 0x00U) return Car_Motor_Read_Flash();
     if (n == 3U && d[0] == 0x03U && d[1] == ANO_COMMAND_CAR_FACTORY_RESET && d[2] == 0x00U) return Car_Motor_Factory_Reset();
@@ -3130,16 +2910,6 @@ void ANO_Host_Process(void)
         apply_baud_rate(baud_rate);
     }
     if (parameter_session_active()) return;
-    if (App_Role_Get() == APP_ROLE_ARM && arm_motor_telemetry_enabled != 0U)
-    {
-        uint32_t telemetry_period_ms = (uint32_t)(1000.0f / arm_motor_telemetry_hz);
-        if (telemetry_period_ms == 0U) telemetry_period_ms = 1U;
-        if (HAL_GetTick() - arm_last_motor_telemetry_ms >= telemetry_period_ms)
-        {
-            arm_last_motor_telemetry_ms = HAL_GetTick();
-            send_arm_motor_telemetry();
-        }
-    }
     if (App_Role_Get() == APP_ROLE_CAR && HAL_GetTick() - last_imu_ms >= ANO_IMU_PERIOD_MS)
     {
         last_imu_ms = HAL_GetTick();
@@ -3154,11 +2924,7 @@ void ANO_Host_Process(void)
             send_tracking_diagnostic();
             send_car_b0_calibration_telemetry();
         }
-        else
-        {
-            send_stepper_feedforward_diagnostic();
-            send_arm_debug_diagnostic();
-        }
+        else send_stepper_feedforward_diagnostic();
     }
     if (App_Role_Get() == APP_ROLE_CAR && HAL_GetTick() - last_telemetry_ms >= 100U)
     {
