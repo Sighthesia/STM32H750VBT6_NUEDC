@@ -209,6 +209,8 @@ static const uint16_t arm_parameter_ids[] = {
 
 static const ano_command_desc_t arm_commands[] = {
     {{0x03U, ANO_COMMAND_ARM_CAPTURE_HIGH, 0x00U}, "设置当前为最高点", "采集当前电机绝对位置和有效IMU Pitch并写入Flash"},
+    {{0x03U, ANO_COMMAND_ARM_BALL_LOOP_START, 0x00U}, "启动小球闭环", "三点标定、电机位置和视觉有效且双环开启后立即进入闭环"},
+    {{0x03U, ANO_COMMAND_ARM_BALL_LOOP_STOP, 0x00U}, "停止小球闭环", "立即撤销闭环授权、停止电机并清零PID"},
     {{0x03U, ANO_COMMAND_ARM_DISABLE, 0x00U}, "关闭保持力矩", "停止并关闭臂杆电机保持力矩"},
     {{0x03U, ANO_COMMAND_ARM_ENABLE, 0x00U}, "开启保持力矩", "开启臂杆电机保持力矩"},
     {{0x03U, ANO_COMMAND_ARM_CAPTURE_LOW, 0x00U}, "设置当前为最低点", "采集当前电机绝对位置和有效IMU Pitch并写入Flash"},
@@ -2702,6 +2704,8 @@ static void process_arm_startup(ZDTStepperMotor *motor, uint32_t now)
 
 static bool handle_arm_command(uint8_t command_id)
 {
+    ZDTStepperMotor *motor = zdt_stepper_motors[0];
+
     switch (command_id)
     {
     case ANO_COMMAND_ARM_CAPTURE_HIGH: return request_arm_calibration_capture(0U);
@@ -2724,6 +2728,23 @@ static bool handle_arm_command(uint8_t command_id)
         arm_motor_telemetry_enabled = 0U;
         return true;
     case ANO_COMMAND_ARM_CAPTURE_BALANCE: return request_arm_calibration_capture(2U);
+    case ANO_COMMAND_ARM_BALL_LOOP_START:
+        if (motor == NULL || !arm_points_valid() ||
+            motor->data.current_position_ms == 0U ||
+            (uint32_t)(HAL_GetTick() - motor->data.current_position_ms) > arm_motor_feedback_timeout_ms() ||
+            !Vision_Link_Is_Online()) return false;
+        {
+            const arm_angle_control_config_t *config = Arm_Angle_Control_Get_Config();
+            if (config->ball_position_loop_enabled == 0.0f ||
+                config->ball_velocity_loop_enabled == 0.0f ||
+                arm_motion_active != 0U || arm_home_active != 0U ||
+                arm_calibration_status == ANO_ARM_CALIBRATION_ACTIVE) return false;
+        }
+        Arm_Angle_Control_Set_Authorized(true);
+        return true;
+    case ANO_COMMAND_ARM_BALL_LOOP_STOP:
+        Arm_Angle_Control_Set_Authorized(false);
+        return true;
     default: return false;
     }
 }
@@ -3292,6 +3313,8 @@ static bool command(const uint8_t *d, uint16_t n)
                    d[1] == ANO_COMMAND_ARM_ENABLE ||
                    d[1] == ANO_COMMAND_ARM_CAPTURE_LOW ||
                    d[1] == ANO_COMMAND_ARM_CAPTURE_BALANCE ||
+                   d[1] == ANO_COMMAND_ARM_BALL_LOOP_START ||
+                   d[1] == ANO_COMMAND_ARM_BALL_LOOP_STOP ||
                    d[1] == ANO_COMMAND_ARM_TELEMETRY_ENABLE ||
                    d[1] == ANO_COMMAND_ARM_TELEMETRY_DISABLE ? handle_arm_command(d[1]) : false;
         }
@@ -3301,6 +3324,8 @@ static bool command(const uint8_t *d, uint16_t n)
                    d[0] == ANO_COMMAND_ARM_ENABLE ||
                    d[0] == ANO_COMMAND_ARM_CAPTURE_LOW ||
                    d[0] == ANO_COMMAND_ARM_CAPTURE_BALANCE ||
+                   d[0] == ANO_COMMAND_ARM_BALL_LOOP_START ||
+                   d[0] == ANO_COMMAND_ARM_BALL_LOOP_STOP ||
                    d[0] == ANO_COMMAND_ARM_TELEMETRY_ENABLE ||
                    d[0] == ANO_COMMAND_ARM_TELEMETRY_DISABLE ? handle_arm_command(d[0]) : false;
         }
