@@ -10,6 +10,10 @@
 
 #define VISION_LINK_LINE_MAX_LENGTH 48U
 #define VISION_LINK_TIMEOUT_MS 100U
+#define VISION_LINK_MAX_POSITION_STEP_CM 8.0f
+#define VISION_LINK_KALMAN_MEASUREMENT_NOISE 0.04f
+#define VISION_LINK_KALMAN_PROCESS_NOISE_POSITION 0.02f
+#define VISION_LINK_KALMAN_PROCESS_NOISE_VELOCITY 1.0f
 
 static uint8_t vision_rx_byte;
 static uint8_t vision_rx_line[VISION_LINK_LINE_MAX_LENGTH];
@@ -20,6 +24,60 @@ static volatile uint8_t vision_discard_until_newline;
 static volatile uint8_t vision_link_frame_valid;
 static volatile vision_link_sample_t vision_link_sample;
 static volatile vision_link_diagnostic_t vision_link_diagnostic;
+static float kalman_position;
+static float kalman_velocity;
+static float kalman_covariance[2][2];
+static uint8_t kalman_initialized;
+static uint8_t kalman_enabled = 1U;
+static uint32_t kalman_last_update_ms;
+
+static void Vision_Link_Reset_Kalman_State(float position)
+{
+    kalman_position = position;
+    kalman_velocity = 0.0f;
+    kalman_covariance[0][0] = 1.0f;
+    kalman_covariance[0][1] = 0.0f;
+    kalman_covariance[1][0] = 0.0f;
+    kalman_covariance[1][1] = 25.0f;
+    kalman_initialized = 1U;
+}
+
+static void Vision_Link_Update_Kalman(float measurement, float dt)
+{
+    float predicted_position;
+    float predicted_covariance00;
+    float predicted_covariance01;
+    float predicted_covariance10;
+    float predicted_covariance11;
+    float innovation;
+    float innovation_covariance;
+    float gain_position;
+    float gain_velocity;
+
+    if (kalman_initialized == 0U)
+    {
+        Vision_Link_Reset_Kalman_State(measurement);
+        return;
+    }
+    if (dt < 0.001f) dt = 0.001f;
+    if (dt > 0.2f) dt = 0.2f;
+    predicted_position = kalman_position + dt * kalman_velocity;
+    predicted_covariance00 = kalman_covariance[0][0] + dt * (kalman_covariance[1][0] + kalman_covariance[0][1]) +
+                             dt * dt * kalman_covariance[1][1] + VISION_LINK_KALMAN_PROCESS_NOISE_POSITION;
+    predicted_covariance01 = kalman_covariance[0][1] + dt * kalman_covariance[1][1];
+    predicted_covariance10 = kalman_covariance[1][0] + dt * kalman_covariance[1][1];
+    predicted_covariance11 = kalman_covariance[1][1] + VISION_LINK_KALMAN_PROCESS_NOISE_VELOCITY * dt;
+    innovation = measurement - predicted_position;
+    innovation_covariance = predicted_covariance00 + VISION_LINK_KALMAN_MEASUREMENT_NOISE;
+    gain_position = predicted_covariance00 / innovation_covariance;
+    gain_velocity = predicted_covariance10 / innovation_covariance;
+    kalman_position = predicted_position + gain_position * innovation;
+    kalman_velocity += gain_velocity * innovation;
+    kalman_covariance[0][0] = (1.0f - gain_position) * predicted_covariance00;
+    kalman_covariance[0][1] = (1.0f - gain_position) * predicted_covariance01;
+    kalman_covariance[1][0] = predicted_covariance10 - gain_velocity * predicted_covariance00;
+    kalman_covariance[1][1] = predicted_covariance11 - gain_velocity * predicted_covariance01;
+}
 
 static const char *Vision_Link_Skip_Space(const char *text)
 {
@@ -54,8 +112,27 @@ void Vision_Link_Init(void)
     vision_ready_length = 0U;
     vision_discard_until_newline = 0U;
     vision_link_frame_valid = 0U;
+    Vision_Link_Reset_Kalman();
     memset((void *)&vision_link_diagnostic, 0, sizeof(vision_link_diagnostic));
     (void)HAL_UART_Receive_IT(&huart3, &vision_rx_byte, 1U);
+}
+
+void Vision_Link_Set_Kalman_Enabled(bool enabled)
+{
+    kalman_enabled = enabled ? 1U : 0U;
+    Vision_Link_Reset_Kalman();
+}
+
+void Vision_Link_Reset_Kalman(void)
+{
+    kalman_position = 0.0f;
+    kalman_velocity = 0.0f;
+    kalman_covariance[0][0] = 1.0f;
+    kalman_covariance[0][1] = 0.0f;
+    kalman_covariance[1][0] = 0.0f;
+    kalman_covariance[1][1] = 25.0f;
+    kalman_initialized = 0U;
+    kalman_last_update_ms = 0U;
 }
 
 void Vision_Link_UART_RxCplt_Callback(void)
@@ -111,8 +188,11 @@ void Vision_Link_Process(void)
     char line[VISION_LINK_LINE_MAX_LENGTH];
     uint8_t length;
     uint32_t primask;
-    float position_cm;
-    float velocity_cm_s;
+    float position_cm = 0.0f;
+    float velocity_cm_s = 0.0f;
+    float filtered_position;
+    float filtered_velocity;
+    uint32_t received_ms;
 
     primask = __get_PRIMASK();
     __disable_irq();
@@ -130,11 +210,28 @@ void Vision_Link_Process(void)
         return;
     }
 
+    received_ms = HAL_GetTick();
+    if (kalman_enabled != 0U)
+    {
+        if (kalman_initialized != 0U && fabsf(position_cm - kalman_position) > VISION_LINK_MAX_POSITION_STEP_CM)
+            Vision_Link_Reset_Kalman_State(position_cm);
+        Vision_Link_Update_Kalman(position_cm, kalman_last_update_ms == 0U ? 0.05f :
+                                   (float)(received_ms - kalman_last_update_ms) * 0.001f);
+        filtered_position = kalman_position;
+        filtered_velocity = kalman_velocity;
+        kalman_last_update_ms = received_ms;
+    }
+    else
+    {
+        filtered_position = position_cm;
+        filtered_velocity = velocity_cm_s;
+    }
+
     primask = __get_PRIMASK();
     __disable_irq();
-    vision_link_sample.position_cm = position_cm;
-    vision_link_sample.velocity_cm_s = velocity_cm_s;
-    vision_link_sample.received_ms = HAL_GetTick();
+    vision_link_sample.position_cm = filtered_position;
+    vision_link_sample.velocity_cm_s = filtered_velocity;
+    vision_link_sample.received_ms = received_ms;
     vision_link_frame_valid = 1U;
     vision_link_diagnostic.valid_frames++;
     __set_PRIMASK(primask);

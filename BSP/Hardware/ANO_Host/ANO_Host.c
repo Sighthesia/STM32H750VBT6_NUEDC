@@ -58,7 +58,7 @@
 #define ANO_ARM_CALIBRATION_STORAGE_B FLASH_ARM_CALIBRATION_STORAGE_B
 #define ANO_STORAGE_MAGIC 0x414E4F57UL
 #define ANO_ARM_ANGLE_STORAGE_MAGIC 0x41414331UL
-#define ANO_ARM_ANGLE_STORAGE_VERSION 1U
+#define ANO_ARM_ANGLE_STORAGE_VERSION 3U
 #define ANO_ARM_CALIBRATION_STORAGE_MAGIC 0x41433350UL
 #define ANO_ARM_CALIBRATION_STORAGE_VERSION 2U
 #define ANO_STORAGE_VERSION 18U
@@ -167,9 +167,9 @@ enum {
     ARM_CALIBRATION_BALANCE_PITCH,
     ARM_CALIBRATION_RIGHT_MOTOR,
     ARM_CALIBRATION_RIGHT_PITCH,
-    ARM_MOTOR_CONTROL_MODE,
-    ARM_MOTOR_POSITION_LIMIT,
-    ARM_MOTOR_SPEED_LIMIT,
+    ARM_BALL_POSITION_LOOP_ENABLE,
+    ARM_BALL_VELOCITY_LOOP_ENABLE,
+    ARM_BALL_TARGET_POSITION,
     ARM_MOTOR_SPEED_KP,
     ARM_MOTOR_SPEED_KI,
     ARM_MOTOR_SPEED_KD,
@@ -185,6 +185,8 @@ enum {
     ATTITUDE_LADRC_TARGET_RATE_SLEW,
     ATTITUDE_LADRC_DIFFERENTIAL_SLEW,
     ARM_PITCH_INVERTED,
+    ARM_VISION_KALMAN_ENABLED,
+    ARM_VISION_PREDICTION_ENABLED,
     ANO_PARAM_COUNT
 };
 
@@ -192,13 +194,15 @@ typedef struct { uint8_t state, source, destination, id, sum, checksum; uint16_t
 typedef struct { uint8_t cid[3]; const char *name; const char *info; } ano_command_desc_t;
 
 static const uint16_t arm_parameter_ids[] = {
-    ARM_MOTOR_SPEED_KP, ARM_MOTOR_SPEED_KI, ARM_MOTOR_SPEED_KD,
+    ARM_BALL_POSITION_LOOP_ENABLE, ARM_BALL_VELOCITY_LOOP_ENABLE,
+    ARM_BALL_TARGET_POSITION,
     ARM_ANGLE_KP, ARM_ANGLE_KI, ARM_ANGLE_KD,
-    ARM_MOTOR_CONTROL_MODE, ARM_MOTOR_POSITION_LIMIT, ARM_MOTOR_SPEED_LIMIT,
+    ARM_MOTOR_SPEED_KP, ARM_MOTOR_SPEED_KI, ARM_MOTOR_SPEED_KD,
+    ARM_ANGLE_MAX_SPEED, ARM_ANGLE_DERIVATIVE_FILTER,
     ARM_CALIBRATION_LEFT_MOTOR, ARM_CALIBRATION_LEFT_PITCH,
     ARM_CALIBRATION_BALANCE_MOTOR, ARM_CALIBRATION_BALANCE_PITCH,
     ARM_CALIBRATION_RIGHT_MOTOR, ARM_CALIBRATION_RIGHT_PITCH,
-    ARM_PITCH_INVERTED
+    ARM_PITCH_INVERTED, ARM_VISION_KALMAN_ENABLED, ARM_VISION_PREDICTION_ENABLED
 };
 
 static const ano_command_desc_t arm_commands[] = {
@@ -350,6 +354,14 @@ static float arm_coordinate_to_motor(float position)
 static float arm_coordinate_from_motor(float position)
 {
     return arm_coordinate_to_motor(position);
+}
+
+static void sync_arm_control_calibration(void)
+{
+    if (arm_calibration_valid == 0U) return;
+    (void)Arm_Angle_Control_Set_Motor_Calibration(arm_calibration_values[0],
+                                                  arm_calibration_values[2],
+                                                  arm_calibration_values[4]);
 }
 
 static void arm_motor_limits(float *minimum, float *maximum)
@@ -649,6 +661,7 @@ static void load_arm_calibration(void)
     arm_calibration_pending_mask = selected->version == 1U ? 0x3FU : selected->valid;
     arm_calibration_sequence = selected->sequence;
     arm_calibration_valid = arm_calibration_pending_mask == 0x3FU ? 1U : 0U;
+    sync_arm_control_calibration();
 }
 
 static bool save_arm_calibration(void)
@@ -1382,21 +1395,25 @@ static float *parameter(uint16_t id)
         return &attitude->ladrc_target_rate_slew_deg_s2;
     if (id == ATTITUDE_LADRC_DIFFERENTIAL_SLEW)
         return &attitude->ladrc_differential_slew_s2;
-    if (id == ARM_MOTOR_CONTROL_MODE) return &arm_angle->motor_control_mode;
-    if (id == ARM_MOTOR_POSITION_LIMIT) return &arm_angle->motor_position_limit;
-    if (id == ARM_MOTOR_SPEED_LIMIT) return &arm_angle->motor_speed_limit;
-    if (id == ARM_MOTOR_SPEED_KP) return &arm_angle->motor_speed_kp;
-    if (id == ARM_MOTOR_SPEED_KI) return &arm_angle->motor_speed_ki;
-    if (id == ARM_MOTOR_SPEED_KD) return &arm_angle->motor_speed_kd;
+    if (id == ARM_BALL_POSITION_LOOP_ENABLE) return &arm_angle->ball_position_loop_enabled;
+    if (id == ARM_BALL_VELOCITY_LOOP_ENABLE) return &arm_angle->ball_velocity_loop_enabled;
+    if (id == ARM_BALL_TARGET_POSITION) return &arm_angle->ball_target_position_cm;
+    if (id == ARM_MOTOR_SPEED_KP) return &arm_angle->ball_velocity_kp;
+    if (id == ARM_MOTOR_SPEED_KI) return &arm_angle->ball_velocity_ki;
+    if (id == ARM_MOTOR_SPEED_KD) return &arm_angle->ball_velocity_kd;
     if (id >= ARM_CALIBRATION_LEFT_MOTOR && id <= ARM_CALIBRATION_RIGHT_PITCH)
         return &arm_calibration_values[id - ARM_CALIBRATION_LEFT_MOTOR];
     if (id == ARM_PITCH_INVERTED) return &arm_pitch_inverted;
+    if (id == ARM_VISION_KALMAN_ENABLED) return &arm_angle->vision_kalman_enabled;
+    if (id == ARM_VISION_PREDICTION_ENABLED) return &arm_angle->vision_prediction_enabled;
     if (id >= ARM_ANGLE_KP && id <= ARM_ANGLE_DIRECTION_INVERTED)
     {
         float *const arm_angle_values[] = {
-            &arm_angle->kp, &arm_angle->ki, &arm_angle->kd,
-            &arm_angle->derivative_filter_s, &arm_angle->maximum_speed_rpm,
-            &arm_angle->deadzone_deg, &arm_angle->direction_inverted
+            &arm_angle->ball_position_kp, &arm_angle->ball_position_ki,
+            &arm_angle->ball_position_kd, &arm_angle->derivative_filter_s,
+            &arm_angle->ball_velocity_limit_cm_s,
+            &arm_angle->motor_position_offset_limit_deg,
+            &arm_angle->direction_inverted
         };
         return arm_angle_values[id - ARM_ANGLE_KP];
     }
@@ -1483,14 +1500,12 @@ static bool write_arm_parameter(uint16_t parameter_id, float value)
         if (value < -3600.0f || value > 3600.0f) return false;
         arm_point_configured |= 0x02U;
         break;
-    case ARM_MOTOR_CONTROL_MODE:
+    case ARM_BALL_POSITION_LOOP_ENABLE:
+    case ARM_BALL_VELOCITY_LOOP_ENABLE:
         if (value != 0.0f && value != 1.0f) return false;
         break;
-    case ARM_MOTOR_POSITION_LIMIT:
-        if (value <= 0.0f || value > 3600.0f) return false;
-        break;
-    case ARM_MOTOR_SPEED_LIMIT:
-        if (value <= 0.0f || value > 100.0f) return false;
+    case ARM_BALL_TARGET_POSITION:
+        if (value < -12.5f || value > 12.5f) return false;
         break;
     case ARM_MOTOR_SPEED_KP:
     case ARM_MOTOR_SPEED_KI:
@@ -1500,11 +1515,28 @@ static bool write_arm_parameter(uint16_t parameter_id, float value)
     case ARM_PITCH_INVERTED:
         if (value != 0.0f && value != 1.0f) return false;
         break;
+    case ARM_VISION_KALMAN_ENABLED:
+    case ARM_VISION_PREDICTION_ENABLED:
+        if (value != 0.0f && value != 1.0f) return false;
+        break;
     default:
         return false;
     }
     *target = value;
-    if (parameter_id == ARM_PITCH_INVERTED && !save_arm_angle_config())
+    if ((parameter_id >= ARM_BALL_POSITION_LOOP_ENABLE &&
+         parameter_id <= ARM_MOTOR_SPEED_KD) ||
+        parameter_id == ARM_VISION_KALMAN_ENABLED ||
+        parameter_id == ARM_VISION_PREDICTION_ENABLED)
+    {
+        if (!Arm_Angle_Control_Apply_Config(Arm_Angle_Control_Get_Config()))
+        {
+            *target = previous;
+            return false;
+        }
+    }
+    if ((parameter_id == ARM_PITCH_INVERTED ||
+         parameter_id == ARM_VISION_KALMAN_ENABLED ||
+         parameter_id == ARM_VISION_PREDICTION_ENABLED) && !save_arm_angle_config())
     {
         *target = previous;
         return false;
@@ -1545,6 +1577,7 @@ static bool write_arm_calibration_parameter(uint16_t parameter_id, float value)
         return false;
     }
     arm_calibration_valid = arm_calibration_pending_mask == 0x3FU ? 1U : 0U;
+    sync_arm_control_calibration();
     return true;
 }
 
@@ -1555,9 +1588,11 @@ static bool write_arm_angle_parameter(uint16_t parameter_id, float value)
     if (!isfinite(value)) return false;
     switch (parameter_id)
     {
-    case ARM_ANGLE_KP: next.kp = value; break;
-    case ARM_ANGLE_KI: next.ki = value; break;
-    case ARM_ANGLE_KD: next.kd = value; break;
+    case ARM_ANGLE_KP: next.ball_position_kp = value; break;
+    case ARM_ANGLE_KI: next.ball_position_ki = value; break;
+    case ARM_ANGLE_KD: next.ball_position_kd = value; break;
+    case ARM_ANGLE_DERIVATIVE_FILTER: next.derivative_filter_s = value; break;
+    case ARM_ANGLE_MAX_SPEED: next.ball_velocity_limit_cm_s = value; break;
     default: return false;
     }
     return Arm_Angle_Control_Apply_Config(&next);
@@ -1813,7 +1848,8 @@ static void apply_parameter_after_ack(uint16_t parameter_id)
         else if (parameter_id >= PITCH_KP && parameter_id <= PITCH_KD) PIDController_Init(&pitch_pid);
         else if (parameter_id == ARM_LIMIT_MIN || parameter_id == ARM_LIMIT_MAX ||
                  parameter_id == ARM_BALANCE_POSITION) invalidate_arm_reference();
-        else if (parameter_id >= ARM_MOTOR_CONTROL_MODE && parameter_id <= ARM_MOTOR_SPEED_KD)
+        else if ((parameter_id >= ARM_BALL_POSITION_LOOP_ENABLE && parameter_id <= ARM_MOTOR_SPEED_KD) ||
+                 parameter_id == ARM_VISION_KALMAN_ENABLED || parameter_id == ARM_VISION_PREDICTION_ENABLED)
             (void)Arm_Angle_Control_Apply_Config(Arm_Angle_Control_Get_Config());
         else if (parameter_id == ARM_PITCH_INVERTED)
             Arm_Angle_Control_Set_Pitch_Inverted(arm_pitch_inverted != 0.0f);
@@ -1914,19 +1950,24 @@ static void send_param_info(uint16_t protocol_index)
     if (App_Role_Get() == APP_ROLE_ARM)
     {
         static const char *const names[] = {
-            "臂杆钢球速度环Kp", "臂杆钢球速度环Ki", "臂杆钢球速度环Kd",
-            "臂杆位置环Kp", "臂杆位置环Ki", "臂杆位置环Kd",
-            "电机控制模式", "电机位置式限幅", "电机速度式限幅",
+            "小球位置环开关", "小球速度环开关", "小球目标位置",
+            "小球位置环Kp", "小球位置环Ki", "小球位置环Kd",
+            "小球速度环Kp", "小球速度环Ki", "小球速度环Kd",
+            "小球速度限幅", "PID微分滤波",
             "最高点电机位置", "最高点Pitch角度", "平衡点电机位置",
-            "平衡点Pitch角度", "最低点电机位置", "最低点Pitch角度", "Pitch反转"
+            "平衡点Pitch角度", "最低点电机位置", "最低点Pitch角度", "Pitch反转",
+            "视觉卡尔曼开关", "视觉帧间预测开关"
         };
         static const char *const infos[] = {
-            "钢球速度环比例系数", "钢球速度环积分系数", "钢球速度环微分系数",
-            "臂杆位置环比例系数", "臂杆位置环积分系数", "臂杆位置环微分系数",
-            "0为位置式，1为速度式", "位置式电机位置绝对值限幅，单位度", "速度式电机输出限幅，单位RPM",
+            "0关闭，1启用位置外环", "0关闭，1启用速度内环", "位置环目标，单位厘米",
+            "位置外环比例系数", "位置外环积分系数", "位置外环微分系数",
+            "速度内环比例系数", "速度内环积分系数", "速度内环微分系数",
+            "位置环输出速度限幅，单位厘米每秒", "两个小球环共用微分滤波时间，单位秒",
             "设置最高点时自动采集，单位度，只读", "设置最高点时自动采集，单位度，只读", "设置平衡点时自动采集，单位度，只读",
             "设置平衡点时自动采集，单位度，只读", "设置最低点时自动采集，单位度，只读", "设置最低点时自动采集，单位度，只读",
-            "0正常，1仅反转臂杆控制和标定的Pitch角度"
+            "0正常，1仅反转臂杆控制和标定的Pitch角度",
+            "0关闭，1使用MCU二维卡尔曼估计位置和速度",
+            "0关闭，1使用视觉帧间位置预测"
         };
         uint8_t d[ANO_DATA_MAX] = {0};
         uint16_t i = 0U;
@@ -2382,6 +2423,7 @@ static bool capture_arm_calibration_point(uint8_t index)
         return false;
     }
     arm_calibration_valid = arm_calibration_pending_mask == 0x3FU ? 1U : 0U;
+    sync_arm_control_calibration();
     return true;
 }
 
@@ -3023,6 +3065,20 @@ static void send_imu(void)
         imu.temperature_c = (float)sample->temperature * 0.01f;
         imu.pressure_pa = 0.0f;
         imu.sequence = status->sequence;
+        if (arm_pitch_inverted != 0.0f)
+        {
+            /* Rotate every exported IMU field into the arm's right-handed frame. */
+            imu.acceleration_mps2.y = -imu.acceleration_mps2.y;
+            imu.acceleration_mps2.z = -imu.acceleration_mps2.z;
+            imu.angular_velocity_rad_s.y = -imu.angular_velocity_rad_s.y;
+            imu.angular_velocity_rad_s.z = -imu.angular_velocity_rad_s.z;
+            imu.magnetic_field_mg.y = -imu.magnetic_field_mg.y;
+            imu.magnetic_field_mg.z = -imu.magnetic_field_mg.z;
+            imu.angle_rad.y = -imu.angle_rad.y;
+            imu.angle_rad.z = -imu.angle_rad.z;
+            imu.quaternion_y = -imu.quaternion_y;
+            imu.quaternion_z = -imu.quaternion_z;
+        }
     }
     else if (!Car_IMU_Get_Sample(&imu))
     {
@@ -3207,9 +3263,12 @@ static void handle(uint8_t source, uint8_t id, const uint8_t *d, uint16_t n, uin
             accepted = write_arm_calibration_parameter(parameter_id, value);
         } else if (parameter_id >= ARM_LIMIT_MIN && parameter_id <= ARM_BALANCE_POSITION) {
             accepted = write_arm_parameter(parameter_id, value);
-        } else if (parameter_id >= ARM_ANGLE_KP && parameter_id <= ARM_ANGLE_KD) {
+        } else if ((parameter_id >= ARM_ANGLE_KP && parameter_id <= ARM_ANGLE_KD) ||
+                   parameter_id == ARM_ANGLE_DERIVATIVE_FILTER ||
+                   parameter_id == ARM_ANGLE_MAX_SPEED) {
             accepted = write_arm_angle_parameter(parameter_id, value);
-        } else if (parameter_id >= ARM_MOTOR_CONTROL_MODE && parameter_id <= ARM_MOTOR_SPEED_KD) {
+        } else if ((parameter_id >= ARM_BALL_POSITION_LOOP_ENABLE && parameter_id <= ARM_MOTOR_SPEED_KD) ||
+                   parameter_id == ARM_VISION_KALMAN_ENABLED || parameter_id == ARM_VISION_PREDICTION_ENABLED) {
             accepted = write_arm_parameter(parameter_id, value);
         } else if (parameter_id == ARM_PITCH_INVERTED) {
             accepted = write_arm_parameter(parameter_id, value);
