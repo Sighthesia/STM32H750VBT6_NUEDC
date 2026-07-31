@@ -228,6 +228,7 @@ void Arm_Angle_Control_Process(void)
         PIDController_Init(&controller);
     }
     if (config.direction_inverted != 0.0f) output = -output;
+    if (pitch_inverted != 0U) output = -output;
     if (fabsf(motor->data.current_position) >= config.motor_position_limit &&
         ((motor->data.current_position < 0.0f && output < 0.0f) ||
          (motor->data.current_position > 0.0f && output > 0.0f)))
