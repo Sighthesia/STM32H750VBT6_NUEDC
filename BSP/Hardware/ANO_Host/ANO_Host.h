@@ -38,6 +38,7 @@
 #define ANO_COMMAND_ARM_CALIBRATION_CANCEL 0x41U
 
 #define ANO_ID_ARM_MOTOR_TELEMETRY 0xF9U
+#define ANO_ID_VISION_TELEMETRY 0xFAU
 
 #define ANO_ARM_MOTOR_SPEED_VALID 0x01U
 #define ANO_ARM_MOTOR_POSITION_VALID 0x02U
@@ -49,11 +50,12 @@
 #define ANO_ARM_CALIBRATION_CANCELLED 4U
 #define ANO_ARM_CALIBRATION_STORAGE_ERROR 5U
 
-/* F9 payload v3: version, motor ID, valid flags, status flags,
+/* F9 payload v4: version, motor ID, valid flags, status flags,
  * speed RPM (float), position deg (float), speed/position age ms (u16),
  * query/telemetry frequency Hz (u16), target/measured/error angle deg (float),
  * angle output RPM (float), angle status/enabled/authorized/IMU-valid (u8),
- * calibration status/stage/captured-mask/valid (u8).
+ * calibration status/stage/captured-mask/valid (u8), last Emm42 command
+ * status (u8). The first 44 bytes retain the v3 layout.
  * Multi-byte fields are little-endian. */
 
 void ANO_Host_Init(void);

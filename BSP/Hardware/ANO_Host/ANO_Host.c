@@ -271,6 +271,7 @@ static int16_t car_b0_applied_differential;
 static uint32_t car_b0_phase_started_ms;
 static uint32_t last_telemetry_ms;
 static uint32_t last_control_telemetry_ms;
+static uint32_t last_vision_telemetry_ms;
 static uint32_t last_diagnostic_ms;
 static uint32_t last_imu_ms;
 static uint32_t last_imu_sequence;
@@ -2612,14 +2613,11 @@ static void send_arm_motor_telemetry(void)
 {
     ZDTStepperMotor *motor = zdt_stepper_motors[0];
     const arm_angle_control_debug_t *angle = Arm_Angle_Control_Get_Debug();
-    vision_link_sample_t vision = {0};
     uint32_t now = HAL_GetTick();
     uint16_t speed_age;
     uint16_t position_age;
-    uint16_t vision_age;
-    bool vision_valid;
     uint8_t valid = 0U;
-    uint8_t d[55];
+    uint8_t d[45];
     uint16_t i = 0U;
 
     if (motor == NULL || !tx_has_capacity(1U)) return;
@@ -2627,11 +2625,8 @@ static void send_arm_motor_telemetry(void)
     position_age = feedback_age_ms(now, motor->data.current_position_ms);
     if (speed_age <= ARM_MOTOR_FEEDBACK_TIMEOUT_MS) valid |= ANO_ARM_MOTOR_SPEED_VALID;
     if (position_age <= ARM_MOTOR_FEEDBACK_TIMEOUT_MS) valid |= ANO_ARM_MOTOR_POSITION_VALID;
-    vision_valid = Vision_Link_Get_Last_Sample(&vision);
-    vision_age = vision_valid ? feedback_age_ms(now, vision.received_ms) : UINT16_MAX;
-    vision_valid = vision_valid && Vision_Link_Is_Online();
 
-    d[i++] = 3U;
+    d[i++] = 4U;
     d[i++] = motor->id;
     d[i++] = valid;
     d[i++] = motor->data.motor_status_flags;
@@ -2653,11 +2648,29 @@ static void send_arm_motor_telemetry(void)
     d[i++] = arm_calibration_stage;
     d[i++] = arm_calibration_captured_mask;
     d[i++] = arm_calibration_valid;
+    d[i++] = motor->data.last_command_status;
+    send_frame(ANO_ID_ARM_MOTOR_TELEMETRY, d, i);
+}
+
+static void send_vision_telemetry(void)
+{
+    vision_link_sample_t vision = {0};
+    uint32_t now = HAL_GetTick();
+    uint16_t age = UINT16_MAX;
+    uint8_t d[11];
+    uint16_t i = 0U;
+    bool valid = Vision_Link_Get_Last_Sample(&vision);
+
+    if (valid)
+    {
+        age = feedback_age_ms(now, vision.received_ms);
+        valid = Vision_Link_Is_Online();
+    }
     put_float(d, &i, vision.position_cm);
     put_float(d, &i, vision.velocity_cm_s);
-    d[i++] = vision_valid ? 1U : 0U;
-    put_u16(d, &i, vision_age);
-    send_frame(ANO_ID_ARM_MOTOR_TELEMETRY, d, i);
+    d[i++] = valid ? 1U : 0U;
+    put_u16(d, &i, age);
+    send_frame(ANO_ID_VISION_TELEMETRY, d, i);
 }
 
 static void stop_car_b0_calibration(uint8_t status)
@@ -2855,8 +2868,42 @@ static void send_imu(void)
     uint8_t d[14];
     uint16_t i;
 
-    if (!Car_IMU_Get_Sample(&imu) || imu.sequence == last_imu_sequence ||
-        !tx_has_capacity(4U))
+    if (App_Role_Get() == APP_ROLE_ARM)
+    {
+        const jy61p_status_t *status = JY61P_Get_Status();
+        const jy61p_sample_t *sample;
+
+        if (!status->available || !status->sample_valid)
+        {
+            return;
+        }
+        sample = JY61P_Get_Sample();
+        imu.acceleration_mps2.x = (float)sample->acceleration.x * (16.0f * 9.80665f / 32768.0f);
+        imu.acceleration_mps2.y = (float)sample->acceleration.y * (16.0f * 9.80665f / 32768.0f);
+        imu.acceleration_mps2.z = (float)sample->acceleration.z * (16.0f * 9.80665f / 32768.0f);
+        imu.angular_velocity_rad_s.x = (float)sample->angular_velocity.x * (34.906585f / 32768.0f);
+        imu.angular_velocity_rad_s.y = (float)sample->angular_velocity.y * (34.906585f / 32768.0f);
+        imu.angular_velocity_rad_s.z = (float)sample->angular_velocity.z * (34.906585f / 32768.0f);
+        imu.magnetic_field_mg.x = (float)sample->magnetic_field.x;
+        imu.magnetic_field_mg.y = (float)sample->magnetic_field.y;
+        imu.magnetic_field_mg.z = (float)sample->magnetic_field.z;
+        imu.angle_rad.x = (float)sample->angle.x * (3.14159265f / 32768.0f);
+        imu.angle_rad.y = (float)sample->angle.y * (3.14159265f / 32768.0f);
+        imu.angle_rad.z = (float)sample->angle.z * (3.14159265f / 32768.0f);
+        imu.quaternion_w = (float)sample->quaternion.w / 32768.0f;
+        imu.quaternion_x = (float)sample->quaternion.x / 32768.0f;
+        imu.quaternion_y = (float)sample->quaternion.y / 32768.0f;
+        imu.quaternion_z = (float)sample->quaternion.z / 32768.0f;
+        imu.temperature_c = (float)sample->temperature * 0.01f;
+        imu.pressure_pa = 0.0f;
+        imu.sequence = status->sequence;
+    }
+    else if (!Car_IMU_Get_Sample(&imu))
+    {
+        return;
+    }
+
+    if (imu.sequence == last_imu_sequence || !tx_has_capacity(4U))
     {
         return;
     }
@@ -3107,6 +3154,7 @@ void ANO_Host_Init(void)
     memset(arm_calibration_pitch_samples, 0, sizeof(arm_calibration_pitch_samples));
     reset_local_defaults();
     last_control_telemetry_ms = HAL_GetTick();
+    last_vision_telemetry_ms = HAL_GetTick();
     storage_ready = W25Qxx_Init() ? 1U : 0U;
     if (storage_ready)
     {
@@ -3151,7 +3199,17 @@ void ANO_Host_Process(void)
             send_arm_motor_telemetry();
         }
     }
-    if (App_Role_Get() == APP_ROLE_CAR && HAL_GetTick() - last_imu_ms >= ANO_IMU_PERIOD_MS)
+    if (App_Role_Get() == APP_ROLE_ARM)
+    {
+        uint32_t vision_period_ms = (uint32_t)(1000.0f / ARM_MOTOR_TELEMETRY_DEFAULT_HZ);
+        if (vision_period_ms == 0U) vision_period_ms = 1U;
+        if (HAL_GetTick() - last_vision_telemetry_ms >= vision_period_ms)
+        {
+            last_vision_telemetry_ms = HAL_GetTick();
+            send_vision_telemetry();
+        }
+    }
+    if (HAL_GetTick() - last_imu_ms >= ANO_IMU_PERIOD_MS)
     {
         last_imu_ms = HAL_GetTick();
         send_imu();
