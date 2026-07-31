@@ -589,7 +589,7 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
     if (huart->Instance == USART1) { ANO_Host_UART_RxCplt_Callback(); return; }
     if (App_Role_Get() == APP_ROLE_CAR && huart->Instance == USART2) { WheelTec_UART_RxCplt_Callback(); return; }
     if (App_Role_Get() == APP_ROLE_ARM && huart->Instance == USART2) { Tracking_Link_UART_RxCplt_Callback(); return; }
-    if (App_Role_Get() == APP_ROLE_ARM && huart->Instance == UART4) { Vision_Link_UART_RxCplt_Callback(); return; }
+    if (App_Role_Get() == APP_ROLE_ARM && huart->Instance == USART3) { Vision_Link_UART_RxCplt_Callback(); return; }
 #if APP_ENABLE_CAR_MOTOR
     if (App_Role_Get() == APP_ROLE_CAR && huart->Instance == USART3)
     {
@@ -624,7 +624,7 @@ void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart)
     if (huart->Instance == USART1) { ANO_Host_UART_Error_Callback(); return; }
     if (App_Role_Get() == APP_ROLE_CAR && huart->Instance == USART2) { WheelTec_UART_Error_Callback(); return; }
     if (App_Role_Get() == APP_ROLE_ARM && huart->Instance == USART2) { Tracking_Link_UART_Error_Callback(); return; }
-    if (App_Role_Get() == APP_ROLE_ARM && huart->Instance == UART4) { Vision_Link_UART_Error_Callback(); return; }
+    if (App_Role_Get() == APP_ROLE_ARM && huart->Instance == USART3) { Vision_Link_UART_Error_Callback(); return; }
 #if APP_ENABLE_CAR_MOTOR
     if (App_Role_Get() == APP_ROLE_CAR && huart->Instance == USART3)
     {

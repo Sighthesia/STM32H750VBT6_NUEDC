@@ -55,7 +55,7 @@ void Vision_Link_Init(void)
     vision_discard_until_newline = 0U;
     vision_link_frame_valid = 0U;
     memset((void *)&vision_link_diagnostic, 0, sizeof(vision_link_diagnostic));
-    (void)HAL_UART_Receive_IT(&huart4, &vision_rx_byte, 1U);
+    (void)HAL_UART_Receive_IT(&huart3, &vision_rx_byte, 1U);
 }
 
 void Vision_Link_UART_RxCplt_Callback(void)
@@ -87,20 +87,20 @@ void Vision_Link_UART_RxCplt_Callback(void)
         }
     }
 
-    (void)HAL_UART_Receive_IT(&huart4, &vision_rx_byte, 1U);
+    (void)HAL_UART_Receive_IT(&huart3, &vision_rx_byte, 1U);
 }
 
 void Vision_Link_UART_Error_Callback(void)
 {
-    uint32_t error = HAL_UART_GetError(&huart4);
+    uint32_t error = HAL_UART_GetError(&huart3);
 
     vision_link_diagnostic.uart_errors++;
     vision_link_diagnostic.last_uart_error = error;
-    vision_link_diagnostic.last_uart_isr = huart4.Instance->ISR;
+    vision_link_diagnostic.last_uart_isr = huart3.Instance->ISR;
     vision_rx_length = 0U;
     vision_discard_until_newline = 0U;
     if ((error & (HAL_UART_ERROR_ORE | HAL_UART_ERROR_RTO)) != 0U &&
-        HAL_UART_Receive_IT(&huart4, &vision_rx_byte, 1U) != HAL_OK)
+        HAL_UART_Receive_IT(&huart3, &vision_rx_byte, 1U) != HAL_OK)
     {
         vision_link_diagnostic.restart_failures++;
     }
