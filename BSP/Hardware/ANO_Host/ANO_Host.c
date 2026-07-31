@@ -1653,6 +1653,38 @@ static bool parameter_is_visible(uint16_t parameter_id)
     return parameter_id == HOST_BAUD || parameter(parameter_id) != NULL;
 }
 
+static uint16_t parameter_id_from_protocol_index(uint16_t index)
+{
+    if (App_Role_Get() == APP_ROLE_ARM)
+    {
+        return index < sizeof(arm_parameter_ids) / sizeof(arm_parameter_ids[0]) ?
+               arm_parameter_ids[index] : ANO_PARAM_COUNT;
+    }
+
+    for (uint16_t id = 0U; id < ANO_PARAM_COUNT; id++)
+    {
+        if (!parameter_is_visible(id)) continue;
+        if (index == 0U) return id;
+        index--;
+    }
+    return ANO_PARAM_COUNT;
+}
+
+static uint16_t parameter_protocol_count(void)
+{
+    if (App_Role_Get() == APP_ROLE_ARM)
+    {
+        return (uint16_t)(sizeof(arm_parameter_ids) / sizeof(arm_parameter_ids[0]));
+    }
+
+    uint16_t count = 0U;
+    for (uint16_t id = 0U; id < ANO_PARAM_COUNT; id++)
+    {
+        if (parameter_is_visible(id)) count++;
+    }
+    return count;
+}
+
 static void apply_parameter_after_ack(uint16_t parameter_id)
 {
     if (App_Role_Get() == APP_ROLE_CAR)
@@ -1734,14 +1766,15 @@ static void restore_parameter_defaults(void)
     if (App_Role_Get() == APP_ROLE_CAR) (void)apply_car_config();
     else if (zdt_stepper_motors[0] != NULL) invalidate_arm_reference();
 }
-static void send_param(uint16_t id)
+static void send_param(uint16_t protocol_index)
 {
+    uint16_t id = parameter_id_from_protocol_index(protocol_index);
     uint8_t d[6]; uint16_t i = 0U; float *v;
-    if (!parameter_is_visible(id)) return;
+    if (id >= ANO_PARAM_COUNT) return;
     v = parameter(id);
-    if (id == HOST_BAUD) { put_u16(d, &i, id); put_float(d, &i, (float)(requested_baud_rate != 0U ? requested_baud_rate : host_baud_rate)); send_frame(ANO_ID_PARAM_VALUE, d, i); return; }
+    if (id == HOST_BAUD) { put_u16(d, &i, protocol_index); put_float(d, &i, (float)(requested_baud_rate != 0U ? requested_baud_rate : host_baud_rate)); send_frame(ANO_ID_PARAM_VALUE, d, i); return; }
     if (v == NULL) return;
-    put_u16(d, &i, id); put_float(d, &i, *v); send_frame(ANO_ID_PARAM_VALUE, d, i);
+    put_u16(d, &i, protocol_index); put_float(d, &i, *v); send_frame(ANO_ID_PARAM_VALUE, d, i);
 }
 static void send_device_info(void)
 {
@@ -1753,9 +1786,10 @@ static void send_device_info(void)
     memcpy(&d[i], name, name_length); i += (uint16_t)name_length;
     send_frame(ANO_ID_DEVICE_INFO, d, i);
 }
-static void send_param_info(uint16_t id)
+static void send_param_info(uint16_t protocol_index)
 {
-    if (!parameter_is_visible(id)) return;
+    uint16_t id = parameter_id_from_protocol_index(protocol_index);
+    if (id >= ANO_PARAM_COUNT) return;
     if (App_Role_Get() == APP_ROLE_ARM)
     {
         static const char *const names[] = {
@@ -1778,7 +1812,7 @@ static void send_param_info(uint16_t id)
         for (index = 0U; index < sizeof(arm_parameter_ids) / sizeof(arm_parameter_ids[0]); index++)
             if (arm_parameter_ids[index] == id) break;
         if (index == sizeof(arm_parameter_ids) / sizeof(arm_parameter_ids[0])) return;
-        put_u16(d, &i, id); d[i++] = 8U;
+        put_u16(d, &i, protocol_index); d[i++] = 8U;
         strncpy((char *)&d[i], names[index], 20U); i += 20U;
         strncpy((char *)&d[i], infos[index], sizeof(d) - i - 1U);
         i += (uint16_t)strlen((const char *)&d[i]);
@@ -1795,7 +1829,7 @@ static void send_param_info(uint16_t id)
                            "LADRC差速输出变化率，单位速度单位每秒";
         uint8_t d[ANO_DATA_MAX] = {0};
         uint16_t i = 0U;
-        put_u16(d, &i, id);
+        put_u16(d, &i, protocol_index);
         d[i++] = 8U;
         strncpy((char *)&d[i], name, 20U); i += 20U;
         strncpy((char *)&d[i], info, sizeof(d) - i - 1U);
@@ -1824,7 +1858,7 @@ static void send_param_info(uint16_t id)
         uint8_t d[ANO_DATA_MAX] = {0};
         uint16_t i = 0U;
         uint16_t index = (uint16_t)(id - CAR_ARC_STRAIGHT_LENGTH);
-        put_u16(d, &i, id);
+        put_u16(d, &i, protocol_index);
         d[i++] = 8U;
         strncpy((char *)&d[i], arc_names[index], 20U); i += 20U;
         strncpy((char *)&d[i], arc_infos[index], sizeof(d) - i - 1U);
@@ -1946,7 +1980,7 @@ static void send_param_info(uint16_t id)
     uint16_t i = 0U;
 
     if (id >= ANO_PARAM_COUNT) return;
-    put_u16(d, &i, id);
+    put_u16(d, &i, protocol_index);
     d[i++] = 8U;
     strncpy((char *)&d[i], names[id], 20U);
     i += 20U;
@@ -2939,11 +2973,7 @@ static void handle(uint8_t source, uint8_t id, const uint8_t *d, uint16_t n, uin
         parameter_session_until_ms = HAL_GetTick() + ANO_PARAMETER_SESSION_MS;
         if (d[0] == 0U) send_device_info();
         else if (d[0] == 1U) {
-            uint8_t count[3] = {1U, 0U, 0U};
-            for (uint16_t parameter_id = 0U; parameter_id < ANO_PARAM_COUNT; parameter_id++)
-            {
-                if (parameter_is_visible(parameter_id)) count[1]++;
-            }
+            uint8_t count[3] = {1U, (uint8_t)parameter_protocol_count(), 0U};
             send_frame(ANO_ID_PARAM_COMMAND, count, 3U);
         }
         else if (d[0] == 2U) send_param(v);
@@ -2959,9 +2989,11 @@ static void handle(uint8_t source, uint8_t id, const uint8_t *d, uint16_t n, uin
     }
     else if (id == ANO_ID_PARAM_VALUE && n == 6U) {
         bool accepted = false;
-        uint16_t parameter_id = get_u16(d); float value = get_float(&d[2]); float *v = parameter(parameter_id);
+        uint16_t protocol_index = get_u16(d);
+        uint16_t parameter_id = parameter_id_from_protocol_index(protocol_index);
+        float value = get_float(&d[2]); float *v = parameter(parameter_id);
         parameter_session_until_ms = HAL_GetTick() + ANO_PARAMETER_SESSION_MS;
-        if (!parameter_is_visible(parameter_id)) return;
+        if (parameter_id >= ANO_PARAM_COUNT) return;
         bool calibration_read_only = parameter_id >= ARM_CALIBRATION_LEFT_MOTOR &&
                                      parameter_id <= ARM_CALIBRATION_RIGHT_PITCH;
 
