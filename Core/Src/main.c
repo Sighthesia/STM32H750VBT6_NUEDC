@@ -156,8 +156,10 @@ static void App_Peripheral_Init(void)
     MX_UART4_Init();
     MX_I2C1_Init();
 #if APP_ENABLE_ZDT_STEPPER
-    ZDT_Stepper_Init();
-    ZDT_Stepper_Enable(zdt_stepper_motors[0], ZDT_STEPPER_ENABLE, ZDT_STEPPER_SYNC_DISABLE);
+    if (ZDT_Stepper_Init())
+    {
+      ZDT_Stepper_Enable(zdt_stepper_motors[0], ZDT_STEPPER_ENABLE, ZDT_STEPPER_SYNC_DISABLE);
+    }
 #endif
     Tracking_Link_Init();
     Vision_Link_Init();

@@ -42,6 +42,8 @@ extern UART_HandleTypeDef huart3;
 
 extern UART_HandleTypeDef huart4;
 
+extern DMA_HandleTypeDef hdma_usart3_rx;
+
 /* USER CODE BEGIN Private defines */
 
 /* USER CODE END Private defines */

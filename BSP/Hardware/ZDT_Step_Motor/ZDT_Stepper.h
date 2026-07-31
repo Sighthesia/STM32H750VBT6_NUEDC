@@ -66,7 +66,7 @@ typedef struct
     uint8_t motor_count;                                     // 电机数量
 } ZDTStepperUart;
 
-void ZDT_Stepper_Init(void);
+bool ZDT_Stepper_Init(void);
 void ZDT_Stepper_Register_Motor(UART_HandleTypeDef *huart, uint8_t motor_id);
 ZDTStepperMotor *ZDT_Stepper_Get_Motor(UART_HandleTypeDef *huart, uint8_t motor_id);
 void ZDT_Stepper_UART_Send_Data(ZDTStepperMotor *motor, uint8_t *data, size_t length);

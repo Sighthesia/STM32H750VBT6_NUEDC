@@ -28,6 +28,11 @@ int main(void)
     assert(Car_Tracking_Display_Correction(0.35f) == 0.35f);
     assert(Car_Tracking_Display_Correction(-0.35f) == -0.35f);
     assert(Car_Tracking_Display_Correction(0.0f) == 0.0f);
+    assert(Car_Tracking_Approach(0.0f, 30.0f, 3.0f) == 3.0f);
+    assert(Car_Tracking_Approach(30.0f, 0.0f, 3.0f) == 27.0f);
+    assert(Car_Tracking_Approach(10.0f, 11.0f, 3.0f) == 11.0f);
+    assert(Car_Tracking_Arc_Target_Rate(30.0f, 100.0f, 15.0f) == 45.0f);
+    assert(Car_Tracking_Arc_Target_Rate(30.0f, -100.0f, 15.0f) == 15.0f);
 
     puts("car tracking heading model tests passed");
     return 0;

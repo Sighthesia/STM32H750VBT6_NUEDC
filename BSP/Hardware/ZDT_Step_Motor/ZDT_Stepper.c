@@ -3,10 +3,11 @@
 /* ---------------------------------- 电机配置表 --------------------------------- */
 static zdt_stepper_motor_config_t zdt_stepper_motor_config_table[] = {
     // {串口句柄, DMA句柄, 电机ID}
-    {&huart3, NULL, STEPPER_PITCH}};
+    {&huart3, &hdma_usart3_rx, STEPPER_PITCH}};
 
-// 串口管理数组
-static ZDTStepperUart uart_motors[ZDT_STEPPER_MAX_UART];
+// DMA1 cannot access DTCM, so keep its receive buffers in D2 SRAM.
+static ZDTStepperUart uart_motors[ZDT_STEPPER_MAX_UART]
+    __attribute__((section(".dma_buffer"), aligned(32)));
 static uint8_t uart_count = 0;
 
 #define ZDT_STEPPER_TX_MAX_LENGTH 13U
@@ -31,6 +32,24 @@ typedef struct
 } ZDTStepperTxState;
 
 static ZDTStepperTxState uart_tx[ZDT_STEPPER_MAX_UART];
+
+static bool ZDT_Stepper_Start_Receive(ZDTStepperUart *uart)
+{
+    if (uart == NULL || uart->huart == NULL || uart->huart->hdmarx == NULL ||
+        uart->motor_count == 0U)
+    {
+        return false;
+    }
+
+    memset(uart->motors[0].rx_buffer, 0, sizeof(uart->motors[0].rx_buffer));
+    if (HAL_UARTEx_ReceiveToIdle_DMA(uart->huart, uart->motors[0].rx_buffer,
+                                     sizeof(uart->motors[0].rx_buffer)) != HAL_OK)
+    {
+        return false;
+    }
+    __HAL_DMA_DISABLE_IT(uart->huart->hdmarx, DMA_IT_HT);
+    return true;
+}
 
 static ZDTStepperTxState *ZDT_Stepper_Get_Tx_State(UART_HandleTypeDef *huart)
 {
@@ -120,7 +139,7 @@ void print_hex_array(const uint8_t *data, uint16_t size)
  * @brief   遍历配置表自动初始化所有步进电机及串口
  *****************************************************************************
  */
-void ZDT_Stepper_Init(void)
+bool ZDT_Stepper_Init(void)
 {
     uart_count = 0;
     memset(uart_motors, 0, sizeof(uart_motors));
@@ -165,17 +184,14 @@ void ZDT_Stepper_Init(void)
     }
     for (uint8_t i = 0U; i < uart_count; i++)
     {
-        if (uart_motors[i].motor_count > 0U)
+        if (!ZDT_Stepper_Start_Receive(&uart_motors[i]))
         {
-            (void)HAL_UARTEx_ReceiveToIdle_DMA(uart_motors[i].huart,
-                                               uart_motors[i].motors[0].rx_buffer,
-                                               sizeof(uart_motors[i].motors[0].rx_buffer));
-            if (uart_motors[i].huart->hdmarx != NULL)
-            {
-                __HAL_DMA_DISABLE_IT(uart_motors[i].huart->hdmarx, DMA_IT_HT);
-            }
+            memset(zdt_stepper_motors, 0, sizeof(zdt_stepper_motors));
+            uart_count = 0U;
+            return false;
         }
     }
+    return uart_count != 0U;
 }
 
 /**
@@ -467,15 +483,7 @@ void ZDT_Stepper_USRT_RX_callback(UART_HandleTypeDef *huart, uint16_t Size)
                 }
             }
             // 重新启动DMA接收
-            if (uart_motors[i].motor_count > 0)
-            {
-                memset(uart_motors[i].motors[0].rx_buffer, 0, sizeof(uart_motors[i].motors[0].rx_buffer));
-                HAL_UARTEx_ReceiveToIdle_DMA(huart, uart_motors[i].motors[0].rx_buffer, sizeof(uart_motors[i].motors[0].rx_buffer));
-                if (huart->hdmarx != NULL)
-                {
-                    __HAL_DMA_DISABLE_IT(huart->hdmarx, DMA_IT_HT);
-                }
-            }
+            (void)ZDT_Stepper_Start_Receive(&uart_motors[i]);
             return;
         }
     }
@@ -558,10 +566,7 @@ void ZDT_Stepper_UART_Error_Callback(UART_HandleTypeDef *huart)
         if (uart_motors[i].huart == huart && uart_motors[i].motor_count > 0U)
         {
             uart_motors[i].motors[0].data.current_position_ms = 0U;
-            memset(uart_motors[i].motors[0].rx_buffer, 0, sizeof(uart_motors[i].motors[0].rx_buffer));
-            (void)HAL_UARTEx_ReceiveToIdle_DMA(huart, uart_motors[i].motors[0].rx_buffer,
-                                               sizeof(uart_motors[i].motors[0].rx_buffer));
-            if (huart->hdmarx != NULL) __HAL_DMA_DISABLE_IT(huart->hdmarx, DMA_IT_HT);
+            (void)ZDT_Stepper_Start_Receive(&uart_motors[i]);
             break;
         }
     }
