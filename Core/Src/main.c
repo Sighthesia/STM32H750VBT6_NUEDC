@@ -132,7 +132,6 @@ static void App_Peripheral_Init(void)
   App_Role_Init();
   MX_SPI1_Init();
   MX_DMA_Init();
-  MX_I2C1_Init();
   MX_I2C2_Init();
   MX_USART1_UART_Init();
   MX_USART3_UART_Init();
@@ -147,12 +146,12 @@ static void App_Peripheral_Init(void)
     Car_Lap_Task_Init();
 #endif
     Gray_Sensor_Init();
-    JY61P_Init();
     WheelTec_Init();
     Car_IMU_Init();
   }
   else
   {
+    MX_I2C1_Init();
 #if APP_ENABLE_ZDT_STEPPER
     ZDT_Stepper_Init();
     ZDT_Stepper_Enable(zdt_stepper_motors[0], ZDT_STEPPER_ENABLE, ZDT_STEPPER_SYNC_DISABLE);
@@ -181,7 +180,6 @@ static void App_Process(void)
     Car_Lap_Task_Process();
     Car_Attitude_Control_Process();
 #endif
-    JY61P_Process();
   }
   else
   {

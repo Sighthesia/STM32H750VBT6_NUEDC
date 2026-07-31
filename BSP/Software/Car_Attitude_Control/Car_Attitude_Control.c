@@ -184,8 +184,10 @@ void Car_Attitude_Control_Reset_Defaults(void)
     config.step_hold_ms = 2000.0f;
     config.step_angle_feedback_inverted = 1.0f;
     config.rate_feedback_inverted = 1.0f;
-    tracking_config.inner_weight_deg_s = 7.0f;
-    tracking_config.outer_weight_deg_s = 101.0f;
+    tracking_config.layer1_weight_deg_s = 7.0f;
+    tracking_config.layer2_weight_deg_s = 25.0f;
+    tracking_config.layer3_weight_deg_s = 55.0f;
+    tracking_config.layer4_weight_deg_s = 101.0f;
     configure_pid();
     reset_controllers();
     reset_tracking_state();
@@ -193,10 +195,13 @@ void Car_Attitude_Control_Reset_Defaults(void)
 
 bool Car_Attitude_Control_Apply_Tracking_Config(const car_tracking_config_t *next)
 {
-    if (next == NULL || !isfinite(next->inner_weight_deg_s) ||
-        !isfinite(next->outer_weight_deg_s) || next->inner_weight_deg_s < 0.0f ||
-        next->inner_weight_deg_s > 720.0f || next->outer_weight_deg_s < 0.0f ||
-        next->outer_weight_deg_s > 720.0f)
+    if (next == NULL || !isfinite(next->layer1_weight_deg_s) ||
+        !isfinite(next->layer2_weight_deg_s) || !isfinite(next->layer3_weight_deg_s) ||
+        !isfinite(next->layer4_weight_deg_s) || next->layer1_weight_deg_s < 0.0f ||
+        next->layer1_weight_deg_s > 720.0f || next->layer2_weight_deg_s < 0.0f ||
+        next->layer2_weight_deg_s > 720.0f || next->layer3_weight_deg_s < 0.0f ||
+        next->layer3_weight_deg_s > 720.0f || next->layer4_weight_deg_s < 0.0f ||
+        next->layer4_weight_deg_s > 720.0f)
     {
         return false;
     }
@@ -269,7 +274,7 @@ bool Car_Attitude_Control_Set_Enabled(bool state)
 
 static bool update_tracking_target(uint32_t now, float measured_heading)
 {
-    const uint8_t sensor_state = Gray_Sensor_Get_Stable() & 0x0FU;
+    const uint8_t sensor_state = Gray_Sensor_Get_Stable();
     float target_offset;
 
     (void)now;
@@ -289,8 +294,9 @@ static bool update_tracking_target(uint32_t now, float measured_heading)
 
     debug.status |= CAR_ATTITUDE_STATUS_TRACKING_ONLINE | CAR_ATTITUDE_STATUS_HEADING_TRACKING;
     target_offset = Car_Tracking_Target_Offset(
-        sensor_state, tracking_config.inner_weight_deg_s,
-        tracking_config.outer_weight_deg_s, CAR_CONTROL_TRACKING_LOOKAHEAD_S);
+        sensor_state, tracking_config.layer1_weight_deg_s,
+        tracking_config.layer2_weight_deg_s, tracking_config.layer3_weight_deg_s,
+        tracking_config.layer4_weight_deg_s, CAR_CONTROL_TRACKING_LOOKAHEAD_S);
     tracking_target_heading = tracking_unwrapped_heading + target_offset;
     tracking_base_speed = config.base_speed;
     debug.optical_heading_correction_deg_s = Car_Tracking_Display_Correction(target_offset);

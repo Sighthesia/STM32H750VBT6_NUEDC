@@ -5,7 +5,7 @@
 
 static inline uint8_t Gray_Sensor_Normalize(uint8_t raw_value, uint8_t active_low)
 {
-    return active_low != 0U ? ((uint8_t)~raw_value & 0x0FU) : (raw_value & 0x0FU);
+    return active_low != 0U ? (uint8_t)~raw_value : raw_value;
 }
 
 void Gray_Sensor_Init(void);

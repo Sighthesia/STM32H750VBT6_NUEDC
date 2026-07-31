@@ -6,7 +6,7 @@
 #define GRAY_SENSOR_DEBOUNCE_COUNT   3U
 
 static volatile uint8_t stable_value;
-static uint8_t debounce_count[4];
+static uint8_t debounce_count[8];
 static uint32_t last_sample_ms;
 static uint8_t initialized;
 static uint8_t active_low = 1U;
@@ -18,6 +18,7 @@ void Gray_Sensor_Init(void)
     __HAL_RCC_GPIOA_CLK_ENABLE();
     __HAL_RCC_GPIOB_CLK_ENABLE();
     __HAL_RCC_GPIOC_CLK_ENABLE();
+    __HAL_RCC_GPIOE_CLK_ENABLE();
 
     __HAL_GPIO_EXTI_CLEAR_IT(GPIO_PIN_8);
     EXTI->IMR1 &= ~EXTI_IMR1_IM8;
@@ -28,13 +29,15 @@ void Gray_Sensor_Init(void)
 
     gpio.Pin = GPIO_PIN_4 | GPIO_PIN_5;
     HAL_GPIO_Init(GPIOC, &gpio);
-    gpio.Pin = GPIO_PIN_0;
+    gpio.Pin = GPIO_PIN_0 | GPIO_PIN_1 | GPIO_PIN_8 | GPIO_PIN_9;
     HAL_GPIO_Init(GPIOB, &gpio);
     gpio.Pin = GPIO_PIN_8;
     HAL_GPIO_Init(GPIOA, &gpio);
+    gpio.Pin = GPIO_PIN_15;
+    HAL_GPIO_Init(GPIOE, &gpio);
 
     stable_value = Gray_Sensor_Read();
-    for (uint8_t bit = 0U; bit < 4U; bit++)
+    for (uint8_t bit = 0U; bit < 8U; bit++)
     {
         debounce_count[bit] = (stable_value & (1U << bit)) != 0U ?
                               GRAY_SENSOR_DEBOUNCE_COUNT : 0U;
@@ -51,7 +54,7 @@ void Gray_Sensor_Process(void)
     last_sample_ms = now;
 
     uint8_t raw = Gray_Sensor_Read();
-    for (uint8_t bit = 0U; bit < 4U; bit++)
+    for (uint8_t bit = 0U; bit < 8U; bit++)
     {
         uint8_t mask = (uint8_t)(1U << bit);
         if ((raw & mask) != 0U)
@@ -75,6 +78,10 @@ uint8_t Gray_Sensor_Read(void)
     value |= HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_5) == GPIO_PIN_SET ? 0x02U : 0U;
     value |= HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_0) == GPIO_PIN_SET ? 0x04U : 0U;
     value |= HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_8) == GPIO_PIN_SET ? 0x08U : 0U;
+    value |= HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_1) == GPIO_PIN_SET ? 0x10U : 0U;
+    value |= HAL_GPIO_ReadPin(GPIOE, GPIO_PIN_15) == GPIO_PIN_SET ? 0x20U : 0U;
+    value |= HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_8) == GPIO_PIN_SET ? 0x40U : 0U;
+    value |= HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_9) == GPIO_PIN_SET ? 0x80U : 0U;
     return Gray_Sensor_Normalize(value, active_low);
 }
 
@@ -89,7 +96,7 @@ void Gray_Sensor_Set_Active_Low(uint8_t state)
     if (initialized != 0U)
     {
         stable_value = Gray_Sensor_Read();
-        for (uint8_t bit = 0U; bit < 4U; bit++)
+        for (uint8_t bit = 0U; bit < 8U; bit++)
         {
             debounce_count[bit] = (stable_value & (1U << bit)) != 0U ?
                                   GRAY_SENSOR_DEBOUNCE_COUNT : 0U;

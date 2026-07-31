@@ -50,7 +50,7 @@
 #define ANO_PARAMETER_SAVE_DELAY_MS 100U
 #define ANO_STORAGE_ADDRESS 0U
 #define ANO_STORAGE_MAGIC 0x414E4F57UL
-#define ANO_STORAGE_VERSION 15U
+#define ANO_STORAGE_VERSION 16U
 #define ARM_DEBUG_POSITION_PERIOD_MS 20U
 #define ARM_DEBUG_POSITION_STALE_MS 100U
 #define ARM_HOME_STATUS_PERIOD_MS 50U
@@ -120,9 +120,10 @@ enum {
     CAR_LAP_STOP_DELAY_MS,
     ARM_BALANCE_POSITION,
     CAR_LAP_COUNTS_PER_METER,
-    IMU_SOURCE,
-    TRACKING_INNER_WEIGHT,
-    TRACKING_OUTER_WEIGHT,
+    TRACKING_LAYER1_WEIGHT,
+    TRACKING_LAYER2_WEIGHT,
+    TRACKING_LAYER3_WEIGHT,
+    TRACKING_LAYER4_WEIGHT,
     IMU_RATE_Z_INVERTED,
     GRAY_SENSOR_ACTIVE_LOW,
     CAR_B0_START_DIFFERENTIAL,
@@ -230,7 +231,6 @@ static float arm_home_mode;
 static float car_lap_stop_delay_ms;
 static float arm_balance_position;
 static float car_lap_counts_per_meter = 285053.625f;
-static float imu_source;
 static float gray_sensor_active_low = 1.0f;
 static uint8_t arm_debug_active;
 static uint8_t arm_zero_valid;
@@ -293,8 +293,7 @@ typedef struct
     ano_arm_debug_config_t arm_debug;
     float car_lap_counts_per_meter;
     car_tracking_config_t tracking;
-    uint8_t imu_source;
-    uint8_t reserved_2[3];
+    uint8_t reserved_2[4];
     uint32_t checksum;
 } ano_storage_record_t;
 
@@ -353,8 +352,6 @@ static void reset_local_defaults(void)
     car_lap_counts_per_meter = 285053.625f;
     gray_sensor_active_low = 1.0f;
     Gray_Sensor_Set_Active_Low(1U);
-    imu_source = (float)CAR_IMU_SOURCE_JY61P;
-    (void)Car_IMU_Set_Source(CAR_IMU_SOURCE_JY61P);
     (void)Car_Lap_Task_Set_Stop_Delay(0U);
     (void)Car_Lap_Task_Set_Counts_Per_Meter(car_lap_counts_per_meter);
     arm_debug_active = 0U;
@@ -441,7 +438,6 @@ static bool save_storage(uint32_t baud_rate)
     record.arm_debug.home_mode = arm_home_mode;
     record.arm_debug.balance_position = arm_balance_position;
     record.car_lap_counts_per_meter = car_lap_counts_per_meter;
-    record.imu_source = (uint8_t)Car_IMU_Get_Source();
     record.reserved[0] = (uint8_t)gray_sensor_active_low;
     record.reserved[1] = 0xA5U;
     record.checksum = storage_record_checksum(&record);
@@ -500,11 +496,6 @@ static void load_storage(void)
         }
         (void)Car_Attitude_Control_Apply_Config(&record.attitude);
         (void)Car_Attitude_Control_Apply_Tracking_Config(&record.tracking);
-        if (record.imu_source <= (uint8_t)CAR_IMU_SOURCE_WHEELTEC)
-        {
-            imu_source = (float)record.imu_source;
-            (void)Car_IMU_Set_Source((car_imu_source_t)record.imu_source);
-        }
         if (record.reserved[1] == 0xA5U && record.reserved[0] <= 1U)
         {
             gray_sensor_active_low = (float)record.reserved[0];
@@ -992,8 +983,8 @@ static float *parameter(uint16_t id)
         &arm_limit_min, &arm_limit_max, &arm_debug_speed, &arm_target_position,
         &arm_debug_direction, &arm_debug_accel, &arm_driver_microstep,
         &arm_debug_timeout_ms, &arm_home_mode, &car_lap_stop_delay_ms,
-        &arm_balance_position, &car_lap_counts_per_meter, &imu_source,
-        NULL, NULL, &gray_sensor_active_low,
+        &arm_balance_position, &car_lap_counts_per_meter,
+        NULL, NULL, NULL, NULL, NULL, &gray_sensor_active_low,
         &car_b0_start_differential, &car_b0_differential_step, &car_b0_level_count,
         &car_b0_pulse_duration_ms, &car_b0_settle_duration_ms, &car_b0_repeat_count
     };
@@ -1020,13 +1011,14 @@ static float *parameter(uint16_t id)
         };
         return feedforward_values[id - STEPPER_FF_ENABLE];
     }
-    if (id >= TRACKING_INNER_WEIGHT && id <= TRACKING_OUTER_WEIGHT)
+    if (id >= TRACKING_LAYER1_WEIGHT && id <= TRACKING_LAYER4_WEIGHT)
     {
         car_tracking_config_t *tracking = Car_Attitude_Control_Get_Tracking_Config();
         float *const tracking_values[] = {
-            &tracking->inner_weight_deg_s, &tracking->outer_weight_deg_s
+            &tracking->layer1_weight_deg_s, &tracking->layer2_weight_deg_s,
+            &tracking->layer3_weight_deg_s, &tracking->layer4_weight_deg_s
         };
-        return tracking_values[id - TRACKING_INNER_WEIGHT];
+        return tracking_values[id - TRACKING_LAYER1_WEIGHT];
     }
     if (id == IMU_RATE_Z_INVERTED) return &attitude->rate_feedback_inverted;
     return id < ANO_PARAM_COUNT ? values[id] : NULL;
@@ -1161,8 +1153,10 @@ static bool write_tracking_parameter(uint16_t parameter_id, float value)
     if (!isfinite(value)) return false;
     switch (parameter_id)
     {
-    case TRACKING_INNER_WEIGHT: next.inner_weight_deg_s = value; break;
-    case TRACKING_OUTER_WEIGHT: next.outer_weight_deg_s = value; break;
+    case TRACKING_LAYER1_WEIGHT: next.layer1_weight_deg_s = value; break;
+    case TRACKING_LAYER2_WEIGHT: next.layer2_weight_deg_s = value; break;
+    case TRACKING_LAYER3_WEIGHT: next.layer3_weight_deg_s = value; break;
+    case TRACKING_LAYER4_WEIGHT: next.layer4_weight_deg_s = value; break;
     default: return false;
     }
     return Car_Attitude_Control_Apply_Tracking_Config(&next);
@@ -1454,7 +1448,7 @@ static void send_param_info(uint16_t id)
         "角速度阶跃幅度", "指定旋转角度", "阶跃保持时间", "航向角反馈倒置",
         "滚球前馈使能", "前后X轴增益", "左右Y轴增益", "前馈滤波常数", "前馈加速度死区", "前馈转速限幅", "控制板角色",
         "臂杆最左点", "臂杆最右点", "臂杆调试速度", "臂杆目标位置", "臂杆调试方向", "臂杆加速度", "驱动细分", "调试超时时间", "驱动回零模式", "一圈停车补偿",
-        "臂杆平衡点", "里程每米计数", "小车惯导来源", "内侧光电权重", "外侧光电权重", "Z轴角速度反馈倒置", "光电低电平有效",
+         "臂杆平衡点", "里程每米计数", "光电第一层权重", "光电第二层权重", "光电第三层权重", "光电第四层权重", "Z轴角速度反馈倒置", "光电低电平有效",
         "b0起始差速", "b0差速步进", "b0档位数量", "b0脉冲时长", "b0停稳时长", "b0重复次数"
     };
     static const char *const infos[ANO_PARAM_COUNT] = {
@@ -1469,7 +1463,7 @@ static void send_param_info(uint16_t id)
         "角速度阶跃幅度，单位度每秒", "指定旋转相对角度，单位度", "正阶跃和回零各自保持毫秒数", "0原方向，1倒置",
         "0关闭，1启用", "JY61P X轴到Pitch转速增益", "JY61P Y轴到Yaw转速增益", "一阶低通时间常数，单位秒", "滤波加速度死区，单位g", "单轴前馈最大转速，单位RPM", "0小车控制板，1臂杆电机板",
         "臂杆最左绝对角度", "臂杆最右绝对角度", "速度和定位命令使用的转速，单位RPM", "绝对定位目标角度", "0顺时针，1逆时针", "驱动器加速度档位", "驱动器细分值", "运动看门狗超时，单位毫秒", "驱动器回零模式", "终点横线后继续行驶时间，单位毫秒",
-        "上电回零后自动到达的绝对角度", "单轮前进一米对应的累计编码器计数", "0使用JY61P，1使用WheelTec", "左二和右二改变目标航向的速度，单位度每秒", "左一和右一改变目标航向的速度，单位度每秒", "0原方向，1倒置，仅作用于Z轴角速度反馈", "0高电平黑线有效，1低电平黑线有效",
+         "上电回零后自动到达的绝对角度", "单轮前进一米对应的累计编码器计数", "4和5号光电的修正速度，单位度每秒", "3和6号光电的修正速度，单位度每秒", "2和7号光电的修正速度，单位度每秒", "1和8号光电的修正速度，单位度每秒", "0原方向，1倒置，仅作用于Z轴角速度反馈", "0高电平黑线有效，1低电平黑线有效",
         "第一档逻辑差速", "相邻档逻辑差速增量", "正幅值档位数量", "每个激励脉冲时长，单位毫秒", "相邻脉冲停稳时长，单位毫秒", "每个档位正反激励重复次数"
     };
     uint8_t d[ANO_DATA_MAX] = {0};
@@ -2157,13 +2151,13 @@ static void send_tracking_diagnostic(void)
 {
     const car_attitude_control_debug_t *control = Car_Attitude_Control_Get_Debug();
     car_lap_status_t lap;
-    const uint8_t gray = Gray_Sensor_Get_Stable() & 0x0FU;
-    uint8_t d[36];
+    const uint8_t gray = Gray_Sensor_Get_Stable();
+    uint8_t d[52];
     uint16_t i = 0U;
 
     if (!tx_has_capacity(1U)) return;
 
-    for (uint8_t bit = 0U; bit < 4U; bit++)
+    for (uint8_t bit = 0U; bit < 8U; bit++)
     {
         put_float(d, &i, (float)((gray >> bit) & 0x01U));
     }
@@ -2348,8 +2342,8 @@ static void handle(uint8_t source, uint8_t id, const uint8_t *d, uint16_t n, uin
               (parameter_id <= CAR_KD ||
               (parameter_id >= CAR_TYPE && parameter_id <= STEP_ANGLE_FEEDBACK_INVERTED) ||
               parameter_id == CAR_LAP_STOP_DELAY_MS || parameter_id == CAR_LAP_COUNTS_PER_METER ||
-              parameter_id == IMU_SOURCE || parameter_id == TRACKING_INNER_WEIGHT ||
-              parameter_id == TRACKING_OUTER_WEIGHT || parameter_id == GRAY_SENSOR_ACTIVE_LOW)) ||
+               (parameter_id >= TRACKING_LAYER1_WEIGHT && parameter_id <= TRACKING_LAYER4_WEIGHT) ||
+               parameter_id == GRAY_SENSOR_ACTIVE_LOW)) ||
             (App_Role_Get() == APP_ROLE_CAR &&
              ((parameter_id >= YAW_KP && parameter_id <= PITCH_KD) ||
               (parameter_id >= STEPPER_FF_ENABLE && parameter_id <= STEPPER_FF_OUTPUT_LIMIT) ||
@@ -2389,13 +2383,8 @@ static void handle(uint8_t source, uint8_t id, const uint8_t *d, uint16_t n, uin
             accepted = write_attitude_parameter(parameter_id, value);
         } else if (parameter_id >= STEPPER_FF_ENABLE && parameter_id <= STEPPER_FF_OUTPUT_LIMIT) {
             accepted = write_feedforward_parameter(parameter_id, value);
-        } else if (parameter_id >= TRACKING_INNER_WEIGHT && parameter_id <= TRACKING_OUTER_WEIGHT) {
+        } else if (parameter_id >= TRACKING_LAYER1_WEIGHT && parameter_id <= TRACKING_LAYER4_WEIGHT) {
             accepted = write_tracking_parameter(parameter_id, value);
-        } else if (parameter_id == IMU_SOURCE && App_Role_Get() == APP_ROLE_CAR &&
-                   isfinite(value) && (value == 0.0f || value == 1.0f)) {
-            (void)Car_Attitude_Control_Set_Enabled(false);
-            accepted = Car_IMU_Set_Source((car_imu_source_t)(uint8_t)value);
-            if (accepted) { imu_source = value; last_imu_sequence = 0U; }
         } else if (parameter_id >= ARM_LIMIT_MIN && parameter_id <= ARM_HOME_MODE) {
             accepted = write_arm_parameter(parameter_id, value);
         } else if (parameter_id == ARM_BALANCE_POSITION) {

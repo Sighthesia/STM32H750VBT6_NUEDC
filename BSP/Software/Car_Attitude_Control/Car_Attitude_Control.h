@@ -45,8 +45,10 @@ typedef struct
 
 typedef struct
 {
-    float inner_weight_deg_s;
-    float outer_weight_deg_s;
+    float layer1_weight_deg_s;
+    float layer2_weight_deg_s;
+    float layer3_weight_deg_s;
+    float layer4_weight_deg_s;
 } car_tracking_config_t;
 
 enum

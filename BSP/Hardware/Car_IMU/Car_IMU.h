@@ -6,8 +6,7 @@
 
 typedef enum
 {
-    CAR_IMU_SOURCE_JY61P = 0,
-    CAR_IMU_SOURCE_WHEELTEC = 1
+    CAR_IMU_SOURCE_WHEELTEC = 0
 } car_imu_source_t;
 
 typedef struct
@@ -35,7 +34,6 @@ typedef struct
 } car_imu_sample_t;
 
 void Car_IMU_Init(void);
-bool Car_IMU_Set_Source(car_imu_source_t source);
 car_imu_source_t Car_IMU_Get_Source(void);
 bool Car_IMU_Get_Sample(car_imu_sample_t *sample);
 
