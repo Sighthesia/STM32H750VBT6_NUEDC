@@ -31,6 +31,13 @@ Load the relevant skill before specialized work:
 - The toolchain targets Cortex-M7 hard-float and links `stm32h750vbtx_flash.ld`; do not use the host compiler.
 - Build output is under `build/<preset>/` and is ignored. If the checkout path changes, configure a fresh preset directory because CMake caches absolute paths.
 
+## Firmware Branch
+
+- Branch: `arm-controller` (`APP_ROLE_ARM` fixed at compile time).
+- Worktree: `/home/Sighthesia/0_Files/Producing/Hardware/MCU/STM32/STM32H750VBT6_NUEDC-arm-controller`.
+- Download artifact: `build/MinSizeRel/STM32H750VBT6_NUEDC.elf`.
+- Verify with `git branch --show-current`; do not download this worktree's artifact to the car controller board.
+
 ## Change Boundaries
 
 - Treat `STM32H750VBT6_NUEDC.ioc` and CubeMX-generated sections/files as configuration-owned. Regenerate deliberately and review generated diffs before keeping manual changes.
