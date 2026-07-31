@@ -18,6 +18,7 @@ void Gray_Sensor_Init(void)
     __HAL_RCC_GPIOA_CLK_ENABLE();
     __HAL_RCC_GPIOB_CLK_ENABLE();
     __HAL_RCC_GPIOC_CLK_ENABLE();
+    __HAL_RCC_GPIOD_CLK_ENABLE();
     __HAL_RCC_GPIOE_CLK_ENABLE();
 
     __HAL_GPIO_EXTI_CLEAR_IT(GPIO_PIN_8);
@@ -29,7 +30,7 @@ void Gray_Sensor_Init(void)
 
     gpio.Pin = GPIO_PIN_4 | GPIO_PIN_5;
     HAL_GPIO_Init(GPIOC, &gpio);
-    gpio.Pin = GPIO_PIN_0 | GPIO_PIN_1 | GPIO_PIN_8;
+    gpio.Pin = GPIO_PIN_0 | GPIO_PIN_1 | GPIO_PIN_9;
     HAL_GPIO_Init(GPIOB, &gpio);
     gpio.Pin = GPIO_PIN_8;
     HAL_GPIO_Init(GPIOA, &gpio);
