@@ -24,6 +24,7 @@ typedef struct
 {
     float z1;
     float z2;
+    float commanded_rate;
     float previous_output;
     uint8_t initialized;
 } car_ladrc_t;
@@ -147,6 +148,9 @@ static float update_ladrc(float target_rate, float measured_rate)
     const float error = measured_rate - rate_ladrc.z1;
     const float observer = config.ladrc_observer_bandwidth;
     const float gain = config.ladrc_plant_gain;
+    const float target_step = config.ladrc_target_rate_slew_deg_s2 * CAR_CONTROL_PERIOD_S;
+    const float output_step = config.ladrc_differential_slew_s2 * CAR_CONTROL_PERIOD_S;
+    float requested_output;
 
     if (!rate_ladrc.initialized)
     {
@@ -154,18 +158,32 @@ static float update_ladrc(float target_rate, float measured_rate)
         rate_ladrc.initialized = 1U;
     }
 
+    rate_ladrc.commanded_rate = Car_Tracking_Approach(rate_ladrc.commanded_rate,
+                                                       target_rate, target_step);
+    if (rate_ladrc.commanded_rate != target_rate)
+    {
+        debug.status |= CAR_ATTITUDE_STATUS_LADRC_TARGET_SLEW_LIMITED;
+    }
+
     rate_ladrc.z1 += CAR_CONTROL_PERIOD_S *
                      (rate_ladrc.z2 + gain * rate_ladrc.previous_output + 2.0f * observer * error);
     rate_ladrc.z2 += CAR_CONTROL_PERIOD_S * observer * observer * error;
-    rate_ladrc.previous_output =
-        (config.ladrc_controller_bandwidth * (target_rate - rate_ladrc.z1) - rate_ladrc.z2) / gain;
-    if (rate_ladrc.previous_output > config.max_differential ||
-        rate_ladrc.previous_output < -config.max_differential)
+    requested_output =
+        (config.ladrc_controller_bandwidth * (rate_ladrc.commanded_rate - rate_ladrc.z1) -
+         rate_ladrc.z2) / gain;
+    if (requested_output > config.max_differential ||
+        requested_output < -config.max_differential)
     {
         debug.status |= CAR_ATTITUDE_STATUS_DIFFERENTIAL_LIMITED;
     }
-    rate_ladrc.previous_output = clampf(rate_ladrc.previous_output,
-                                       -config.max_differential, config.max_differential);
+    requested_output = clampf(requested_output, -config.max_differential,
+                              config.max_differential);
+    rate_ladrc.previous_output = Car_Tracking_Approach(rate_ladrc.previous_output,
+                                                        requested_output, output_step);
+    if (rate_ladrc.previous_output != requested_output)
+    {
+        debug.status |= CAR_ATTITUDE_STATUS_LADRC_OUTPUT_SLEW_LIMITED;
+    }
     return rate_ladrc.previous_output;
 }
 
@@ -192,6 +210,8 @@ void Car_Attitude_Control_Reset_Defaults(void)
     config.step_hold_ms = 2000.0f;
     config.step_angle_feedback_inverted = 1.0f;
     config.rate_feedback_inverted = 1.0f;
+    config.ladrc_target_rate_slew_deg_s2 = 60.0f;
+    config.ladrc_differential_slew_s2 = 250.0f;
     tracking_config.layer1_weight_deg_s = 7.0f;
     tracking_config.layer2_weight_deg_s = 25.0f;
     tracking_config.layer3_weight_deg_s = 55.0f;
@@ -228,6 +248,8 @@ bool Car_Attitude_Control_Apply_Config(const car_attitude_control_config_t *next
         !isfinite(next->step_rate_amplitude) || !isfinite(next->step_angle_amplitude) ||
         !isfinite(next->step_hold_ms) || !isfinite(next->step_angle_feedback_inverted) ||
         !isfinite(next->rate_feedback_inverted) ||
+        !isfinite(next->ladrc_target_rate_slew_deg_s2) ||
+        !isfinite(next->ladrc_differential_slew_s2) ||
         (next->mode != 0.0f && next->mode != 1.0f) || next->base_speed < 0.0f || next->base_speed > 1000.0f ||
         next->heading_kp < 0.0f || next->heading_ki < 0.0f || next->heading_kd < 0.0f ||
         next->rate_kp < 0.0f || next->rate_ki < 0.0f || next->rate_kd < 0.0f ||
@@ -242,7 +264,11 @@ bool Car_Attitude_Control_Apply_Config(const car_attitude_control_config_t *next
         next->step_hold_ms < 100.0f || next->step_hold_ms > 30000.0f ||
         next->step_hold_ms != floorf(next->step_hold_ms) ||
         (next->step_angle_feedback_inverted != 0.0f && next->step_angle_feedback_inverted != 1.0f) ||
-        (next->rate_feedback_inverted != 0.0f && next->rate_feedback_inverted != 1.0f))
+        (next->rate_feedback_inverted != 0.0f && next->rate_feedback_inverted != 1.0f) ||
+        next->ladrc_target_rate_slew_deg_s2 <= 0.0f ||
+        next->ladrc_target_rate_slew_deg_s2 > 2000.0f ||
+        next->ladrc_differential_slew_s2 <= 0.0f ||
+        next->ladrc_differential_slew_s2 > 10000.0f)
     {
         return false;
     }
@@ -484,7 +510,11 @@ void Car_Attitude_Control_Process(void)
         {
             step_return_phase = 1U;
             step_phase_started_ms = now;
-            reset_controllers();
+            if (config.mode != (float)CAR_ATTITUDE_CONTROL_LADRC ||
+                step_mode != CAR_ATTITUDE_STEP_RATE)
+            {
+                reset_controllers();
+            }
         }
         else
         {
@@ -596,6 +626,7 @@ void Car_Attitude_Control_Process(void)
     if (config.mode == (float)CAR_ATTITUDE_CONTROL_LADRC)
     {
         differential = update_ladrc(target_rate, measured_rate);
+        debug.target_rate = rate_ladrc.commanded_rate;
         debug.ladrc_z1 = rate_ladrc.z1;
         debug.ladrc_z2 = rate_ladrc.z2;
         debug.ladrc_output = differential;

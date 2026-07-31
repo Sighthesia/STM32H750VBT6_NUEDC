@@ -41,6 +41,8 @@ typedef struct
     float step_hold_ms;
     float step_angle_feedback_inverted;
     float rate_feedback_inverted;
+    float ladrc_target_rate_slew_deg_s2;
+    float ladrc_differential_slew_s2;
 } car_attitude_control_config_t;
 
 typedef struct
@@ -67,7 +69,9 @@ enum
     CAR_ATTITUDE_STATUS_HEADING_TRACKING = 1U << 11,
     CAR_ATTITUDE_STATUS_ROTATION_ACTIVE = 1U << 12,
     CAR_ATTITUDE_STATUS_ARC_ACTIVE = 1U << 13,
-    CAR_ATTITUDE_STATUS_DIFFERENTIAL_SLEW_LIMITED = 1U << 14
+    CAR_ATTITUDE_STATUS_DIFFERENTIAL_SLEW_LIMITED = 1U << 14,
+    CAR_ATTITUDE_STATUS_LADRC_TARGET_SLEW_LIMITED = 1U << 15,
+    CAR_ATTITUDE_STATUS_LADRC_OUTPUT_SLEW_LIMITED = 1U << 16
 };
 
 typedef struct

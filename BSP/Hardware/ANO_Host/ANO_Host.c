@@ -60,7 +60,7 @@
 #define ANO_ARM_ANGLE_STORAGE_VERSION 1U
 #define ANO_ARM_CALIBRATION_STORAGE_MAGIC 0x41433350UL
 #define ANO_ARM_CALIBRATION_STORAGE_VERSION 1U
-#define ANO_STORAGE_VERSION 17U
+#define ANO_STORAGE_VERSION 18U
 #define ARM_HOME_STATUS_PERIOD_MS 50U
 #define ARM_HOME_SETTLE_MS 100U
 #define ARM_STARTUP_HOME_TIMEOUT_MS 22000U
@@ -177,6 +177,8 @@ enum {
     CAR_ARC_FEEDFORWARD_MAX,
     CAR_ARC_FEEDFORWARD_SLEW,
     CAR_ARC_DIFFERENTIAL_SLEW,
+    ATTITUDE_LADRC_TARGET_RATE_SLEW,
+    ATTITUDE_LADRC_DIFFERENTIAL_SLEW,
     ANO_PARAM_COUNT
 };
 
@@ -378,6 +380,49 @@ typedef struct
 
 typedef struct
 {
+    float mode;
+    float base_speed;
+    float heading_kp;
+    float heading_ki;
+    float heading_kd;
+    float rate_kp;
+    float rate_ki;
+    float rate_kd;
+    float ladrc_observer_bandwidth;
+    float ladrc_controller_bandwidth;
+    float ladrc_plant_gain;
+    float max_rate;
+    float max_differential;
+    float invert_x;
+    float invert_y;
+    float invert_z;
+    float step_rate_amplitude;
+    float step_angle_amplitude;
+    float step_hold_ms;
+    float step_angle_feedback_inverted;
+    float rate_feedback_inverted;
+} ano_attitude_config_v17_t;
+
+typedef struct
+{
+    uint32_t magic;
+    uint8_t version;
+    uint32_t baud_rate;
+    uint8_t reserved[3];
+    float values[HOST_BAUD];
+    float directions[2];
+    ano_attitude_config_v17_t attitude;
+    stepper_feedforward_config_t feedforward;
+    ano_arm_debug_config_t arm_debug;
+    float car_lap_counts_per_meter;
+    car_tracking_config_t tracking;
+    car_lap_arc_config_t arc;
+    uint8_t reserved_2[4];
+    uint32_t checksum;
+} ano_storage_record_v17_t;
+
+typedef struct
+{
     uint32_t magic;
     uint8_t version;
     uint8_t reserved[3];
@@ -512,6 +557,15 @@ static uint32_t storage_record_checksum(const ano_storage_record_t *record)
     const uint8_t *data = (const uint8_t *)record;
     uint32_t checksum = 0x6D2B79F5U;
     for (uint16_t i = 0U; i < sizeof(*record) - sizeof(record->checksum); i++) checksum = (checksum << 5U) ^ (checksum >> 27U) ^ data[i];
+    return checksum;
+}
+
+static uint32_t storage_record_v17_checksum(const ano_storage_record_v17_t *record)
+{
+    const uint8_t *data = (const uint8_t *)record;
+    uint32_t checksum = 0x6D2B79F5U;
+    for (uint16_t i = 0U; i < sizeof(*record) - sizeof(record->checksum); i++)
+        checksum = (checksum << 5U) ^ (checksum >> 27U) ^ data[i];
     return checksum;
 }
 
@@ -676,9 +730,39 @@ static void load_storage(void)
     ano_storage_record_t record = {0};
     storage_operation = 2U;
     if (!W25Qxx_Read(ANO_STORAGE_ADDRESS, (uint8_t *)&record, sizeof(record)) ||
-        record.magic != ANO_STORAGE_MAGIC || record.version != ANO_STORAGE_VERSION ||
-        !baud_rate_is_valid(record.baud_rate) ||
-        record.checksum != storage_record_checksum(&record))
+        record.magic != ANO_STORAGE_MAGIC)
+    {
+        return;
+    }
+    if (record.version == 17U)
+    {
+        ano_storage_record_v17_t legacy = {0};
+        if (!W25Qxx_Read(ANO_STORAGE_ADDRESS, (uint8_t *)&legacy, sizeof(legacy)) ||
+            !baud_rate_is_valid(legacy.baud_rate) ||
+            legacy.checksum != storage_record_v17_checksum(&legacy))
+        {
+            return;
+        }
+        memset(&record, 0, sizeof(record));
+        record.magic = legacy.magic;
+        record.version = ANO_STORAGE_VERSION;
+        record.baud_rate = legacy.baud_rate;
+        memcpy(record.reserved, legacy.reserved, sizeof(record.reserved));
+        memcpy(record.values, legacy.values, sizeof(record.values));
+        memcpy(record.directions, legacy.directions, sizeof(record.directions));
+        memcpy(&record.attitude, &legacy.attitude, sizeof(legacy.attitude));
+        record.attitude.ladrc_target_rate_slew_deg_s2 = 60.0f;
+        record.attitude.ladrc_differential_slew_s2 = 250.0f;
+        record.feedforward = legacy.feedforward;
+        record.arm_debug = legacy.arm_debug;
+        record.car_lap_counts_per_meter = legacy.car_lap_counts_per_meter;
+        record.tracking = legacy.tracking;
+        record.arc = legacy.arc;
+        memcpy(record.reserved_2, legacy.reserved_2, sizeof(record.reserved_2));
+    }
+    else if (record.version != ANO_STORAGE_VERSION ||
+             !baud_rate_is_valid(record.baud_rate) ||
+             record.checksum != storage_record_checksum(&record))
     {
         return;
     }
@@ -1251,6 +1335,10 @@ static float *parameter(uint16_t id)
         return tracking_values[id - TRACKING_LAYER1_WEIGHT];
     }
     if (id == IMU_RATE_Z_INVERTED) return &attitude->rate_feedback_inverted;
+    if (id == ATTITUDE_LADRC_TARGET_RATE_SLEW)
+        return &attitude->ladrc_target_rate_slew_deg_s2;
+    if (id == ATTITUDE_LADRC_DIFFERENTIAL_SLEW)
+        return &attitude->ladrc_differential_slew_s2;
     if (id >= ARM_ANGLE_KP && id <= ARM_ANGLE_DIRECTION_INVERTED)
     {
         float *const arm_angle_values[] = {
@@ -1424,6 +1512,8 @@ static bool write_attitude_parameter(uint16_t parameter_id, float value)
     case STEP_HOLD_MS: next.step_hold_ms = value; break;
     case STEP_ANGLE_FEEDBACK_INVERTED: next.step_angle_feedback_inverted = value; break;
     case IMU_RATE_Z_INVERTED: next.rate_feedback_inverted = value; break;
+    case ATTITUDE_LADRC_TARGET_RATE_SLEW: next.ladrc_target_rate_slew_deg_s2 = value; break;
+    case ATTITUDE_LADRC_DIFFERENTIAL_SLEW: next.ladrc_differential_slew_s2 = value; break;
     default: return false;
     }
     return Car_Attitude_Control_Apply_Config(&next);
@@ -1684,6 +1774,24 @@ static void send_device_info(void)
 }
 static void send_param_info(uint16_t id)
 {
+    if (id == ATTITUDE_LADRC_TARGET_RATE_SLEW ||
+        id == ATTITUDE_LADRC_DIFFERENTIAL_SLEW)
+    {
+        const char *name = id == ATTITUDE_LADRC_TARGET_RATE_SLEW ?
+                           "LADRC目标斜率" : "LADRC差速斜率";
+        const char *info = id == ATTITUDE_LADRC_TARGET_RATE_SLEW ?
+                           "LADRC目标角速度变化率，单位度每秒平方" :
+                           "LADRC差速输出变化率，单位速度单位每秒";
+        uint8_t d[ANO_DATA_MAX] = {0};
+        uint16_t i = 0U;
+        put_u16(d, &i, id);
+        d[i++] = 8U;
+        strncpy((char *)&d[i], name, 20U); i += 20U;
+        strncpy((char *)&d[i], info, sizeof(d) - i - 1U);
+        i += (uint16_t)strlen((const char *)&d[i]);
+        send_frame(ANO_ID_PARAM_INFO, d, i);
+        return;
+    }
     static const char *const arc_names[] = {
         "直道长度", "圆弧半径", "圆弧长度", "圆弧退出航向",
         "光电纠偏上限", "前馈最小角速度", "前馈最大角速度",
@@ -2997,6 +3105,8 @@ static void handle(uint8_t source, uint8_t id, const uint8_t *d, uint16_t n, uin
               ((parameter_id <= CAR_REDUCTION_RATIO) ||
               (parameter_id > HOST_BAUD && parameter_id <= CAR_DEBUG_M2_DIRECTION) ||
               (parameter_id >= CAR_M1_DIRECTION && parameter_id <= STEP_ANGLE_FEEDBACK_INVERTED) ||
+              parameter_id == ATTITUDE_LADRC_TARGET_RATE_SLEW ||
+              parameter_id == ATTITUDE_LADRC_DIFFERENTIAL_SLEW ||
               parameter_id == CAR_LAP_STOP_DELAY_MS || parameter_id == CAR_LAP_COUNTS_PER_METER ||
                (parameter_id >= TRACKING_LAYER1_WEIGHT && parameter_id <= TRACKING_LAYER4_WEIGHT) ||
                parameter_id == GRAY_SENSOR_ACTIVE_LOW)) ||
@@ -3030,7 +3140,9 @@ static void handle(uint8_t source, uint8_t id, const uint8_t *d, uint16_t n, uin
         } else if (parameter_id >= CAR_B0_START_DIFFERENTIAL && parameter_id <= CAR_B0_REPEAT_COUNT) {
             accepted = write_car_b0_calibration_parameter(parameter_id, value);
         } else if ((parameter_id >= ATTITUDE_MODE && parameter_id <= STEP_ANGLE_FEEDBACK_INVERTED) ||
-                   parameter_id == IMU_RATE_Z_INVERTED) {
+                   parameter_id == IMU_RATE_Z_INVERTED ||
+                   parameter_id == ATTITUDE_LADRC_TARGET_RATE_SLEW ||
+                   parameter_id == ATTITUDE_LADRC_DIFFERENTIAL_SLEW) {
             accepted = write_attitude_parameter(parameter_id, value);
         } else if (parameter_id >= STEPPER_FF_ENABLE && parameter_id <= STEPPER_FF_OUTPUT_LIMIT) {
             accepted = write_feedforward_parameter(parameter_id, value);
