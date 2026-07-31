@@ -31,6 +31,14 @@ Load the relevant skill before specialized work:
 - The toolchain targets Cortex-M7 hard-float and links `stm32h750vbtx_flash.ld`; do not use the host compiler.
 - Build output is under `build/<preset>/` and is ignored. If the checkout path changes, configure a fresh preset directory because CMake caches absolute paths.
 
+## Firmware Branches
+
+- `car-controller`: fixed `APP_ROLE_CAR`; worktree `/home/Sighthesia/0_Files/Producing/Hardware/MCU/STM32/STM32H750VBT6_NUEDC-car-controller`; build with `cmake --preset MinSizeRel && cmake --build --preset MinSizeRel`.
+- `arm-controller`: fixed `APP_ROLE_ARM`; worktree `/home/Sighthesia/0_Files/Producing/Hardware/MCU/STM32/STM32H750VBT6_NUEDC-arm-controller`; build with `cmake --preset MinSizeRel && cmake --build --preset MinSizeRel`.
+- Both branches remove runtime role selection from external Flash and initialize only their role-specific peripherals and processing path.
+- Keep branch-specific changes in the matching worktree. Do not use the root `main` worktree to build or commit role-branch firmware.
+- Before downloading firmware, verify the current branch with `git branch --show-current` and use that branch's `build/MinSizeRel/STM32H750VBT6_NUEDC.elf`.
+
 ## Change Boundaries
 
 - Treat `STM32H750VBT6_NUEDC.ioc` and CubeMX-generated sections/files as configuration-owned. Regenerate deliberately and review generated diffs before keeping manual changes.
