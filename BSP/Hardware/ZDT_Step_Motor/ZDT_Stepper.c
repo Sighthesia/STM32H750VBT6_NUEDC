@@ -348,7 +348,7 @@ void ZDT_Stepper_UART_Send_Data(ZDTStepperMotor *motor, uint8_t *data, size_t le
     header.ErrorStateIndicator = FDCAN_ESI_ACTIVE;
     header.BitRateSwitch = FDCAN_BRS_OFF;
     header.FDFormat = FDCAN_CLASSIC_CAN;
-    header.TxEventFifoControl = FDCAN_STORE_TX_EVENTS;
+    header.TxEventFifoControl = FDCAN_NO_TX_EVENTS;
 
     while (offset < length)
     {
@@ -390,7 +390,9 @@ void ZDT_Stepper_FDCAN_RxFifo0_Callback(FDCAN_HandleTypeDef *hfdcan)
             continue;
         }
         uint8_t length = zdt_can_dlc_bytes(header.DataLength);
-        if (length < 2U || data[0] != can_motors.motors[0].data.pending_command)
+        if (length < 2U ||
+            (ZDT_Stepper_Is_Control_Command(data[0]) &&
+             data[0] != can_motors.motors[0].data.pending_command))
         {
             can_motors.motors[0].data.rx_unmatched_count++;
             continue;
