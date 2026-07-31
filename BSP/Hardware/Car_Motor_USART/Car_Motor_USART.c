@@ -19,6 +19,7 @@
 #define CAR_MOTOR_VOLTAGE_TIMEOUT_MS 500U
 #define CAR_MOTOR_VOLTAGE_VALID_INTERVAL_MS 10000U
 #define CAR_MOTOR_VOLTAGE_RETRY_INTERVAL_MS 1000U
+#define CAR_MOTOR_TELEMETRY_TIMEOUT_MS 500U
 
 typedef enum
 {
@@ -55,8 +56,10 @@ static uint16_t car_motor_next_sequence;
 static uint16_t car_motor_last_sequence;
 static uint32_t car_motor_last_voltage_request_ms;
 static uint32_t car_motor_last_voltage_response_ms;
+static uint32_t car_motor_upload_enable_ms;
 static uint8_t car_motor_voltage_measurement_active;
 static uint8_t car_motor_output_stopped;
+static uint8_t car_motor_upload_enable_pending;
 static uint8_t car_motor_reversed[2];
 
 static car_motor_telemetry_t car_motor_telemetry;
@@ -227,7 +230,7 @@ static bool Car_Motor_Format_Command(const char *format, ...)
 
 static bool Car_Motor_Ensure_Telemetry_Upload(void)
 {
-    if (car_motor_telemetry.encoder_upload_active)
+    if (car_motor_telemetry.encoder_upload_active || car_motor_upload_enable_pending)
     {
         return true;
     }
@@ -236,7 +239,7 @@ static bool Car_Motor_Ensure_Telemetry_Upload(void)
         return false;
     }
 
-    car_motor_telemetry.encoder_upload_active = 1U;
+    car_motor_upload_enable_pending = 1U;
     return true;
 }
 
@@ -266,6 +269,7 @@ static bool Car_Motor_Start_Voltage_Measurement(const char *stop_command)
     __set_PRIMASK(primask);
     car_motor_telemetry.voltage_valid = 0U;
     car_motor_telemetry.encoder_upload_active = 0U;
+    car_motor_upload_enable_pending = 0U;
     car_motor_voltage_measurement_active = 1U;
     car_motor_last_voltage_request_ms = HAL_GetTick();
     return true;
@@ -414,8 +418,10 @@ void Car_Motor_Init(void)
     car_motor_last_sequence = 0U;
     car_motor_last_voltage_request_ms = 0U;
     car_motor_last_voltage_response_ms = 0U;
+    car_motor_upload_enable_ms = 0U;
     car_motor_voltage_measurement_active = 0U;
     car_motor_output_stopped = 1U;
+    car_motor_upload_enable_pending = 0U;
     memset(&car_motor_telemetry, 0, sizeof(car_motor_telemetry));
     HAL_UART_Receive_IT(&huart3, &car_motor_rx_byte, 1U);
     char commands[3][CAR_MOTOR_FRAME_MAX_LENGTH] = {
@@ -457,6 +463,14 @@ void Car_Motor_Process(void)
     }
     if (!car_motor_output_stopped)
     {
+        if (car_motor_telemetry.encoder_upload_active &&
+            ((car_motor_telemetry.total_encoder_valid == 0U &&
+              now - car_motor_upload_enable_ms >= CAR_MOTOR_TELEMETRY_TIMEOUT_MS) ||
+             (car_motor_telemetry.total_encoder_valid != 0U &&
+              now - car_motor_telemetry.total_encoder_ms >= CAR_MOTOR_TELEMETRY_TIMEOUT_MS)))
+        {
+            car_motor_telemetry.encoder_upload_active = 0U;
+        }
         (void)Car_Motor_Ensure_Telemetry_Upload();
     }
     if (!car_motor_voltage_measurement_active && car_motor_output_stopped)
@@ -528,6 +542,17 @@ void Car_Motor_UART_TxCplt_Callback(void)
     }
     else
     {
+        if (strcmp(car_motor_tx_queue[car_motor_tx_head], "$upload:1,1,1#") == 0)
+        {
+            car_motor_upload_enable_pending = 0U;
+            car_motor_telemetry.encoder_upload_active = 1U;
+            car_motor_upload_enable_ms = HAL_GetTick();
+        }
+        else if (strcmp(car_motor_tx_queue[car_motor_tx_head], "$upload:0,0,0#") == 0)
+        {
+            car_motor_upload_enable_pending = 0U;
+            car_motor_telemetry.encoder_upload_active = 0U;
+        }
         Car_Motor_Set_Command_Status(car_motor_tx_sequence[car_motor_tx_head], CAR_MOTOR_COMMAND_TRANSMITTED);
         car_motor_tx_head = (uint8_t)((car_motor_tx_head + 1U) % CAR_MOTOR_TX_QUEUE_DEPTH);
         car_motor_tx_count--;
@@ -539,7 +564,22 @@ void Car_Motor_UART_TxCplt_Callback(void)
 void Car_Motor_UART_Error_Callback(void)
 {
     car_motor_telemetry.uart_error_count++;
-    car_motor_tx_active = 0U;
+    car_motor_telemetry.encoder_upload_active = 0U;
+    car_motor_upload_enable_pending = 0U;
+
+    if (car_motor_tx_active && huart3.gState == HAL_UART_STATE_READY)
+    {
+        if (car_motor_tx_active_is_speed)
+        {
+            memcpy(car_motor_speed_pending, car_motor_tx_active_speed,
+                   car_motor_tx_active_speed_length);
+            car_motor_speed_pending_length = car_motor_tx_active_speed_length;
+            car_motor_speed_pending_sequence = car_motor_tx_active_speed_sequence;
+            car_motor_speed_pending_valid = 1U;
+        }
+        car_motor_tx_active = 0U;
+        Car_Motor_Start_Next_Transmit();
+    }
     HAL_UART_Receive_IT(&huart3, &car_motor_rx_byte, 1U);
 }
 

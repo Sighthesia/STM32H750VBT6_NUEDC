@@ -14,7 +14,8 @@ typedef enum
 {
     CAR_ATTITUDE_STEP_NONE = 0,
     CAR_ATTITUDE_STEP_RATE,
-    CAR_ATTITUDE_STEP_ANGLE
+    CAR_ATTITUDE_STEP_ANGLE,
+    CAR_ATTITUDE_STEP_ROTATE
 } car_attitude_step_mode_t;
 
 typedef struct
@@ -44,19 +45,8 @@ typedef struct
 
 typedef struct
 {
-    float direction_inverted;
-    float error_filter_time_s;
-    float target_rate_slew_deg_s2;
-    float line_initial_weight;
-    float line_weight_ramp_time_s;
-    float line_release_time_s;
-    float line_heading_rate_deg_s;
-    float heading_error_limit_deg;
-    float line_inner_position_weight;
-    float line_outer_position_weight;
-    float line_time_curve_exponent;
-    float optical_fusion_weight;
-    float imu_fusion_weight;
+    float inner_weight_deg_s;
+    float outer_weight_deg_s;
 } car_tracking_config_t;
 
 enum
@@ -72,19 +62,15 @@ enum
     CAR_ATTITUDE_STATUS_ANGLE_STEP = 1U << 8,
     CAR_ATTITUDE_STATUS_LINE_SEARCH = 1U << 9,
     CAR_ATTITUDE_STATUS_PATTERN_INVALID = 1U << 10,
-    CAR_ATTITUDE_STATUS_HEADING_TRACKING = 1U << 11
+    CAR_ATTITUDE_STATUS_HEADING_TRACKING = 1U << 11,
+    CAR_ATTITUDE_STATUS_ROTATION_ACTIVE = 1U << 12
 };
 
 typedef struct
 {
     float target_heading;
     float tracking_angle;
-    float line_offset;
-    float line_weight;
-    float line_heading_rate;
-    float line_position_weight;
-    float line_time_weight;
-    float imu_fusion_weight;
+    float optical_heading_correction_deg_s;
     float commanded_base_speed;
     float target_rate;
     float measured_rate;
@@ -109,6 +95,7 @@ void Car_Attitude_Control_Reset_Defaults(void);
 bool Car_Attitude_Control_Apply_Config(const car_attitude_control_config_t *config);
 bool Car_Attitude_Control_Set_Enabled(bool enabled);
 bool Car_Attitude_Control_Start_Step(car_attitude_step_mode_t mode);
+bool Car_Attitude_Control_Start_Rotation(float relative_angle_deg);
 void Car_Attitude_Control_Cancel_Step(void);
 bool Car_Attitude_Control_Is_Enabled(void);
 car_attitude_control_config_t *Car_Attitude_Control_Get_Config(void);
