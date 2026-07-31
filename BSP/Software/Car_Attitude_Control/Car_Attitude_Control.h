@@ -65,7 +65,9 @@ enum
     CAR_ATTITUDE_STATUS_LINE_SEARCH = 1U << 9,
     CAR_ATTITUDE_STATUS_PATTERN_INVALID = 1U << 10,
     CAR_ATTITUDE_STATUS_HEADING_TRACKING = 1U << 11,
-    CAR_ATTITUDE_STATUS_ROTATION_ACTIVE = 1U << 12
+    CAR_ATTITUDE_STATUS_ROTATION_ACTIVE = 1U << 12,
+    CAR_ATTITUDE_STATUS_ARC_ACTIVE = 1U << 13,
+    CAR_ATTITUDE_STATUS_DIFFERENTIAL_SLEW_LIMITED = 1U << 14
 };
 
 typedef struct
@@ -88,6 +90,8 @@ typedef struct
     float ladrc_z1;
     float ladrc_z2;
     float ladrc_output;
+    float arc_feedforward_rate;
+    float arc_optical_rate;
     uint32_t status;
 } car_attitude_control_debug_t;
 
@@ -103,6 +107,7 @@ bool Car_Attitude_Control_Is_Enabled(void);
 car_attitude_control_config_t *Car_Attitude_Control_Get_Config(void);
 car_tracking_config_t *Car_Attitude_Control_Get_Tracking_Config(void);
 bool Car_Attitude_Control_Apply_Tracking_Config(const car_tracking_config_t *config);
+bool Car_Attitude_Control_Set_Arc_Rate(float target_rate_deg_s);
 const car_attitude_control_debug_t *Car_Attitude_Control_Get_Debug(void);
 
 #endif /* CAR_ATTITUDE_CONTROL_H */

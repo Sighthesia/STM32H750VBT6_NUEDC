@@ -1,5 +1,7 @@
 #include "ANO_Host.h"
 
+#include "Flash_Layout.h"
+
 #include "Car_Motor_USART.h"
 #include "Car_Attitude_Control.h"
 #include "Car_Lap_Task.h"
@@ -49,10 +51,10 @@
 #define ANO_BAUD_SWITCH_DELAY_MS 50U
 #define ANO_PARAMETER_SESSION_MS 500U
 #define ANO_PARAMETER_SAVE_DELAY_MS 100U
-#define ANO_STORAGE_ADDRESS 0U
+#define ANO_STORAGE_ADDRESS FLASH_ANO_STORAGE_ADDRESS
 #define ANO_ARM_ANGLE_STORAGE_ADDRESS 512U
-#define ANO_ARM_CALIBRATION_STORAGE_A 4096U
-#define ANO_ARM_CALIBRATION_STORAGE_B 8192U
+#define ANO_ARM_CALIBRATION_STORAGE_A FLASH_ARM_CALIBRATION_STORAGE_A
+#define ANO_ARM_CALIBRATION_STORAGE_B FLASH_ARM_CALIBRATION_STORAGE_B
 #define ANO_STORAGE_MAGIC 0x414E4F57UL
 #define ANO_ARM_ANGLE_STORAGE_MAGIC 0x41414331UL
 #define ANO_ARM_ANGLE_STORAGE_VERSION 1U
@@ -386,8 +388,8 @@ typedef struct
 
 _Static_assert(sizeof(ano_storage_record_t) <= ANO_ARM_ANGLE_STORAGE_ADDRESS,
                "ANO storage records overlap");
-_Static_assert(ANO_ARM_CALIBRATION_STORAGE_A % 4096U == 0U &&
-               ANO_ARM_CALIBRATION_STORAGE_B % 4096U == 0U,
+_Static_assert(ANO_ARM_CALIBRATION_STORAGE_A % W25QXX_FLASH_SECTOR_SIZE == 0U &&
+               ANO_ARM_CALIBRATION_STORAGE_B % W25QXX_FLASH_SECTOR_SIZE == 0U,
                "Arm calibration slots must be sector aligned");
 
 static void put_u16(uint8_t *d, uint16_t *i, uint16_t v) { d[(*i)++] = (uint8_t)v; d[(*i)++] = (uint8_t)(v >> 8U); }
@@ -2741,7 +2743,7 @@ static void send_tracking_diagnostic(void)
     const car_attitude_control_debug_t *control = Car_Attitude_Control_Get_Debug();
     car_lap_status_t lap;
     const uint8_t gray = Gray_Sensor_Get_Stable();
-    uint8_t d[52];
+    uint8_t d[72];
     uint16_t i = 0U;
 
     if (!tx_has_capacity(1U)) return;
@@ -2757,6 +2759,11 @@ static void send_tracking_diagnostic(void)
     put_float(d, &i, control->target_heading);
     put_float(d, &i, (float)lap.half_turn_armed);
     put_float(d, &i, (float)lap.state);
+    put_float(d, &i, (float)lap.segment);
+    put_float(d, &i, (float)lap.odometry_valid);
+    put_float(d, &i, (float)lap.geometry_tracking_valid);
+    put_float(d, &i, control->arc_feedforward_rate);
+    put_float(d, &i, control->arc_optical_rate);
     send_frame(ANO_ID_TRACKING_DIAGNOSTIC, d, i);
 }
 

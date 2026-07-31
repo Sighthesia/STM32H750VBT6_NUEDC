@@ -28,4 +28,20 @@ static inline float Car_Tracking_Display_Correction(float target_offset)
     return target_offset;
 }
 
+static inline float Car_Tracking_Approach(float current, float target, float maximum_step)
+{
+    if (target > current + maximum_step) return current + maximum_step;
+    if (target < current - maximum_step) return current - maximum_step;
+    return target;
+}
+
+static inline float Car_Tracking_Arc_Target_Rate(float feedforward_rate,
+                                                 float optical_rate,
+                                                 float optical_limit)
+{
+    if (optical_rate > optical_limit) optical_rate = optical_limit;
+    if (optical_rate < -optical_limit) optical_rate = -optical_limit;
+    return feedforward_rate + optical_rate;
+}
+
 #endif /* CAR_TRACKING_MODEL_H */

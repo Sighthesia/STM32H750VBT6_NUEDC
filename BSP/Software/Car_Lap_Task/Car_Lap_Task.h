@@ -23,6 +23,16 @@ typedef enum
     CAR_LAP_START_CONTROL_FAILED
 } car_lap_start_result_t;
 
+typedef enum
+{
+    CAR_LAP_SEGMENT_WAIT_START = 0,
+    CAR_LAP_SEGMENT_STRAIGHT_AB,
+    CAR_LAP_SEGMENT_ARC_BC,
+    CAR_LAP_SEGMENT_STRAIGHT_CD,
+    CAR_LAP_SEGMENT_ARC_DA,
+    CAR_LAP_SEGMENT_FINISH
+} car_lap_segment_t;
+
 typedef struct
 {
     car_lap_state_t state;
@@ -33,6 +43,9 @@ typedef struct
     float relative_yaw_deg;
     uint8_t gray_state;
     uint8_t half_turn_armed;
+    uint8_t odometry_valid;
+    uint8_t geometry_tracking_valid;
+    car_lap_segment_t segment;
     car_lap_start_result_t last_start_result;
 } car_lap_status_t;
 

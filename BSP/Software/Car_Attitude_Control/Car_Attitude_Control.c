@@ -18,6 +18,9 @@
 #define CAR_CONTROL_ROTATE_RATE_DEG_S     5.0f
 #define CAR_CONTROL_ROTATE_CONFIRM_MS     200U
 #define CAR_CONTROL_ROTATE_TIMEOUT_MS     10000U
+#define CAR_CONTROL_ARC_OPTICAL_LIMIT_DEG_S 15.0f
+#define CAR_CONTROL_ARC_RATE_SLEW_DEG_S2    300.0f
+#define CAR_CONTROL_DIFFERENTIAL_SLEW_S2    1500.0f
 
 typedef struct
 {
@@ -50,6 +53,9 @@ static uint32_t step_phase_started_ms;
 static float step_start_heading;
 static float rotation_target_heading;
 static uint32_t rotation_settled_started_ms;
+static float arc_target_rate;
+static float arc_commanded_rate;
+static float commanded_differential;
 
 static void clear_debug_output(void)
 {
@@ -61,7 +67,9 @@ static void clear_debug_output(void)
                                      CAR_ATTITUDE_STATUS_LINE_SEARCH |
                                      CAR_ATTITUDE_STATUS_PATTERN_INVALID |
                                      CAR_ATTITUDE_STATUS_HEADING_TRACKING |
-                                     CAR_ATTITUDE_STATUS_ROTATION_ACTIVE);
+                                     CAR_ATTITUDE_STATUS_ROTATION_ACTIVE |
+                                     CAR_ATTITUDE_STATUS_ARC_ACTIVE |
+                                     CAR_ATTITUDE_STATUS_DIFFERENTIAL_SLEW_LIMITED);
     memset(&debug, 0, sizeof(debug));
     debug.status = status;
 }
@@ -101,6 +109,8 @@ static void reset_tracking_state(void)
     tracking_unwrapped_heading = 0.0f;
     tracking_target_heading = 0.0f;
     tracking_heading_initialized = 0U;
+    arc_commanded_rate = 0.0f;
+    commanded_differential = 0.0f;
 }
 
 static void configure_pid(void)
@@ -253,6 +263,7 @@ void Car_Attitude_Control_Init(void)
     last_sequence = 0U;
     last_sample_ms = HAL_GetTick();
     step_mode = CAR_ATTITUDE_STEP_NONE;
+    arc_target_rate = 0.0f;
     reset_tracking_state();
     memset(&debug, 0, sizeof(debug));
     Car_Attitude_Control_Reset_Defaults();
@@ -262,6 +273,7 @@ void Car_Attitude_Control_Init(void)
 bool Car_Attitude_Control_Set_Enabled(bool state)
 {
     step_mode = CAR_ATTITUDE_STEP_NONE;
+    arc_target_rate = 0.0f;
     enabled = state ? 1U : 0U;
     stopped = 0U;
     reset_controllers();
@@ -269,6 +281,21 @@ bool Car_Attitude_Control_Set_Enabled(bool state)
     debug.status = enabled ? CAR_ATTITUDE_STATUS_ENABLED : 0U;
     clear_debug_output();
     if (!enabled) stop_output();
+    return true;
+}
+
+bool Car_Attitude_Control_Set_Arc_Rate(float target_rate_deg_s)
+{
+    if (!isfinite(target_rate_deg_s) || target_rate_deg_s < -config.max_rate ||
+        target_rate_deg_s > config.max_rate)
+    {
+        return false;
+    }
+    if ((arc_target_rate == 0.0f) != (target_rate_deg_s == 0.0f))
+    {
+        reset_controllers();
+    }
+    arc_target_rate = target_rate_deg_s;
     return true;
 }
 
@@ -300,6 +327,10 @@ static bool update_tracking_target(uint32_t now, float measured_heading)
     tracking_target_heading = tracking_unwrapped_heading + target_offset;
     tracking_base_speed = config.base_speed;
     debug.optical_heading_correction_deg_s = Car_Tracking_Display_Correction(target_offset);
+    if (arc_target_rate != 0.0f || arc_commanded_rate != 0.0f)
+    {
+        debug.status |= CAR_ATTITUDE_STATUS_ARC_ACTIVE;
+    }
     return true;
 }
 
@@ -516,12 +547,29 @@ void Car_Attitude_Control_Process(void)
         heading_pid_initialized = 1U;
     }
     float target_rate;
-    if (step_mode == CAR_ATTITUDE_STEP_NONE)
+    if (step_mode == CAR_ATTITUDE_STEP_NONE && arc_target_rate != 0.0f)
     {
-        target_rate = PIDController_Update(&heading_pid, 0.0f, heading_error);
+        const float optical_rate = debug.optical_heading_correction_deg_s /
+                                   CAR_CONTROL_TRACKING_LOOKAHEAD_S;
+        arc_commanded_rate = Car_Tracking_Approach(
+            arc_commanded_rate, arc_target_rate,
+            CAR_CONTROL_ARC_RATE_SLEW_DEG_S2 * CAR_CONTROL_PERIOD_S);
+        target_rate = Car_Tracking_Arc_Target_Rate(
+            arc_commanded_rate, optical_rate, CAR_CONTROL_ARC_OPTICAL_LIMIT_DEG_S);
+        debug.arc_feedforward_rate = arc_commanded_rate;
+        debug.arc_optical_rate = clampf(optical_rate, -CAR_CONTROL_ARC_OPTICAL_LIMIT_DEG_S,
+                                        CAR_CONTROL_ARC_OPTICAL_LIMIT_DEG_S);
+    }
+    else if (step_mode == CAR_ATTITUDE_STEP_NONE)
+    {
+        arc_commanded_rate = Car_Tracking_Approach(
+            arc_commanded_rate, 0.0f,
+            CAR_CONTROL_ARC_RATE_SLEW_DEG_S2 * CAR_CONTROL_PERIOD_S);
+        target_rate = PIDController_Update(&heading_pid, 0.0f, heading_error) + arc_commanded_rate;
         debug.heading_p = heading_pid.Kp * -heading_error;
         debug.heading_i = heading_pid.integrator;
         debug.heading_d = heading_pid.differentiator;
+        debug.arc_feedforward_rate = arc_commanded_rate;
     }
     else if (step_mode == CAR_ATTITUDE_STEP_RATE)
     {
@@ -566,6 +614,23 @@ void Car_Attitude_Control_Process(void)
         }
     }
     differential = clampf(differential, -config.max_differential, config.max_differential);
+    if (step_mode == CAR_ATTITUDE_STEP_NONE)
+    {
+        const float differential_step = CAR_CONTROL_DIFFERENTIAL_SLEW_S2 * CAR_CONTROL_PERIOD_S;
+        const float limited_differential = Car_Tracking_Approach(commanded_differential,
+                                                                 differential,
+                                                                 differential_step);
+        if (limited_differential != differential)
+        {
+            debug.status |= CAR_ATTITUDE_STATUS_DIFFERENTIAL_SLEW_LIMITED;
+        }
+        commanded_differential = limited_differential;
+        differential = commanded_differential;
+    }
+    else
+    {
+        commanded_differential = differential;
+    }
 
     const float base_speed = step_mode == CAR_ATTITUDE_STEP_NONE ? tracking_base_speed : 0.0f;
     debug.commanded_base_speed = base_speed;

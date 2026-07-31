@@ -17,6 +17,13 @@
 #define CAR_LAP_ENCODER_TIMEOUT_MS    200U
 #define CAR_LAP_ARM_YAW_DEG           180.0f
 #define CAR_LAP_CROSS_CONFIRM_MS      50U
+#define CAR_LAP_STRAIGHT_LENGTH_M      1.5f
+#define CAR_LAP_ARC_LENGTH_M           1.5707963f
+#define CAR_LAP_ARC_EXIT_YAW_DEG       165.0f
+#define CAR_LAP_CURVE_RADIUS_M         0.5f
+#define CAR_LAP_MIN_ARC_RATE_DEG_S     15.0f
+#define CAR_LAP_MAX_ARC_RATE_DEG_S     120.0f
+#define CAR_LAP_RAD_TO_DEG             57.2957795f
 
 static car_lap_state_t state;
 static uint32_t started_ms;
@@ -31,6 +38,52 @@ static float distance_m;
 static float average_speed_mps;
 static uint8_t half_turn_armed;
 static car_lap_start_result_t last_start_result;
+static float encoder_baseline_distance_m;
+static float segment_started_distance_m;
+static float segment_started_yaw_deg;
+static float previous_distance_m;
+static uint32_t previous_distance_ms;
+static float current_speed_mps;
+static car_lap_segment_t segment;
+static uint8_t geometry_tracking_valid;
+
+static float absolute_value(float value)
+{
+    return value < 0.0f ? -value : value;
+}
+
+static void set_segment(car_lap_segment_t next, float yaw_deg)
+{
+    segment = next;
+    segment_started_distance_m = distance_m;
+    segment_started_yaw_deg = yaw_deg;
+    if (next == CAR_LAP_SEGMENT_ARC_BC || next == CAR_LAP_SEGMENT_ARC_DA)
+    {
+        float target_rate = current_speed_mps / CAR_LAP_CURVE_RADIUS_M * CAR_LAP_RAD_TO_DEG;
+        if (target_rate < CAR_LAP_MIN_ARC_RATE_DEG_S) target_rate = CAR_LAP_MIN_ARC_RATE_DEG_S;
+        if (target_rate > CAR_LAP_MAX_ARC_RATE_DEG_S) target_rate = CAR_LAP_MAX_ARC_RATE_DEG_S;
+        (void)Car_Attitude_Control_Set_Arc_Rate(target_rate);
+    }
+    else
+    {
+        (void)Car_Attitude_Control_Set_Arc_Rate(0.0f);
+    }
+}
+
+static void update_arc_feedforward(void)
+{
+    if (geometry_tracking_valid == 0U || encoder_baseline_valid == 0U ||
+        (segment != CAR_LAP_SEGMENT_ARC_BC && segment != CAR_LAP_SEGMENT_ARC_DA))
+    {
+        (void)Car_Attitude_Control_Set_Arc_Rate(0.0f);
+        return;
+    }
+
+    float target_rate = current_speed_mps / CAR_LAP_CURVE_RADIUS_M * CAR_LAP_RAD_TO_DEG;
+    if (target_rate < CAR_LAP_MIN_ARC_RATE_DEG_S) target_rate = CAR_LAP_MIN_ARC_RATE_DEG_S;
+    if (target_rate > CAR_LAP_MAX_ARC_RATE_DEG_S) target_rate = CAR_LAP_MAX_ARC_RATE_DEG_S;
+    (void)Car_Attitude_Control_Set_Arc_Rate(target_rate);
+}
 
 static void update_odometry(void)
 {
@@ -41,11 +94,13 @@ static void update_odometry(void)
         (uint32_t)(HAL_GetTick() - telemetry->total_encoder_ms) > CAR_LAP_ENCODER_TIMEOUT_MS)
     {
         encoder_baseline_valid = 0U;
+        geometry_tracking_valid = 0U;
         return;
     }
     if (encoder_baseline_valid == 0U)
     {
         for (uint8_t i = 0U; i < 2U; i++) encoder_baseline[i] = telemetry->total_encoder[i];
+        encoder_baseline_distance_m = distance_m;
         encoder_baseline_valid = 1U;
         return;
     }
@@ -56,8 +111,17 @@ static void update_odometry(void)
         if (delta < 0) delta = -delta;
         total_counts += (float)delta;
     }
-    distance_m = total_counts / (2.0f * counts_per_meter);
+    distance_m = encoder_baseline_distance_m + total_counts / (2.0f * counts_per_meter);
     average_speed_mps = elapsed_ms != 0U ? distance_m * 1000.0f / (float)elapsed_ms : 0.0f;
+    const uint32_t now = HAL_GetTick();
+    if (distance_m > previous_distance_m && now != previous_distance_ms)
+    {
+        const float sample_speed = (distance_m - previous_distance_m) * 1000.0f /
+                                   (float)(now - previous_distance_ms);
+        current_speed_mps += 0.25f * (sample_speed - current_speed_mps);
+        previous_distance_m = distance_m;
+        previous_distance_ms = now;
+    }
 }
 
 static bool is_cross(uint8_t pattern)
@@ -77,6 +141,14 @@ void Car_Lap_Task_Init(void)
     distance_m = 0.0f;
     average_speed_mps = 0.0f;
     half_turn_armed = 0U;
+    encoder_baseline_distance_m = 0.0f;
+    segment_started_distance_m = 0.0f;
+    segment_started_yaw_deg = 0.0f;
+    previous_distance_m = 0.0f;
+    previous_distance_ms = 0U;
+    current_speed_mps = 0.0f;
+    segment = CAR_LAP_SEGMENT_WAIT_START;
+    geometry_tracking_valid = 0U;
     last_start_result = CAR_LAP_START_NOT_ATTEMPTED;
     encoder_baseline_valid = 0U;
     for (uint8_t i = 0U; i < 2U; i++) encoder_baseline[i] = 0;
@@ -105,9 +177,17 @@ bool Car_Lap_Task_Start(void)
     distance_m = 0.0f;
     average_speed_mps = 0.0f;
     half_turn_armed = 0U;
+    encoder_baseline_distance_m = 0.0f;
+    segment_started_distance_m = 0.0f;
+    segment_started_yaw_deg = 0.0f;
+    previous_distance_m = 0.0f;
+    previous_distance_ms = started_ms;
+    current_speed_mps = 0.0f;
+    segment = CAR_LAP_SEGMENT_WAIT_START;
     encoder_baseline_valid = telemetry->total_encoder_valid != 0U &&
                              (uint32_t)(started_ms - telemetry->total_encoder_ms) <=
                              CAR_LAP_ENCODER_TIMEOUT_MS;
+    geometry_tracking_valid = encoder_baseline_valid;
     for (uint8_t i = 0U; i < 2U; i++) encoder_baseline[i] = telemetry->total_encoder[i];
     state = CAR_LAP_STATE_WAIT_LEAVE;
     if (!Car_Attitude_Control_Set_Enabled(true))
@@ -135,6 +215,8 @@ bool Car_Lap_Task_Stop(void)
     }
     condition_started_ms = 0U;
     half_turn_armed = 0U;
+    segment = CAR_LAP_SEGMENT_WAIT_START;
+    (void)Car_Attitude_Control_Set_Arc_Rate(0.0f);
     return Car_Attitude_Control_Set_Enabled(false);
 }
 
@@ -182,6 +264,7 @@ void Car_Lap_Task_Process(void)
     {
         elapsed_ms = now - started_ms;
         update_odometry();
+        update_arc_feedforward();
     }
     if (active && !Car_Attitude_Control_Is_Enabled())
     {
@@ -203,6 +286,8 @@ void Car_Lap_Task_Process(void)
         else if ((uint32_t)(now - condition_started_ms) >= CAR_LAP_LEAVE_CONFIRM_MS)
         {
             state = CAR_LAP_STATE_RUNNING;
+            set_segment(CAR_LAP_SEGMENT_STRAIGHT_AB,
+                        Car_Attitude_Control_Get_Debug()->tracking_angle);
             condition_started_ms = 0U;
         }
     }
@@ -211,6 +296,34 @@ void Car_Lap_Task_Process(void)
         const car_attitude_control_debug_t *control = Car_Attitude_Control_Get_Debug();
         const float yaw_magnitude = control->tracking_angle < 0.0f ?
                                     -control->tracking_angle : control->tracking_angle;
+        const float segment_distance = distance_m - segment_started_distance_m;
+        const float segment_yaw = absolute_value(control->tracking_angle - segment_started_yaw_deg);
+
+        if (geometry_tracking_valid != 0U && encoder_baseline_valid != 0U)
+        {
+            if (segment == CAR_LAP_SEGMENT_STRAIGHT_AB &&
+                segment_distance >= CAR_LAP_STRAIGHT_LENGTH_M)
+            {
+                set_segment(CAR_LAP_SEGMENT_ARC_BC, control->tracking_angle);
+            }
+            else if (segment == CAR_LAP_SEGMENT_ARC_BC &&
+                     segment_distance >= CAR_LAP_ARC_LENGTH_M &&
+                     segment_yaw >= CAR_LAP_ARC_EXIT_YAW_DEG)
+            {
+                set_segment(CAR_LAP_SEGMENT_STRAIGHT_CD, control->tracking_angle);
+            }
+            else if (segment == CAR_LAP_SEGMENT_STRAIGHT_CD &&
+                     segment_distance >= CAR_LAP_STRAIGHT_LENGTH_M)
+            {
+                set_segment(CAR_LAP_SEGMENT_ARC_DA, control->tracking_angle);
+            }
+            else if (segment == CAR_LAP_SEGMENT_ARC_DA &&
+                     segment_distance >= CAR_LAP_ARC_LENGTH_M &&
+                     segment_yaw >= CAR_LAP_ARC_EXIT_YAW_DEG)
+            {
+                set_segment(CAR_LAP_SEGMENT_FINISH, control->tracking_angle);
+            }
+        }
         if (!half_turn_armed)
         {
             if (yaw_magnitude >= CAR_LAP_ARM_YAW_DEG)
@@ -238,6 +351,8 @@ void Car_Lap_Task_Process(void)
              (uint32_t)(now - stop_delay_started_ms) >= stop_delay_ms)
     {
         elapsed_ms = now - started_ms;
+        segment = CAR_LAP_SEGMENT_FINISH;
+        (void)Car_Attitude_Control_Set_Arc_Rate(0.0f);
         (void)Car_Attitude_Control_Set_Enabled(false);
         state = CAR_LAP_STATE_FINISHED;
     }
@@ -254,5 +369,8 @@ void Car_Lap_Task_Get_Status(car_lap_status_t *status)
     status->relative_yaw_deg = Car_Attitude_Control_Get_Debug()->tracking_angle;
     status->gray_state = Gray_Sensor_Get_Stable() & CAR_LAP_CROSS_PATTERN;
     status->half_turn_armed = half_turn_armed;
+    status->odometry_valid = encoder_baseline_valid;
+    status->geometry_tracking_valid = geometry_tracking_valid;
+    status->segment = segment;
     status->last_start_result = last_start_result;
 }
