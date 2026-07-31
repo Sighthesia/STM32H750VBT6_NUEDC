@@ -5,6 +5,7 @@
 #include "Gray_Sensor.h"
 #include "PID.h"
 #include "Car_Tracking_Model.h"
+#include "Car_Lap_Task.h"
 #include "main.h"
 
 #include <math.h>
@@ -18,9 +19,6 @@
 #define CAR_CONTROL_ROTATE_RATE_DEG_S     5.0f
 #define CAR_CONTROL_ROTATE_CONFIRM_MS     200U
 #define CAR_CONTROL_ROTATE_TIMEOUT_MS     10000U
-#define CAR_CONTROL_ARC_OPTICAL_LIMIT_DEG_S 15.0f
-#define CAR_CONTROL_ARC_RATE_SLEW_DEG_S2    300.0f
-#define CAR_CONTROL_DIFFERENTIAL_SLEW_S2    1500.0f
 
 typedef struct
 {
@@ -549,22 +547,23 @@ void Car_Attitude_Control_Process(void)
     float target_rate;
     if (step_mode == CAR_ATTITUDE_STEP_NONE && arc_target_rate != 0.0f)
     {
+        const car_lap_arc_config_t *arc = Car_Lap_Task_Get_Arc_Config();
         const float optical_rate = debug.optical_heading_correction_deg_s /
                                    CAR_CONTROL_TRACKING_LOOKAHEAD_S;
         arc_commanded_rate = Car_Tracking_Approach(
             arc_commanded_rate, arc_target_rate,
-            CAR_CONTROL_ARC_RATE_SLEW_DEG_S2 * CAR_CONTROL_PERIOD_S);
+            arc->feedforward_rate_slew_deg_s2 * CAR_CONTROL_PERIOD_S);
         target_rate = Car_Tracking_Arc_Target_Rate(
-            arc_commanded_rate, optical_rate, CAR_CONTROL_ARC_OPTICAL_LIMIT_DEG_S);
+            arc_commanded_rate, optical_rate, arc->optical_rate_limit_deg_s);
         debug.arc_feedforward_rate = arc_commanded_rate;
-        debug.arc_optical_rate = clampf(optical_rate, -CAR_CONTROL_ARC_OPTICAL_LIMIT_DEG_S,
-                                        CAR_CONTROL_ARC_OPTICAL_LIMIT_DEG_S);
+        debug.arc_optical_rate = clampf(optical_rate, -arc->optical_rate_limit_deg_s,
+                                        arc->optical_rate_limit_deg_s);
     }
     else if (step_mode == CAR_ATTITUDE_STEP_NONE)
     {
         arc_commanded_rate = Car_Tracking_Approach(
             arc_commanded_rate, 0.0f,
-            CAR_CONTROL_ARC_RATE_SLEW_DEG_S2 * CAR_CONTROL_PERIOD_S);
+            Car_Lap_Task_Get_Arc_Config()->feedforward_rate_slew_deg_s2 * CAR_CONTROL_PERIOD_S);
         target_rate = PIDController_Update(&heading_pid, 0.0f, heading_error) + arc_commanded_rate;
         debug.heading_p = heading_pid.Kp * -heading_error;
         debug.heading_i = heading_pid.integrator;
@@ -616,7 +615,8 @@ void Car_Attitude_Control_Process(void)
     differential = clampf(differential, -config.max_differential, config.max_differential);
     if (step_mode == CAR_ATTITUDE_STEP_NONE)
     {
-        const float differential_step = CAR_CONTROL_DIFFERENTIAL_SLEW_S2 * CAR_CONTROL_PERIOD_S;
+        const float differential_step = Car_Lap_Task_Get_Arc_Config()->differential_slew_s2 *
+                                        CAR_CONTROL_PERIOD_S;
         const float limited_differential = Car_Tracking_Approach(commanded_differential,
                                                                  differential,
                                                                  differential_step);

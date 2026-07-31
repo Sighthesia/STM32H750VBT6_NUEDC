@@ -35,6 +35,19 @@ typedef enum
 
 typedef struct
 {
+    float straight_length_m;
+    float arc_radius_m;
+    float arc_length_m;
+    float arc_exit_yaw_deg;
+    float optical_rate_limit_deg_s;
+    float feedforward_rate_min_deg_s;
+    float feedforward_rate_max_deg_s;
+    float feedforward_rate_slew_deg_s2;
+    float differential_slew_s2;
+} car_lap_arc_config_t;
+
+typedef struct
+{
     car_lap_state_t state;
     uint32_t elapsed_ms;
     uint32_t stop_delay_ms;
@@ -57,6 +70,9 @@ bool Car_Lap_Task_Set_Stop_Delay(uint32_t delay_ms);
 uint32_t Car_Lap_Task_Get_Stop_Delay(void);
 bool Car_Lap_Task_Set_Counts_Per_Meter(float counts_per_meter);
 float Car_Lap_Task_Get_Counts_Per_Meter(void);
+void Car_Lap_Task_Reset_Arc_Config(void);
+bool Car_Lap_Task_Apply_Arc_Config(const car_lap_arc_config_t *config);
+car_lap_arc_config_t *Car_Lap_Task_Get_Arc_Config(void);
 void Car_Lap_Task_Get_Status(car_lap_status_t *status);
 
 #endif /* CAR_LAP_TASK_H */

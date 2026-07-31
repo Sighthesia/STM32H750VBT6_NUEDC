@@ -17,12 +17,6 @@
 #define CAR_LAP_ENCODER_TIMEOUT_MS    200U
 #define CAR_LAP_ARM_YAW_DEG           180.0f
 #define CAR_LAP_CROSS_CONFIRM_MS      50U
-#define CAR_LAP_STRAIGHT_LENGTH_M      1.5f
-#define CAR_LAP_ARC_LENGTH_M           1.5707963f
-#define CAR_LAP_ARC_EXIT_YAW_DEG       165.0f
-#define CAR_LAP_CURVE_RADIUS_M         0.5f
-#define CAR_LAP_MIN_ARC_RATE_DEG_S     15.0f
-#define CAR_LAP_MAX_ARC_RATE_DEG_S     120.0f
 #define CAR_LAP_RAD_TO_DEG             57.2957795f
 
 static car_lap_state_t state;
@@ -46,6 +40,58 @@ static uint32_t previous_distance_ms;
 static float current_speed_mps;
 static car_lap_segment_t segment;
 static uint8_t geometry_tracking_valid;
+static car_lap_arc_config_t arc_config;
+
+void Car_Lap_Task_Reset_Arc_Config(void)
+{
+    arc_config.straight_length_m = 1.5f;
+    arc_config.arc_radius_m = 0.5f;
+    arc_config.arc_length_m = 1.5707963f;
+    arc_config.arc_exit_yaw_deg = 165.0f;
+    arc_config.optical_rate_limit_deg_s = 15.0f;
+    arc_config.feedforward_rate_min_deg_s = 15.0f;
+    arc_config.feedforward_rate_max_deg_s = 120.0f;
+    arc_config.feedforward_rate_slew_deg_s2 = 300.0f;
+    arc_config.differential_slew_s2 = 1500.0f;
+}
+
+bool Car_Lap_Task_Apply_Arc_Config(const car_lap_arc_config_t *next)
+{
+    if (next == NULL || !isfinite(next->straight_length_m) ||
+        !isfinite(next->arc_radius_m) || !isfinite(next->arc_length_m) ||
+        !isfinite(next->arc_exit_yaw_deg) || !isfinite(next->optical_rate_limit_deg_s) ||
+        !isfinite(next->feedforward_rate_min_deg_s) ||
+        !isfinite(next->feedforward_rate_max_deg_s) ||
+        !isfinite(next->feedforward_rate_slew_deg_s2) ||
+        !isfinite(next->differential_slew_s2) ||
+        next->straight_length_m <= 0.1f || next->straight_length_m > 10.0f ||
+        next->arc_radius_m <= 0.1f || next->arc_radius_m > 5.0f ||
+        next->arc_length_m <= 0.1f || next->arc_length_m > 20.0f ||
+        next->arc_exit_yaw_deg < 90.0f || next->arc_exit_yaw_deg > 360.0f ||
+        next->optical_rate_limit_deg_s < 0.0f || next->optical_rate_limit_deg_s > 180.0f ||
+        next->feedforward_rate_min_deg_s < 0.0f ||
+        next->feedforward_rate_min_deg_s > 360.0f ||
+        next->feedforward_rate_max_deg_s < next->feedforward_rate_min_deg_s ||
+        next->feedforward_rate_max_deg_s > 720.0f ||
+        next->feedforward_rate_slew_deg_s2 <= 0.0f ||
+        next->feedforward_rate_slew_deg_s2 > 5000.0f ||
+        next->differential_slew_s2 <= 0.0f || next->differential_slew_s2 > 20000.0f)
+    {
+        return false;
+    }
+    if (state == CAR_LAP_STATE_WAIT_LEAVE || state == CAR_LAP_STATE_RUNNING ||
+        state == CAR_LAP_STATE_STOP_DELAY)
+    {
+        return false;
+    }
+    arc_config = *next;
+    return true;
+}
+
+car_lap_arc_config_t *Car_Lap_Task_Get_Arc_Config(void)
+{
+    return &arc_config;
+}
 
 static float absolute_value(float value)
 {
@@ -59,9 +105,9 @@ static void set_segment(car_lap_segment_t next, float yaw_deg)
     segment_started_yaw_deg = yaw_deg;
     if (next == CAR_LAP_SEGMENT_ARC_BC || next == CAR_LAP_SEGMENT_ARC_DA)
     {
-        float target_rate = current_speed_mps / CAR_LAP_CURVE_RADIUS_M * CAR_LAP_RAD_TO_DEG;
-        if (target_rate < CAR_LAP_MIN_ARC_RATE_DEG_S) target_rate = CAR_LAP_MIN_ARC_RATE_DEG_S;
-        if (target_rate > CAR_LAP_MAX_ARC_RATE_DEG_S) target_rate = CAR_LAP_MAX_ARC_RATE_DEG_S;
+        float target_rate = current_speed_mps / arc_config.arc_radius_m * CAR_LAP_RAD_TO_DEG;
+        if (target_rate < arc_config.feedforward_rate_min_deg_s) target_rate = arc_config.feedforward_rate_min_deg_s;
+        if (target_rate > arc_config.feedforward_rate_max_deg_s) target_rate = arc_config.feedforward_rate_max_deg_s;
         (void)Car_Attitude_Control_Set_Arc_Rate(target_rate);
     }
     else
@@ -79,9 +125,9 @@ static void update_arc_feedforward(void)
         return;
     }
 
-    float target_rate = current_speed_mps / CAR_LAP_CURVE_RADIUS_M * CAR_LAP_RAD_TO_DEG;
-    if (target_rate < CAR_LAP_MIN_ARC_RATE_DEG_S) target_rate = CAR_LAP_MIN_ARC_RATE_DEG_S;
-    if (target_rate > CAR_LAP_MAX_ARC_RATE_DEG_S) target_rate = CAR_LAP_MAX_ARC_RATE_DEG_S;
+    float target_rate = current_speed_mps / arc_config.arc_radius_m * CAR_LAP_RAD_TO_DEG;
+    if (target_rate < arc_config.feedforward_rate_min_deg_s) target_rate = arc_config.feedforward_rate_min_deg_s;
+    if (target_rate > arc_config.feedforward_rate_max_deg_s) target_rate = arc_config.feedforward_rate_max_deg_s;
     (void)Car_Attitude_Control_Set_Arc_Rate(target_rate);
 }
 
@@ -149,6 +195,7 @@ void Car_Lap_Task_Init(void)
     current_speed_mps = 0.0f;
     segment = CAR_LAP_SEGMENT_WAIT_START;
     geometry_tracking_valid = 0U;
+    Car_Lap_Task_Reset_Arc_Config();
     last_start_result = CAR_LAP_START_NOT_ATTEMPTED;
     encoder_baseline_valid = 0U;
     for (uint8_t i = 0U; i < 2U; i++) encoder_baseline[i] = 0;
@@ -302,24 +349,24 @@ void Car_Lap_Task_Process(void)
         if (geometry_tracking_valid != 0U && encoder_baseline_valid != 0U)
         {
             if (segment == CAR_LAP_SEGMENT_STRAIGHT_AB &&
-                segment_distance >= CAR_LAP_STRAIGHT_LENGTH_M)
+                segment_distance >= arc_config.straight_length_m)
             {
                 set_segment(CAR_LAP_SEGMENT_ARC_BC, control->tracking_angle);
             }
             else if (segment == CAR_LAP_SEGMENT_ARC_BC &&
-                     segment_distance >= CAR_LAP_ARC_LENGTH_M &&
-                     segment_yaw >= CAR_LAP_ARC_EXIT_YAW_DEG)
+                     segment_distance >= arc_config.arc_length_m &&
+                     segment_yaw >= arc_config.arc_exit_yaw_deg)
             {
                 set_segment(CAR_LAP_SEGMENT_STRAIGHT_CD, control->tracking_angle);
             }
             else if (segment == CAR_LAP_SEGMENT_STRAIGHT_CD &&
-                     segment_distance >= CAR_LAP_STRAIGHT_LENGTH_M)
+                segment_distance >= arc_config.straight_length_m)
             {
                 set_segment(CAR_LAP_SEGMENT_ARC_DA, control->tracking_angle);
             }
             else if (segment == CAR_LAP_SEGMENT_ARC_DA &&
-                     segment_distance >= CAR_LAP_ARC_LENGTH_M &&
-                     segment_yaw >= CAR_LAP_ARC_EXIT_YAW_DEG)
+                     segment_distance >= arc_config.arc_length_m &&
+                     segment_yaw >= arc_config.arc_exit_yaw_deg)
             {
                 set_segment(CAR_LAP_SEGMENT_FINISH, control->tracking_angle);
             }

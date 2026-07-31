@@ -60,7 +60,7 @@
 #define ANO_ARM_ANGLE_STORAGE_VERSION 1U
 #define ANO_ARM_CALIBRATION_STORAGE_MAGIC 0x41433350UL
 #define ANO_ARM_CALIBRATION_STORAGE_VERSION 1U
-#define ANO_STORAGE_VERSION 16U
+#define ANO_STORAGE_VERSION 17U
 #define ARM_HOME_STATUS_PERIOD_MS 50U
 #define ARM_HOME_SETTLE_MS 100U
 #define ARM_STARTUP_HOME_TIMEOUT_MS 22000U
@@ -168,6 +168,15 @@ enum {
     ARM_CALIBRATION_BALANCE_PITCH,
     ARM_CALIBRATION_RIGHT_MOTOR,
     ARM_CALIBRATION_RIGHT_PITCH,
+    CAR_ARC_STRAIGHT_LENGTH,
+    CAR_ARC_RADIUS,
+    CAR_ARC_LENGTH,
+    CAR_ARC_EXIT_YAW,
+    CAR_ARC_OPTICAL_LIMIT,
+    CAR_ARC_FEEDFORWARD_MIN,
+    CAR_ARC_FEEDFORWARD_MAX,
+    CAR_ARC_FEEDFORWARD_SLEW,
+    CAR_ARC_DIFFERENTIAL_SLEW,
     ANO_PARAM_COUNT
 };
 
@@ -362,6 +371,7 @@ typedef struct
     ano_arm_debug_config_t arm_debug;
     float car_lap_counts_per_meter;
     car_tracking_config_t tracking;
+    car_lap_arc_config_t arc;
     uint8_t reserved_2[4];
     uint32_t checksum;
 } ano_storage_record_t;
@@ -478,6 +488,7 @@ static void reset_local_defaults(void)
     arm_startup_state = ARM_STARTUP_IDLE;
     arm_startup_move_issued_ms = 0U;
     Car_Attitude_Control_Reset_Defaults();
+    Car_Lap_Task_Reset_Arc_Config();
     Stepper_Feedforward_Reset_Defaults();
     if (App_Role_Get() == APP_ROLE_ARM) Arm_Angle_Control_Reset_Defaults();
 
@@ -622,18 +633,19 @@ static bool save_storage(uint32_t baud_rate)
     for (uint16_t id = 0U; id < HOST_BAUD; id++)
     {
         float *value = parameter(id);
-        if (value == NULL || !isfinite(*value))
+        if (value != NULL && !isfinite(*value))
         {
             storage_operation = 3U;
             return false;
         }
-        record.values[id] = *value;
+        if (value != NULL) record.values[id] = *value;
     }
     record.directions[0] = car_m1_direction;
     record.directions[1] = car_m2_direction;
     record.attitude = *Car_Attitude_Control_Get_Config();
     record.feedforward = *Stepper_Feedforward_Get_Config();
     record.tracking = *Car_Attitude_Control_Get_Tracking_Config();
+    record.arc = *Car_Lap_Task_Get_Arc_Config();
     record.arm_debug.limit_min = arm_limit_min;
     record.arm_debug.limit_max = arm_limit_max;
     record.arm_debug.speed = arm_debug_speed;
@@ -703,6 +715,7 @@ static void load_storage(void)
         }
         (void)Car_Attitude_Control_Apply_Config(&record.attitude);
         (void)Car_Attitude_Control_Apply_Tracking_Config(&record.tracking);
+        (void)Car_Lap_Task_Apply_Arc_Config(&record.arc);
         if (record.reserved[1] == 0xA5U && record.reserved[0] <= 1U)
         {
             gray_sensor_active_low = (float)record.reserved[0];
@@ -1174,16 +1187,20 @@ static void send_frame(uint8_t id, const uint8_t *data, uint16_t length)
 
 static float *parameter(uint16_t id)
 {
+    if (id <= CAR_REDUCTION_RATIO ||
+        (id > HOST_BAUD && id <= CAR_DEBUG_M2_DIRECTION))
+    {
+        return NULL;
+    }
     car_attitude_control_config_t *attitude = Car_Attitude_Control_Get_Config();
     stepper_feedforward_config_t *feedforward = Stepper_Feedforward_Get_Config();
     arm_angle_control_config_t *arm_angle = Arm_Angle_Control_Get_Config();
     static float *const values[ANO_PARAM_COUNT] = {
-        &car_pid[0], &car_pid[1], &car_pid[2],
-        &yaw_pid.Kp, &yaw_pid.Ki, &yaw_pid.Kd,
-        &pitch_pid.Kp, &pitch_pid.Ki, &pitch_pid.Kd,
-        &car_type, &car_deadzone, &car_line, &car_wheel_diameter, &car_reduction_ratio, NULL,
-        &car_debug_control_mode, &car_debug_m1_value, &car_debug_m1_direction,
-        &car_debug_m2_value, &car_debug_m2_direction, &car_m1_direction, &car_m2_direction,
+        NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
+        NULL,
+        NULL, NULL, NULL, NULL, NULL,
+        NULL, NULL, NULL, NULL, NULL,
+        &car_m1_direction, &car_m2_direction,
         NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
         NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
         NULL, NULL, NULL, NULL,
@@ -1199,7 +1216,7 @@ static float *parameter(uint16_t id)
         NULL, NULL, NULL, NULL, NULL, NULL, NULL,
         &arm_calibration_values[0], &arm_calibration_values[1],
         &arm_calibration_values[2], &arm_calibration_values[3],
-        &arm_calibration_values[4], &arm_calibration_values[5]
+         &arm_calibration_values[4], &arm_calibration_values[5]
     };
     if (id >= ATTITUDE_MODE && id <= STEP_ANGLE_FEEDBACK_INVERTED)
     {
@@ -1428,6 +1445,27 @@ static bool write_tracking_parameter(uint16_t parameter_id, float value)
     return Car_Attitude_Control_Apply_Tracking_Config(&next);
 }
 
+static bool write_arc_parameter(uint16_t parameter_id, float value)
+{
+    car_lap_arc_config_t next = *Car_Lap_Task_Get_Arc_Config();
+
+    if (!isfinite(value)) return false;
+    switch (parameter_id)
+    {
+    case CAR_ARC_STRAIGHT_LENGTH: next.straight_length_m = value; break;
+    case CAR_ARC_RADIUS: next.arc_radius_m = value; break;
+    case CAR_ARC_LENGTH: next.arc_length_m = value; break;
+    case CAR_ARC_EXIT_YAW: next.arc_exit_yaw_deg = value; break;
+    case CAR_ARC_OPTICAL_LIMIT: next.optical_rate_limit_deg_s = value; break;
+    case CAR_ARC_FEEDFORWARD_MIN: next.feedforward_rate_min_deg_s = value; break;
+    case CAR_ARC_FEEDFORWARD_MAX: next.feedforward_rate_max_deg_s = value; break;
+    case CAR_ARC_FEEDFORWARD_SLEW: next.feedforward_rate_slew_deg_s2 = value; break;
+    case CAR_ARC_DIFFERENTIAL_SLEW: next.differential_slew_s2 = value; break;
+    default: return false;
+    }
+    return Car_Lap_Task_Apply_Arc_Config(&next);
+}
+
 static bool write_gray_sensor_parameter(float value)
 {
     if (!isfinite(value) || (value != 0.0f && value != 1.0f)) return false;
@@ -1438,6 +1476,8 @@ static bool write_gray_sensor_parameter(float value)
 
 static bool write_car_parameter(uint16_t parameter_id, float value)
 {
+    if (parameter_id <= CAR_REDUCTION_RATIO ||
+        (parameter_id > HOST_BAUD && parameter_id <= CAR_DEBUG_M2_DIRECTION)) return false;
     float *target = parameter(parameter_id);
     if (target == NULL || !isfinite(value))
     {
@@ -1548,13 +1588,7 @@ static void apply_parameter_after_ack(uint16_t parameter_id)
 {
     if (App_Role_Get() == APP_ROLE_CAR)
     {
-        if (parameter_id <= CAR_KD) (void)Car_Motor_Set_PID(car_pid[0], car_pid[1], car_pid[2]);
-        else if (parameter_id == CAR_TYPE) (void)Car_Motor_Set_Type((car_motor_type_t)(uint8_t)car_type);
-        else if (parameter_id == CAR_DEADZONE) (void)Car_Motor_Set_Deadzone((uint16_t)car_deadzone);
-        else if (parameter_id == CAR_LINE) (void)Car_Motor_Set_Line((uint16_t)car_line);
-        else if (parameter_id == CAR_WHEEL_DIAMETER) (void)Car_Motor_Set_Wheel_Diameter(car_wheel_diameter);
-        else if (parameter_id == CAR_REDUCTION_RATIO) (void)Car_Motor_Set_Reduction_Ratio((uint16_t)car_reduction_ratio);
-        else if (parameter_id == CAR_M1_DIRECTION || parameter_id == CAR_M2_DIRECTION)
+        if (parameter_id == CAR_M1_DIRECTION || parameter_id == CAR_M2_DIRECTION)
         {
             float direction = parameter_id == CAR_M1_DIRECTION ? car_m1_direction : car_m2_direction;
             (void)Car_Motor_Set_Direction((uint8_t)(parameter_id - CAR_M1_DIRECTION), direction != 0.0f);
@@ -1650,13 +1684,41 @@ static void send_device_info(void)
 }
 static void send_param_info(uint16_t id)
 {
+    static const char *const arc_names[] = {
+        "直道长度", "圆弧半径", "圆弧长度", "圆弧退出航向",
+        "光电纠偏上限", "前馈最小角速度", "前馈最大角速度",
+        "前馈变化率", "差速变化率"
+    };
+    static const char *const arc_infos[] = {
+        "AB和CD直道长度，单位米",
+        "BC和DA圆弧半径，单位米",
+        "BC和DA圆弧长度，单位米",
+        "圆弧退出所需的最小IMU相对航向，单位度",
+        "圆弧中光电纠偏角速度上限，单位度每秒",
+        "圆弧前馈角速度下限，单位度每秒",
+        "圆弧前馈角速度上限，单位度每秒",
+        "前馈角速度变化率，单位度每秒平方",
+        "左右轮差速变化率，单位速度单位每秒"
+    };
+    if (id >= CAR_ARC_STRAIGHT_LENGTH && id <= CAR_ARC_DIFFERENTIAL_SLEW)
+    {
+        uint8_t d[ANO_DATA_MAX] = {0};
+        uint16_t i = 0U;
+        uint16_t index = (uint16_t)(id - CAR_ARC_STRAIGHT_LENGTH);
+        put_u16(d, &i, id);
+        d[i++] = 8U;
+        strncpy((char *)&d[i], arc_names[index], 20U); i += 20U;
+        strncpy((char *)&d[i], arc_infos[index], sizeof(d) - i - 1U);
+        i += (uint16_t)strlen((const char *)&d[i]);
+        send_frame(ANO_ID_PARAM_INFO, d, i);
+        return;
+    }
+    if (id <= CAR_REDUCTION_RATIO ||
+        (id > HOST_BAUD && id <= CAR_DEBUG_M2_DIRECTION)) return;
 #if 0
     static const char *const names[ANO_PARAM_COUNT] = {
-        "四驱Kp", "四驱Ki", "四驱Kd",
-        "YAW轴Kp", "YAW轴Ki", "YAW轴Kd",
-        "PITCH轴Kp", "PITCH轴Ki", "PITCH轴Kd",
-        "四驱型号", "四驱死区", "四驱相位线", "车轮直径", "四驱减速比", "上位机波特率",
-        "M1M2控制模式", "M1调试数值", "M1调试方向", "M2调试数值", "M2调试方向", "M1方向", "M2方向",
+         "", "", "", "", "", "", "", "", "", "", "", "", "", "", "上位机波特率",
+         "", "", "", "", "", "M1方向", "M2方向",
         "双环控制模式", "基础轮速", "航向Kp", "航向Ki", "航向Kd", "角速度Kp", "角速度Ki", "角速度Kd",
         "LADRC观测带宽", "LADRC控制带宽", "LADRC对象增益", "最大角速度", "最大差速", "IMU X轴倒置", "IMU Y轴倒置", "IMU Z轴倒置",
         "角速度阶跃幅度", "指定旋转角度", "阶跃保持时间", "航向角反馈倒置",
@@ -1672,15 +1734,13 @@ static void send_param_info(uint16_t id)
         "电机查询频率", "电机遥测频率", "臂杆目标角度", "臂杆角度Kp",
         "臂杆角度Ki", "臂杆角度Kd", "角度微分滤波", "角度最大转速",
         "角度死区", "角度方向倒置", "标定左点电机", "标定左点Pitch",
-        "标定平衡电机", "标定平衡Pitch", "标定右点电机", "标定右点Pitch"
+         "标定平衡电机", "标定平衡Pitch", "标定右点电机", "标定右点Pitch",
+         "直道长度", "圆弧半径", "圆弧长度", "圆弧退出航向",
+         "光电纠偏上限", "前馈最小角速度", "前馈最大角速度", "前馈变化率", "差速变化率"
     };
     static const char *const infos[ANO_PARAM_COUNT] = {
-        "四驱速度环比例系数", "四驱速度环积分系数", "四驱速度环微分系数",
-        "航向轴PID比例系数", "航向轴PID积分系数", "航向轴PID微分系数",
-        "俯仰轴PID比例系数", "俯仰轴PID积分系数", "俯仰轴PID微分系数",
-        "四驱电机型号", "四驱控制死区", "四驱编码器相位线", "车轮直径，单位毫米", "四驱减速比", "匿名上位机波特率",
-        "0为速度模式，1为PWM模式", "速度范围0至1000，PWM范围0至3600", "0为正转，1为反转",
-        "速度范围0至1000，PWM范围0至3600", "0为正转，1为反转", "0为正向，1为反向，作用于速度和PWM", "0为正向，1为反向，作用于速度和PWM",
+         "", "", "", "", "", "", "", "", "", "", "", "", "", "", "匿名上位机波特率",
+         "", "", "", "", "", "0为正向，1为反向，作用于速度和PWM", "0为正向，1为反向，作用于速度和PWM",
         "0为PID，1为LADRC", "M1和M2共同前进速度", "航向外环比例", "航向外环积分", "航向外环微分",
         "角速度内环比例", "角速度内环积分", "角速度内环微分", "线性扩张状态观测器带宽", "角速度控制器带宽",
         "被控对象输入增益，必须大于零", "航向外环目标角速度限幅", "左右轮速度差限幅", "0正常，1倒置", "0正常，1倒置", "0正常，1倒置",
@@ -1713,20 +1773,21 @@ static void send_param_info(uint16_t id)
         "目标角死区，0至5度", "0原方向，1倒置电机输出方向",
         "三点联合标定最左点电机绝对位置，只读", "三点联合标定最左点JY61P Pitch，只读",
         "三点联合标定平衡点电机绝对位置，只读", "三点联合标定平衡点JY61P Pitch，只读",
-        "三点联合标定最右点电机绝对位置，只读", "三点联合标定最右点JY61P Pitch，只读"
+         "三点联合标定最右点电机绝对位置，只读", "三点联合标定最右点JY61P Pitch，只读",
+         "AB和CD直道长度，单位米", "BC和DA圆弧半径，单位米", "BC和DA圆弧长度，单位米",
+         "圆弧退出所需的最小IMU相对航向，单位度", "圆弧中光电纠偏角速度上限，单位度每秒",
+         "圆弧前馈角速度下限，单位度每秒", "圆弧前馈角速度上限，单位度每秒",
+         "前馈角速度变化率，单位度每秒平方", "左右轮差速变化率，单位速度单位每秒"
     };
     uint8_t d[ANO_DATA_MAX] = {0}; uint16_t i = 0U;
-    if (id >= ANO_PARAM_COUNT) return;
+     if (id >= ANO_PARAM_COUNT) return;
     put_u16(d, &i, id); d[i++] = 8U; strncpy((char *)&d[i], names[id], 20U); i += 20U;
     strncpy((char *)&d[i], infos[id], sizeof(d) - i - 1U); i += (uint16_t)strlen((const char *)&d[i]);
     send_frame(ANO_ID_PARAM_INFO, d, i);
  #else
     static const char *const names[ANO_PARAM_COUNT] = {
-        "四驱Kp", "四驱Ki", "四驱Kd",
-        "YAW轴Kp", "YAW轴Ki", "YAW轴Kd",
-        "PITCH轴Kp", "PITCH轴Ki", "PITCH轴Kd",
-        "四驱型号", "四驱死区", "四驱相位线", "车轮直径", "四驱减速比", "上位机波特率",
-        "M1M2控制模式", "M1调试数值", "M1调试方向", "M2调试数值", "M2调试方向", "M1方向", "M2方向",
+         "", "", "", "", "", "", "", "", "", "", "", "", "", "", "上位机波特率",
+         "", "", "", "", "", "M1方向", "M2方向",
         "双环控制模式", "基础轮速", "航向Kp", "航向Ki", "航向Kd", "角速度Kp", "角速度Ki", "角速度Kd",
         "LADRC观测带宽", "LADRC控制带宽", "LADRC对象增益", "最大角速度", "最大差速", "IMU X轴倒置", "IMU Y轴倒置", "IMU Z轴倒置",
         "角速度阶跃幅度", "指定旋转角度", "阶跃保持时间", "航向角反馈倒置",
@@ -1740,12 +1801,8 @@ static void send_param_info(uint16_t id)
         "标定平衡电机", "标定平衡Pitch", "标定右点电机", "标定右点Pitch"
     };
     static const char *const infos[ANO_PARAM_COUNT] = {
-        "四驱速度环比例系数", "四驱速度环积分系数", "四驱速度环微分系数",
-        "航向轴PID比例系数", "航向轴PID积分系数", "航向轴PID微分系数",
-        "俯仰轴PID比例系数", "俯仰轴PID积分系数", "俯仰轴PID微分系数",
-        "四驱电机型号", "四驱控制死区", "四驱编码器相位线", "车轮直径，单位毫米", "四驱减速比", "匿名上位机波特率",
-        "0为速度模式，1为PWM模式", "速度范围0至1000，PWM范围0至3600", "0为正转，1为反转",
-        "速度范围0至1000，PWM范围0至3600", "0为正转，1为反转", "0为正向，1为反向，作用于速度和PWM", "0为正向，1为反向，作用于速度和PWM",
+         "", "", "", "", "", "", "", "", "", "", "", "", "", "", "匿名上位机波特率",
+         "", "", "", "", "", "0为正向，1为反向，作用于速度和PWM", "0为正向，1为反向，作用于速度和PWM",
         "0为PID，1为LADRC", "M1和M2共同前进速度", "航向外环比例", "航向外环积分", "航向外环微分", "角速度内环比例", "角速度内环积分", "角速度内环微分",
         "线性扩张状态观测器带宽", "角速度控制器带宽", "被控对象输入增益", "航向外环目标角速度限幅", "左右轮速度差限幅", "0正常，1倒置", "0正常，1倒置", "0正常，1倒置",
         "角速度阶跃幅度，单位度每秒", "指定旋转相对角度，单位度", "正阶跃和回零各自保持毫秒数", "0原方向，1倒置",
@@ -2937,17 +2994,19 @@ static void handle(uint8_t source, uint8_t id, const uint8_t *d, uint16_t n, uin
                                      parameter_id <= ARM_CALIBRATION_RIGHT_PITCH;
         bool inactive_for_role =
             (App_Role_Get() == APP_ROLE_ARM &&
-              (parameter_id <= CAR_KD ||
-              (parameter_id >= CAR_TYPE && parameter_id <= STEP_ANGLE_FEEDBACK_INVERTED) ||
+              ((parameter_id <= CAR_REDUCTION_RATIO) ||
+              (parameter_id > HOST_BAUD && parameter_id <= CAR_DEBUG_M2_DIRECTION) ||
+              (parameter_id >= CAR_M1_DIRECTION && parameter_id <= STEP_ANGLE_FEEDBACK_INVERTED) ||
               parameter_id == CAR_LAP_STOP_DELAY_MS || parameter_id == CAR_LAP_COUNTS_PER_METER ||
                (parameter_id >= TRACKING_LAYER1_WEIGHT && parameter_id <= TRACKING_LAYER4_WEIGHT) ||
                parameter_id == GRAY_SENSOR_ACTIVE_LOW)) ||
-            (App_Role_Get() == APP_ROLE_CAR &&
-             ((parameter_id >= YAW_KP && parameter_id <= PITCH_KD) ||
+             (App_Role_Get() == APP_ROLE_CAR &&
+              ((parameter_id >= YAW_KP && parameter_id <= PITCH_KD) ||
               (parameter_id >= STEPPER_FF_ENABLE && parameter_id <= STEPPER_FF_OUTPUT_LIMIT) ||
               (parameter_id >= ARM_LIMIT_MIN && parameter_id <= ARM_HOME_MODE) ||
               parameter_id == ARM_BALANCE_POSITION ||
-              (parameter_id >= ARM_MOTOR_QUERY_HZ && parameter_id < ANO_PARAM_COUNT)));
+              (parameter_id >= ARM_MOTOR_QUERY_HZ && parameter_id < ANO_PARAM_COUNT) ||
+              (parameter_id >= CAR_ARC_STRAIGHT_LENGTH && parameter_id <= CAR_ARC_DIFFERENTIAL_SLEW)));
 
         if (calibration_read_only) {
             accepted = false;
@@ -2961,19 +3020,10 @@ static void handle(uint8_t source, uint8_t id, const uint8_t *d, uint16_t n, uin
             accepted = true;
         } else if (inactive_for_role) {
             accepted = write_inactive_parameter(parameter_id, value);
-        } else if (parameter_id <= CAR_KD || (parameter_id >= CAR_TYPE && parameter_id < HOST_BAUD)) {
+        } else if (parameter_id >= CAR_M1_DIRECTION && parameter_id <= CAR_M2_DIRECTION) {
             accepted = write_car_parameter(parameter_id, value);
-        } else if (parameter_id == CAR_DEBUG_CONTROL_MODE && isfinite(value) && (value == 0.0f || value == 1.0f)) {
-            car_debug_control_mode = value;
-            accepted = true;
-        } else if ((parameter_id == CAR_DEBUG_M1_VALUE || parameter_id == CAR_DEBUG_M2_VALUE) && isfinite(value) &&
-                   value >= 0.0f && value <= (car_debug_control_mode == 0.0f ? 1000.0f : 3600.0f)) {
-            *v = value;
-            accepted = true;
-        } else if ((parameter_id == CAR_DEBUG_M1_DIRECTION || parameter_id == CAR_DEBUG_M2_DIRECTION) &&
-                   isfinite(value) && (value == 0.0f || value == 1.0f)) {
-            *v = value;
-            accepted = true;
+        } else if (parameter_id > HOST_BAUD && parameter_id <= CAR_DEBUG_M2_DIRECTION) {
+            accepted = false;
         } else if ((parameter_id == CAR_M1_DIRECTION || parameter_id == CAR_M2_DIRECTION) &&
                    isfinite(value) && (value == 0.0f || value == 1.0f)) {
             accepted = write_car_parameter(parameter_id, value);
@@ -2986,6 +3036,8 @@ static void handle(uint8_t source, uint8_t id, const uint8_t *d, uint16_t n, uin
             accepted = write_feedforward_parameter(parameter_id, value);
         } else if (parameter_id >= TRACKING_LAYER1_WEIGHT && parameter_id <= TRACKING_LAYER4_WEIGHT) {
             accepted = write_tracking_parameter(parameter_id, value);
+        } else if (parameter_id >= CAR_ARC_STRAIGHT_LENGTH && parameter_id <= CAR_ARC_DIFFERENTIAL_SLEW) {
+            accepted = write_arc_parameter(parameter_id, value);
         } else if (parameter_id >= ARM_LIMIT_MIN && parameter_id <= ARM_HOME_MODE) {
             accepted = write_arm_parameter(parameter_id, value);
         } else if (parameter_id == ARM_BALANCE_POSITION ||
