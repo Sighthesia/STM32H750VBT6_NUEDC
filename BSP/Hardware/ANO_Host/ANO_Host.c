@@ -11,6 +11,7 @@
 #include "Stepper_PID.h"
 #include "Arm_Angle_Control.h"
 #include "Tracking_Link.h"
+#include "Vision_Link.h"
 #include "W25Qxx.h"
 #include "ZDT_Stepper.h"
 #include "App_Role.h"
@@ -2611,11 +2612,14 @@ static void send_arm_motor_telemetry(void)
 {
     ZDTStepperMotor *motor = zdt_stepper_motors[0];
     const arm_angle_control_debug_t *angle = Arm_Angle_Control_Get_Debug();
+    vision_link_sample_t vision = {0};
     uint32_t now = HAL_GetTick();
     uint16_t speed_age;
     uint16_t position_age;
+    uint16_t vision_age;
+    bool vision_valid;
     uint8_t valid = 0U;
-    uint8_t d[44];
+    uint8_t d[55];
     uint16_t i = 0U;
 
     if (motor == NULL || !tx_has_capacity(1U)) return;
@@ -2623,6 +2627,9 @@ static void send_arm_motor_telemetry(void)
     position_age = feedback_age_ms(now, motor->data.current_position_ms);
     if (speed_age <= ARM_MOTOR_FEEDBACK_TIMEOUT_MS) valid |= ANO_ARM_MOTOR_SPEED_VALID;
     if (position_age <= ARM_MOTOR_FEEDBACK_TIMEOUT_MS) valid |= ANO_ARM_MOTOR_POSITION_VALID;
+    vision_valid = Vision_Link_Get_Last_Sample(&vision);
+    vision_age = vision_valid ? feedback_age_ms(now, vision.received_ms) : UINT16_MAX;
+    vision_valid = vision_valid && Vision_Link_Is_Online();
 
     d[i++] = 3U;
     d[i++] = motor->id;
@@ -2646,6 +2653,10 @@ static void send_arm_motor_telemetry(void)
     d[i++] = arm_calibration_stage;
     d[i++] = arm_calibration_captured_mask;
     d[i++] = arm_calibration_valid;
+    put_float(d, &i, vision.position_cm);
+    put_float(d, &i, vision.velocity_cm_s);
+    d[i++] = vision_valid ? 1U : 0U;
+    put_u16(d, &i, vision_age);
     send_frame(ANO_ID_ARM_MOTOR_TELEMETRY, d, i);
 }
 

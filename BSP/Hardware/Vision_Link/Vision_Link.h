@@ -16,6 +16,7 @@ void Vision_Link_Process(void);
 void Vision_Link_UART_RxCplt_Callback(void);
 void Vision_Link_UART_Error_Callback(void);
 bool Vision_Link_Get_Sample(vision_link_sample_t *sample);
+bool Vision_Link_Get_Last_Sample(vision_link_sample_t *sample);
 bool Vision_Link_Is_Online(void);
 
 #endif /* VISION_LINK_H */

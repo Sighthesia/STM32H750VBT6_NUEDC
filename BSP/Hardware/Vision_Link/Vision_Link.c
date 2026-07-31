@@ -141,6 +141,23 @@ bool Vision_Link_Get_Sample(vision_link_sample_t *sample)
     return true;
 }
 
+bool Vision_Link_Get_Last_Sample(vision_link_sample_t *sample)
+{
+    uint32_t primask;
+
+    if (sample == NULL) return false;
+    primask = __get_PRIMASK();
+    __disable_irq();
+    if (vision_link_frame_valid == 0U)
+    {
+        __set_PRIMASK(primask);
+        return false;
+    }
+    *sample = vision_link_sample;
+    __set_PRIMASK(primask);
+    return true;
+}
+
 bool Vision_Link_Is_Online(void)
 {
     vision_link_sample_t sample;
