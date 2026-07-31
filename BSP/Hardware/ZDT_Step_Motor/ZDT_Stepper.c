@@ -2,123 +2,24 @@
 
 /* ---------------------------------- 电机配置表 --------------------------------- */
 static zdt_stepper_motor_config_t zdt_stepper_motor_config_table[] = {
-    // {串口句柄, DMA句柄, 电机ID}
-    {&huart3, &hdma_usart3_rx, STEPPER_PITCH}};
+    {&hfdcan2, STEPPER_PITCH}};
 
-// DMA1 cannot access DTCM, so keep its receive buffers in D2 SRAM.
-static ZDTStepperUart uart_motors[ZDT_STEPPER_MAX_UART]
-    __attribute__((section(".dma_buffer"), aligned(32)));
-static uint8_t uart_count = 0;
+static ZDTStepperCan can_motors;
 
 #define ZDT_STEPPER_TX_MAX_LENGTH 13U
 #define ZDT_STEPPER_TX_QUEUE_DEPTH 8U
+#define ZDT_STEPPER_COMMAND_ACK_TIMEOUT_MS 100U
 
-typedef struct
+static bool ZDT_Stepper_Is_Control_Command(uint8_t command)
 {
-    UART_HandleTypeDef *huart;
-    uint8_t active_data[ZDT_STEPPER_TX_MAX_LENGTH];
-    uint8_t active_length;
-    uint8_t busy;
-    uint8_t queue[ZDT_STEPPER_TX_QUEUE_DEPTH][ZDT_STEPPER_TX_MAX_LENGTH];
-    uint8_t queue_length[ZDT_STEPPER_TX_QUEUE_DEPTH];
-    uint8_t queue_head;
-    uint8_t queue_tail;
-    uint8_t queue_count;
-    uint8_t pending_speed[ZDT_STEPPER_TX_MAX_LENGTH];
-    uint8_t pending_speed_length;
-    uint8_t speed_pending;
-    uint32_t dropped_commands;
-    uint32_t transmit_errors;
-} ZDTStepperTxState;
-
-static ZDTStepperTxState uart_tx[ZDT_STEPPER_MAX_UART];
-
-static bool ZDT_Stepper_Start_Receive(ZDTStepperUart *uart)
-{
-    if (uart == NULL || uart->huart == NULL || uart->huart->hdmarx == NULL ||
-        uart->motor_count == 0U)
+    switch (command)
     {
+    case 0xF3U: case 0xF5U: case 0xF6U: case 0xFBU: case 0xFDU:
+    case 0xFEU: case 0xFFU: case 0x0AU: case 0x0EU: case 0x06U:
+    case 0x84U: case 0x9AU: case 0x9CU:
+        return true;
+    default:
         return false;
-    }
-
-    memset(uart->motors[0].rx_buffer, 0, sizeof(uart->motors[0].rx_buffer));
-    if (HAL_UARTEx_ReceiveToIdle_DMA(uart->huart, uart->motors[0].rx_buffer,
-                                     sizeof(uart->motors[0].rx_buffer)) != HAL_OK)
-    {
-        return false;
-    }
-    __HAL_DMA_DISABLE_IT(uart->huart->hdmarx, DMA_IT_HT);
-    return true;
-}
-
-static ZDTStepperTxState *ZDT_Stepper_Get_Tx_State(UART_HandleTypeDef *huart)
-{
-    for (uint8_t i = 0; i < uart_count; i++)
-    {
-        if (uart_tx[i].huart == huart)
-        {
-            return &uart_tx[i];
-        }
-    }
-
-    return NULL;
-}
-
-static void ZDT_Stepper_Start_Next_Transmit(ZDTStepperTxState *state)
-{
-    if (!state || state->busy)
-    {
-        return;
-    }
-
-    const uint8_t *data = NULL;
-    uint8_t length = 0;
-    uint8_t from_queue = 0;
-    uint8_t queue_index = 0;
-
-    if (state->queue_count > 0U)
-    {
-        data = state->queue[state->queue_head];
-        length = state->queue_length[state->queue_head];
-        from_queue = 1;
-        queue_index = state->queue_head;
-    }
-    else if (state->speed_pending)
-    {
-        data = state->pending_speed;
-        length = state->pending_speed_length;
-    }
-    else
-    {
-        return;
-    }
-
-    memcpy(state->active_data, data, length);
-    state->active_length = length;
-    state->busy = 1U;
-    if (from_queue)
-    {
-        state->queue_head = (uint8_t)((state->queue_head + 1U) % ZDT_STEPPER_TX_QUEUE_DEPTH);
-        state->queue_count--;
-    }
-    else
-    {
-        state->speed_pending = 0U;
-    }
-
-    if (zdt_stepper_hal.Uart_Transmit(state->huart, state->active_data, length) != HAL_OK)
-    {
-        state->busy = 0U;
-        state->transmit_errors++;
-        if (from_queue)
-        {
-            state->queue_head = queue_index;
-            state->queue_count++;
-        }
-        else
-        {
-            state->speed_pending = 1U;
-        }
     }
 }
 
@@ -141,57 +42,33 @@ void print_hex_array(const uint8_t *data, uint16_t size)
  */
 bool ZDT_Stepper_Init(void)
 {
-    uart_count = 0;
-    memset(uart_motors, 0, sizeof(uart_motors));
-    memset(uart_tx, 0, sizeof(uart_tx));
+    FDCAN_FilterTypeDef filter = {0};
+    memset(&can_motors, 0, sizeof(can_motors));
+    memset(zdt_stepper_motors, 0, sizeof(zdt_stepper_motors));
+    can_motors.hfdcan = zdt_stepper_motor_config_table[0].hfdcan;
+    can_motors.motors[0].id = zdt_stepper_motor_config_table[0].motor_id;
+    can_motors.motors[0].hfdcan = can_motors.hfdcan;
+    can_motors.motors[0].data.microstepping = 16U;
+    can_motors.motor_count = 1U;
+    zdt_stepper_motors[0] = &can_motors.motors[0];
 
-    for (uint32_t i = 0; i < ZDT_STEPPER_MOTOR_CONFIG_NUM; i++)
+    filter.IdType = FDCAN_EXTENDED_ID;
+    filter.FilterIndex = 0U;
+    filter.FilterType = FDCAN_FILTER_RANGE_NO_EIDM;
+    filter.FilterConfig = FDCAN_FILTER_TO_RXFIFO0;
+    filter.FilterID1 = ((uint32_t)can_motors.motors[0].id << 8U);
+    filter.FilterID2 = filter.FilterID1 | 0xFFU;
+    if (HAL_FDCAN_ConfigFilter(can_motors.hfdcan, &filter) != HAL_OK ||
+        HAL_FDCAN_ConfigGlobalFilter(can_motors.hfdcan, FDCAN_REJECT, FDCAN_REJECT,
+                                     FDCAN_REJECT_REMOTE, FDCAN_REJECT_REMOTE) != HAL_OK ||
+        HAL_FDCAN_ActivateNotification(can_motors.hfdcan, FDCAN_IT_RX_FIFO0_NEW_MESSAGE, 0U) != HAL_OK ||
+        HAL_FDCAN_Start(can_motors.hfdcan) != HAL_OK)
     {
-        UART_HandleTypeDef *huart = zdt_stepper_motor_config_table[i].huart;
-        DMA_HandleTypeDef *hdma_rx = zdt_stepper_motor_config_table[i].hdma_rx;
-        uint8_t motor_id = zdt_stepper_motor_config_table[i].motor_id;
-
-        int uart_idx = -1;
-        for (int j = 0; j < uart_count; j++)
-        {
-            if (uart_motors[j].huart == huart)
-            {
-                uart_idx = j;
-                break;
-            }
-        }
-        if (uart_idx == -1 && uart_count < ZDT_STEPPER_MAX_UART)
-        {
-            uart_motors[uart_count].huart = huart;
-            uart_motors[uart_count].hdma_rx = hdma_rx;
-            uart_motors[uart_count].motor_count = 0;
-            uart_tx[uart_count].huart = huart;
-            uart_idx = uart_count;
-            uart_count++;
-        }
-        if (uart_idx != -1 && uart_motors[uart_idx].motor_count < ZDT_STEPPER_PER_UART_MAX_MOTORS)
-        {
-            int m = uart_motors[uart_idx].motor_count;
-            uart_motors[uart_idx].motors[m].id = motor_id;
-            uart_motors[uart_idx].motors[m].huart = huart;
-            uart_motors[uart_idx].motors[m].hdma_rx = hdma_rx;
-            memset(uart_motors[uart_idx].motors[m].rx_buffer, 0, sizeof(uart_motors[uart_idx].motors[m].rx_buffer));
-            uart_motors[uart_idx].motors[m].data.microstepping = 16U;
-            uart_motors[uart_idx].motor_count++;
-            // 保存指针
-            zdt_stepper_motors[i] = &uart_motors[uart_idx].motors[m];
-        }
+        memset(zdt_stepper_motors, 0, sizeof(zdt_stepper_motors));
+        can_motors.motor_count = 0U;
+        return false;
     }
-    for (uint8_t i = 0U; i < uart_count; i++)
-    {
-        if (!ZDT_Stepper_Start_Receive(&uart_motors[i]))
-        {
-            memset(zdt_stepper_motors, 0, sizeof(zdt_stepper_motors));
-            uart_count = 0U;
-            return false;
-        }
-    }
-    return uart_count != 0U;
+    return true;
 }
 
 /**
@@ -199,61 +76,22 @@ bool ZDT_Stepper_Init(void)
  * @param huart 串口句柄
  * @param motor_id 电机ID
  */
-void ZDT_Stepper_Register_Motor(UART_HandleTypeDef *huart, uint8_t motor_id)
+void ZDT_Stepper_Register_Motor(FDCAN_HandleTypeDef *hfdcan, uint8_t motor_id)
 {
-    // 查找对应的串口
-    for (int i = 0; i < uart_count; i++)
-    {
-        if (uart_motors[i].huart == huart)
-        {
-            // 检查该电机是否已注册
-            for (int j = 0; j < uart_motors[i].motor_count; j++)
-            {
-                if (uart_motors[i].motors[j].id == motor_id)
-                {
-                    return; // 电机已注册
-                }
-            }
-
-            // 添加新电机
-            if (uart_motors[i].motor_count < ZDT_STEPPER_PER_UART_MAX_MOTORS)
-            {
-                uart_motors[i].motors[uart_motors[i].motor_count].id = motor_id;
-                uart_motors[i].motors[uart_motors[i].motor_count].huart = huart;
-                uart_motors[i].motors[uart_motors[i].motor_count].hdma_rx = uart_motors[i].hdma_rx;
-                memset(uart_motors[i].motors[uart_motors[i].motor_count].rx_buffer, 0, sizeof(uart_motors[i].motors[uart_motors[i].motor_count].rx_buffer));
-                uart_motors[i].motor_count++;
-            }
-            return;
-        }
-    }
+    (void)hfdcan;
+    (void)motor_id;
 }
 
 /**
  * @brief 获取电机对象
- * @param huart 串口句柄
+ * @param hfdcan FDCAN句柄
  * @param motor_id 电机ID
  * @return 电机对象指针，未找到返回NULL
  */
-ZDTStepperMotor *ZDT_Stepper_Get_Motor(UART_HandleTypeDef *huart, uint8_t motor_id)
+ZDTStepperMotor *ZDT_Stepper_Get_Motor(FDCAN_HandleTypeDef *hfdcan, uint8_t motor_id)
 {
-    // 查找对应的串口
-    for (int i = 0; i < uart_count; i++)
-    {
-        if (uart_motors[i].huart == huart)
-        {
-            // 查找电机
-            for (int j = 0; j < uart_motors[i].motor_count; j++)
-            {
-                if (uart_motors[i].motors[j].id == motor_id)
-                {
-                    return &uart_motors[i].motors[j];
-                }
-            }
-            return NULL;
-        }
-    }
-    return NULL;
+    if (hfdcan != can_motors.hfdcan || motor_id != can_motors.motors[0].id) return NULL;
+    return &can_motors.motors[0];
 }
 
 // 根据指令标识赋值的函数
@@ -315,22 +153,43 @@ void receive_motor_status(ZDTStepperMotor *motor, uint8_t *data, uint16_t size)
     char message[50];       // 字符串缓冲区
     char statu_message[13]; // 状态字符串缓冲区
     if (data == NULL || motor == NULL || size < 4U)
-        return; // 检查输入是否为空
+    {
+        if (motor != NULL) motor->data.rx_invalid_count++;
+        return;
+    }
+    if (data[0] != motor->id || data[size - 1U] != 0x6BU)
+    {
+        if (data[0] == motor->id) motor->data.rx_invalid_count++;
+        else motor->data.rx_unmatched_count++;
+        if (motor->data.command_lifecycle != ZDT_STEPPER_COMMAND_CAN_SENT)
+        {
+            motor->data.command_lifecycle = data[0] == motor->id ?
+                ZDT_STEPPER_COMMAND_RX_INVALID : ZDT_STEPPER_COMMAND_RX_UNMATCHED;
+        }
+        return;
+    }
     if (size == 4 && data[1] != 0x3A && data[1] != 0x3B)
     {
         uint8_t motor_id = data[0];   // 电机地址
         uint8_t command_id = data[1]; // 指令标识
         uint8_t status = data[2];     // 执行状态
-        uint8_t checksum = data[3];   // 校验字节
-        if (checksum != 0x6B)
+        if (motor->data.command_lifecycle != ZDT_STEPPER_COMMAND_CAN_SENT ||
+            motor->data.pending_command != command_id)
         {
-            printf("校验失败!\n");
-            return; // 校验失败，返回
+            motor->data.rx_unmatched_count++;
+            if (motor->data.command_lifecycle != ZDT_STEPPER_COMMAND_CAN_SENT)
+            {
+                motor->data.command_lifecycle = ZDT_STEPPER_COMMAND_RX_UNMATCHED;
+            }
+            return;
         }
         snprintf(statu_message, sizeof(statu_message), (status == 0x02) ? "执行成功" : "执行失败");
         motor->data.last_command = command_id;
         motor->data.last_command_status = status;
         motor->data.last_command_ms = HAL_GetTick();
+        motor->data.pending_command = 0U;
+        motor->data.command_lifecycle = status == 0x02U ?
+            ZDT_STEPPER_COMMAND_ACK_OK : ZDT_STEPPER_COMMAND_ACK_ERROR;
         assign_message_based_on_command(command_id, message, sizeof(message));
         printf("电机 %d:%s:%s\n", motor_id, message, statu_message);
         // 这里可以根据需要进一步处理接收到的指令
@@ -339,13 +198,7 @@ void receive_motor_status(ZDTStepperMotor *motor, uint8_t *data, uint16_t size)
     {
         uint8_t motor_id = data[0];        // 电机地址
         uint8_t command_id = data[1];      // 指令标识
-        uint8_t checksum = data[size - 1]; // 校验字节
         uint32_t temp;
-        if (checksum != 0x6B)
-        {
-            printf("校验失败!\n");
-            return; // 校验失败，返回
-        }
 
         // 清空消息
         snprintf(message, sizeof(message), "电机 %d: ", motor_id);
@@ -463,30 +316,10 @@ void receive_motor_status(ZDTStepperMotor *motor, uint8_t *data, uint16_t size)
     }
 }
 
-void ZDT_Stepper_USRT_RX_callback(UART_HandleTypeDef *huart, uint16_t Size)
+static uint8_t zdt_can_dlc_bytes(uint32_t dlc)
 {
-    // 查找对应的串口和电机
-    for (int i = 0; i < uart_count; i++)
-    {
-        if (uart_motors[i].huart == huart)
-        {
-            // 遍历该串口下的所有电机，查找数据来源
-            for (int j = 0; j < uart_motors[i].motor_count; j++)
-            {
-                ZDTStepperMotor *motor = &uart_motors[i].motors[j];
-                if (motor->rx_buffer[0] == motor->id)
-                {
-                    // 找到对应的电机
-                    receive_motor_status(motor, motor->rx_buffer, Size);
-                    // 注意：这里不再切换GPIO状态，由用户在应用层自行处理
-                    break;
-                }
-            }
-            // 重新启动DMA接收
-            (void)ZDT_Stepper_Start_Receive(&uart_motors[i]);
-            return;
-        }
-    }
+    static const uint8_t sizes[] = {0U, 1U, 2U, 3U, 4U, 5U, 6U, 7U, 8U};
+    return dlc <= FDCAN_DLC_BYTES_8 ? sizes[dlc] : 0U;
 }
 
 /**
@@ -499,82 +332,94 @@ void ZDT_Stepper_USRT_RX_callback(UART_HandleTypeDef *huart, uint16_t Size)
  */
 void ZDT_Stepper_UART_Send_Data(ZDTStepperMotor *motor, uint8_t *data, size_t length)
 {
-    if (!motor || !motor->huart || !data || length == 0U || length > ZDT_STEPPER_TX_MAX_LENGTH)
+    FDCAN_TxHeaderTypeDef header = {0};
+    uint8_t packet[8];
+    size_t offset = 2U;
+    uint8_t packet_number = 0U;
+
+    if (!motor || !motor->hfdcan || !data || length < 3U || length > ZDT_STEPPER_TX_MAX_LENGTH)
     {
         return;
     }
 
-    ZDTStepperTxState *state = ZDT_Stepper_Get_Tx_State(motor->huart);
-    if (!state)
-    {
-        return;
-    }
+    header.IdType = FDCAN_EXTENDED_ID;
+    header.TxFrameType = FDCAN_DATA_FRAME;
+    header.DataLength = FDCAN_DLC_BYTES_8;
+    header.ErrorStateIndicator = FDCAN_ESI_ACTIVE;
+    header.BitRateSwitch = FDCAN_BRS_OFF;
+    header.FDFormat = FDCAN_CLASSIC_CAN;
+    header.TxEventFifoControl = FDCAN_STORE_TX_EVENTS;
 
-    uint32_t primask = __get_PRIMASK();
-    __disable_irq();
-
-    if (data[1] == 0xF6U)
+    while (offset < length)
     {
-        /* PID speed updates supersede older pending speed requests on this UART. */
-        memcpy(state->pending_speed, data, length);
-        state->pending_speed_length = (uint8_t)length;
-        state->speed_pending = 1U;
-    }
-    else if (state->queue_count < ZDT_STEPPER_TX_QUEUE_DEPTH)
-    {
-        memcpy(state->queue[state->queue_tail], data, length);
-        state->queue_length[state->queue_tail] = (uint8_t)length;
-        state->queue_tail = (uint8_t)((state->queue_tail + 1U) % ZDT_STEPPER_TX_QUEUE_DEPTH);
-        state->queue_count++;
-
-        if (data[1] == 0xFEU)
+        size_t remaining = length - offset;
+        uint8_t payload = remaining > 7U ? 7U : (uint8_t)remaining;
+        memset(packet, 0, sizeof(packet));
+        packet[0] = data[1];
+        memcpy(&packet[1], &data[offset], payload);
+        header.Identifier = ((uint32_t)motor->id << 8U) | packet_number++;
+        header.DataLength = (uint32_t)((payload + 1U) > 8U ? FDCAN_DLC_BYTES_8 : payload + 1U);
+        if (HAL_FDCAN_AddMessageToTxFifoQ(motor->hfdcan, &header, packet) != HAL_OK)
         {
-            /* A stop must not be followed by an obsolete speed request. */
-            state->speed_pending = 0U;
+            motor->data.tx_error_count++;
+            motor->data.command_lifecycle = ZDT_STEPPER_COMMAND_TIMEOUT;
+            return;
         }
+        offset += payload;
     }
-    else
+    if (ZDT_Stepper_Is_Control_Command(data[1]))
     {
-        state->dropped_commands++;
+        motor->data.pending_command = data[1];
+        motor->data.command_lifecycle = ZDT_STEPPER_COMMAND_CAN_SENT;
+        motor->data.command_sent_ms = HAL_GetTick();
     }
-
-    ZDT_Stepper_Start_Next_Transmit(state);
-    __set_PRIMASK(primask);
 }
 
-void ZDT_Stepper_UART_TxCplt_Callback(UART_HandleTypeDef *huart)
+void ZDT_Stepper_FDCAN_RxFifo0_Callback(FDCAN_HandleTypeDef *hfdcan)
 {
-    ZDTStepperTxState *state = ZDT_Stepper_Get_Tx_State(huart);
-    if (!state)
+    FDCAN_RxHeaderTypeDef header;
+    uint8_t data[8];
+    if (hfdcan != can_motors.hfdcan) return;
+    while (HAL_FDCAN_GetRxFifoFillLevel(hfdcan, FDCAN_RX_FIFO0) != 0U)
     {
-        return;
+        if (HAL_FDCAN_GetRxMessage(hfdcan, FDCAN_RX_FIFO0, &header, data) != HAL_OK ||
+            header.IdType != FDCAN_EXTENDED_ID ||
+            (header.Identifier >> 8U) != can_motors.motors[0].id)
+        {
+            can_motors.motors[0].data.rx_unmatched_count++;
+            continue;
+        }
+        uint8_t length = zdt_can_dlc_bytes(header.DataLength);
+        if (length < 2U || data[0] != can_motors.motors[0].data.pending_command)
+        {
+            can_motors.motors[0].data.rx_unmatched_count++;
+            continue;
+        }
+        uint8_t response[9] = {0};
+        response[0] = can_motors.motors[0].id;
+        response[1] = data[0];
+        memcpy(&response[2], &data[1], length - 1U);
+        receive_motor_status(&can_motors.motors[0], response, (uint16_t)length + 1U);
     }
-
-    state->busy = 0U;
-    ZDT_Stepper_Start_Next_Transmit(state);
 }
 
-void ZDT_Stepper_UART_Error_Callback(UART_HandleTypeDef *huart)
+void ZDT_Stepper_FDCAN_Error_Callback(FDCAN_HandleTypeDef *hfdcan)
 {
-    ZDTStepperTxState *state = ZDT_Stepper_Get_Tx_State(huart);
-    if (!state)
+    if (hfdcan == can_motors.hfdcan) can_motors.motors[0].data.tx_error_count++;
+}
+
+void ZDT_Stepper_Update_Communication_Status(ZDTStepperMotor *motor)
+{
+    if (motor == NULL || motor->data.command_lifecycle != ZDT_STEPPER_COMMAND_CAN_SENT ||
+        motor->data.command_sent_ms == 0U)
     {
         return;
     }
-    for (uint8_t i = 0U; i < uart_count; i++)
+    if (HAL_GetTick() - motor->data.command_sent_ms > ZDT_STEPPER_COMMAND_ACK_TIMEOUT_MS)
     {
-        if (uart_motors[i].huart == huart && uart_motors[i].motor_count > 0U)
-        {
-            uart_motors[i].motors[0].data.current_position_ms = 0U;
-            (void)ZDT_Stepper_Start_Receive(&uart_motors[i]);
-            break;
-        }
-    }
-    if (huart->gState != HAL_UART_STATE_BUSY_TX)
-    {
-        state->busy = 0U;
-        state->transmit_errors++;
-        ZDT_Stepper_Start_Next_Transmit(state);
+        motor->data.command_lifecycle = ZDT_STEPPER_COMMAND_TIMEOUT;
+        motor->data.command_timeout_count++;
+        motor->data.pending_command = 0U;
     }
 }
 /* 自定义部分结束 */
