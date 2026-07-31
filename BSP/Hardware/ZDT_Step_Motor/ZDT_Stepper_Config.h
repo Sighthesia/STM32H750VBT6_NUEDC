@@ -21,16 +21,12 @@
 #define ZDT_STEPPER_STORE 1    // 存储标志
 #define ZDT_STEPPER_NO_STORE 0 // 不存储标
 
-// 最大支持的串口数量
-#define ZDT_STEPPER_MAX_UART 1
-// 每个串口最大支持的电机数量
-#define ZDT_STEPPER_PER_UART_MAX_MOTORS 1
+#define ZDT_STEPPER_PER_CAN_MAX_MOTORS 1
 
 // 电机配置结构体
 typedef struct
 {
-    UART_HandleTypeDef *huart;
-    DMA_HandleTypeDef *hdma_rx;
+    FDCAN_HandleTypeDef *hfdcan;
     uint8_t motor_id;
 } zdt_stepper_motor_config_t;
 

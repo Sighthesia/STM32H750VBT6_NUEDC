@@ -1,16 +1,27 @@
 #ifndef _ZDT_STEPPER_H_
 #define _ZDT_STEPPER_H_
 
-#include "ZDT_Stepper_HAL.h"
+#include "ZDT_Stepper_Config.h"
 #include "stdio.h"
 #include "string.h"
 #include "stdlib.h"
-#include "usart.h"
+#include "fdcan.h"
 #include "stdint.h"
-#include "usart.h"
 #include "stdbool.h"
 
 #define ZDT_STEPPER_MOTOR_CONFIG_NUM (sizeof(zdt_stepper_motor_config_table) / sizeof(zdt_stepper_motor_config_table[0]))
+
+typedef enum
+{
+    ZDT_STEPPER_COMMAND_NONE = 0U,
+    ZDT_STEPPER_COMMAND_QUEUED,
+    ZDT_STEPPER_COMMAND_CAN_SENT,
+    ZDT_STEPPER_COMMAND_ACK_OK,
+    ZDT_STEPPER_COMMAND_ACK_ERROR,
+    ZDT_STEPPER_COMMAND_TIMEOUT,
+    ZDT_STEPPER_COMMAND_RX_INVALID,
+    ZDT_STEPPER_COMMAND_RX_UNMATCHED
+} zdt_stepper_command_status_t;
 
 typedef struct
 {
@@ -35,9 +46,17 @@ typedef struct
     uint8_t motor_stall_protection;    // 电机编码器校准标志位
     uint8_t last_command;
     uint8_t last_command_status;
+    uint8_t command_lifecycle;
+    uint8_t pending_command;
     uint8_t microstepping;
     uint8_t homing_status_flags;
     uint32_t last_command_ms;
+    uint32_t command_sent_ms;
+    uint32_t command_timeout_count;
+    uint32_t rx_invalid_count;
+    uint32_t rx_unmatched_count;
+    uint32_t tx_dropped_count;
+    uint32_t tx_error_count;
     uint32_t current_position_ms;
     uint32_t current_speed_ms;
     uint32_t motor_status_ms;
@@ -51,28 +70,24 @@ typedef struct
 typedef struct
 {
     uint8_t id;                 // 电机ID
-    UART_HandleTypeDef *huart;  // 串口句柄
-    uint8_t rx_buffer[50];      // 接收缓冲区
-    DMA_HandleTypeDef *hdma_rx; // DMA句柄
-    ZDTStepperData data;        // 电机数据
+    FDCAN_HandleTypeDef *hfdcan;
+    ZDTStepperData data;
 } ZDTStepperMotor;
 
-// 串口信息结构体
 typedef struct
 {
-    UART_HandleTypeDef *huart;                               // 串口句柄
-    DMA_HandleTypeDef *hdma_rx;                              // DMA句柄
-    ZDTStepperMotor motors[ZDT_STEPPER_PER_UART_MAX_MOTORS]; // 该串口连接的电机
-    uint8_t motor_count;                                     // 电机数量
-} ZDTStepperUart;
+    FDCAN_HandleTypeDef *hfdcan;
+    ZDTStepperMotor motors[ZDT_STEPPER_PER_CAN_MAX_MOTORS];
+    uint8_t motor_count;
+} ZDTStepperCan;
 
 bool ZDT_Stepper_Init(void);
-void ZDT_Stepper_Register_Motor(UART_HandleTypeDef *huart, uint8_t motor_id);
-ZDTStepperMotor *ZDT_Stepper_Get_Motor(UART_HandleTypeDef *huart, uint8_t motor_id);
+void ZDT_Stepper_Register_Motor(FDCAN_HandleTypeDef *hfdcan, uint8_t motor_id);
+ZDTStepperMotor *ZDT_Stepper_Get_Motor(FDCAN_HandleTypeDef *hfdcan, uint8_t motor_id);
 void ZDT_Stepper_UART_Send_Data(ZDTStepperMotor *motor, uint8_t *data, size_t length);
-void ZDT_Stepper_USRT_RX_callback(UART_HandleTypeDef *huart, uint16_t Size);
-void ZDT_Stepper_UART_TxCplt_Callback(UART_HandleTypeDef *huart);
-void ZDT_Stepper_UART_Error_Callback(UART_HandleTypeDef *huart);
+void ZDT_Stepper_FDCAN_RxFifo0_Callback(FDCAN_HandleTypeDef *hfdcan);
+void ZDT_Stepper_FDCAN_Error_Callback(FDCAN_HandleTypeDef *hfdcan);
+void ZDT_Stepper_Update_Communication_Status(ZDTStepperMotor *motor);
 void ZDT_Stepper_Set_Software_Limits(ZDTStepperMotor *motor, float minimum, float maximum, bool enabled);
 
 void ZDT_Stepper_Enable(ZDTStepperMotor *motor, uint8_t enable, uint8_t sync_flag);

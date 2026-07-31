@@ -19,6 +19,7 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "dma.h"
+#include "fdcan.h"
 #include "i2c.h"
 #include "usart.h"
 #include "gpio.h"
@@ -137,7 +138,6 @@ static void App_Peripheral_Init(void)
   MX_I2C2_Init();
   MX_USART1_UART_Init();
   MX_USART3_UART_Init();
-  MX_UART5_Init();
   MX_USART2_UART_Init();
 
   if (App_Role_Get() == APP_ROLE_CAR)
@@ -156,6 +156,7 @@ static void App_Peripheral_Init(void)
     MX_UART4_Init();
     MX_I2C1_Init();
 #if APP_ENABLE_ZDT_STEPPER
+    MX_FDCAN2_Init();
     if (ZDT_Stepper_Init())
     {
       ZDT_Stepper_Enable(zdt_stepper_motors[0], ZDT_STEPPER_ENABLE, ZDT_STEPPER_SYNC_DISABLE);
