@@ -27,11 +27,11 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
     static uint8_t last_state = 0;
     static float increment = 0.1f; // 每次触发增加/减少的数值
 
-    if (GPIO_Pin == GPIO_PIN_7 || GPIO_Pin == GPIO_PIN_8)
+    if (GPIO_Pin == GPIO_PIN_8)
     {
         // 读取当前 A、B 相状态（0或1）
         uint8_t a = HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_8);
-        uint8_t b = HAL_GPIO_ReadPin(GPIOD, GPIO_PIN_7);
+        uint8_t b = 0U;
 
         // 构造当前状态（bit0=A, bit1=B）
         uint8_t current_state = (a << 0) | (b << 1);

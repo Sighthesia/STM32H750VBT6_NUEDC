@@ -148,14 +148,6 @@ void wegui_stm32_panel_self_test(void)
 
 void wegui_stm32_input_init(void)
 {
-    GPIO_InitTypeDef gpio = {0};
-
-    __HAL_RCC_GPIOD_CLK_ENABLE();
-    gpio.Pin = GPIO_PIN_7;
-    gpio.Mode = GPIO_MODE_IT_RISING_FALLING;
-    gpio.Pull = GPIO_PULLUP;
-    HAL_GPIO_Init(GPIOD, &gpio);
-    HAL_NVIC_SetPriority(EXTI9_5_IRQn, 5U, 0U);
     Encoder_Init();
 }
 

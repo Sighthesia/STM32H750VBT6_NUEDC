@@ -29,12 +29,14 @@ void Gray_Sensor_Init(void)
 
     gpio.Pin = GPIO_PIN_4 | GPIO_PIN_5;
     HAL_GPIO_Init(GPIOC, &gpio);
-    gpio.Pin = GPIO_PIN_0 | GPIO_PIN_1 | GPIO_PIN_8 | GPIO_PIN_9;
+    gpio.Pin = GPIO_PIN_0 | GPIO_PIN_1 | GPIO_PIN_8;
     HAL_GPIO_Init(GPIOB, &gpio);
     gpio.Pin = GPIO_PIN_8;
     HAL_GPIO_Init(GPIOA, &gpio);
     gpio.Pin = GPIO_PIN_15;
     HAL_GPIO_Init(GPIOE, &gpio);
+    gpio.Pin = GPIO_PIN_7;
+    HAL_GPIO_Init(GPIOD, &gpio);
 
     stable_value = Gray_Sensor_Read();
     for (uint8_t bit = 0U; bit < 8U; bit++)
@@ -80,7 +82,7 @@ uint8_t Gray_Sensor_Read(void)
     value |= HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_8) == GPIO_PIN_SET ? 0x08U : 0U;
     value |= HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_1) == GPIO_PIN_SET ? 0x10U : 0U;
     value |= HAL_GPIO_ReadPin(GPIOE, GPIO_PIN_15) == GPIO_PIN_SET ? 0x20U : 0U;
-    value |= HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_8) == GPIO_PIN_SET ? 0x40U : 0U;
+    value |= HAL_GPIO_ReadPin(GPIOD, GPIO_PIN_7) == GPIO_PIN_SET ? 0x40U : 0U;
     value |= HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_9) == GPIO_PIN_SET ? 0x80U : 0U;
     return Gray_Sensor_Normalize(value, active_low);
 }
