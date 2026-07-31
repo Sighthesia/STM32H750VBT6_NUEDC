@@ -1384,8 +1384,7 @@ static float *parameter(uint16_t id)
         (id > HOST_BAUD && id < CAR_M1_DIRECTION) ||
         (id >= ARM_DEBUG_SPEED && id <= ARM_HOME_MODE) ||
         id == ARM_MOTOR_QUERY_HZ || id == ARM_MOTOR_TELEMETRY_HZ ||
-        id == ARM_ANGLE_TARGET ||
-        (id >= ARM_ANGLE_DERIVATIVE_FILTER && id <= ARM_ANGLE_DIRECTION_INVERTED))
+        id == ARM_ANGLE_TARGET)
     {
         return NULL;
     }
@@ -2853,6 +2852,7 @@ static void send_arm_motor_telemetry(void)
     put_u16(d, &i, (uint16_t)arm_motor_query_hz);
     put_u16(d, &i, (uint16_t)arm_motor_telemetry_hz);
     put_float(d, &i, angle->target_deg);
+    /* measured_deg already uses the arm Pitch coordinate convention. */
     put_float(d, &i, angle->measured_deg);
     put_float(d, &i, angle->error_deg);
     put_float(d, &i, angle->output_rpm);
