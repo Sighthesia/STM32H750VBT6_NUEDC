@@ -49,6 +49,7 @@
 #define ANO_ARM_CALIBRATION_INVALID_POINTS 3U
 #define ANO_ARM_CALIBRATION_CANCELLED 4U
 #define ANO_ARM_CALIBRATION_STORAGE_ERROR 5U
+#define ANO_ARM_CALIBRATION_POSITION_TIMEOUT 6U
 
 /* F9 payload v4: version, motor ID, valid flags, status flags,
  * speed RPM (float), position deg (float), speed/position age ms (u16),

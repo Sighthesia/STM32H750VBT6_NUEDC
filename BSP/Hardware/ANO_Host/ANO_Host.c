@@ -2787,6 +2787,7 @@ static void process_arm_debug(void)
         else if ((uint32_t)(now - arm_capture_requested_ms) >= ARM_CALIBRATION_CAPTURE_TIMEOUT_MS)
         {
             arm_capture_pending = 0U;
+            arm_calibration_status = ANO_ARM_CALIBRATION_POSITION_TIMEOUT;
         }
     }
 process_feedback:
