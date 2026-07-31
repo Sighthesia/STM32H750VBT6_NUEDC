@@ -131,7 +131,6 @@ int main(void)
 static void App_Peripheral_Init(void)
 {
   MX_GPIO_Init();
-  App_Role_Init();
   MX_SPI1_Init();
   MX_DMA_Init();
   MX_I2C2_Init();
@@ -140,32 +139,18 @@ static void App_Peripheral_Init(void)
   MX_UART5_Init();
   MX_USART2_UART_Init();
 
-  if (App_Role_Get() == APP_ROLE_CAR)
-  {
-#if APP_ENABLE_CAR_MOTOR
-    Car_Motor_Init();
-    Car_Attitude_Control_Init();
-    Car_Lap_Task_Init();
-#endif
-    Gray_Sensor_Init();
-    WheelTec_Init();
-    Car_IMU_Init();
-  }
-  else
-  {
-    MX_UART4_Init();
-    MX_I2C1_Init();
+  MX_UART4_Init();
+  MX_I2C1_Init();
 #if APP_ENABLE_ZDT_STEPPER
-    if (ZDT_Stepper_Init())
-    {
-      ZDT_Stepper_Enable(zdt_stepper_motors[0], ZDT_STEPPER_ENABLE, ZDT_STEPPER_SYNC_DISABLE);
-    }
-#endif
-    Tracking_Link_Init();
-    Vision_Link_Init();
-    JY61P_Init();
-    Arm_Angle_Control_Init();
+  if (ZDT_Stepper_Init())
+  {
+    ZDT_Stepper_Enable(zdt_stepper_motors[0], ZDT_STEPPER_ENABLE, ZDT_STEPPER_SYNC_DISABLE);
   }
+#endif
+  Tracking_Link_Init();
+  Vision_Link_Init();
+  JY61P_Init();
+  Arm_Angle_Control_Init();
   Board_Link_Init();
   ANO_Host_Init();
   lcd_driver_init();
@@ -180,19 +165,8 @@ static void App_Peripheral_Init(void)
 
 static void App_Process(void)
 {
-  if (App_Role_Get() == APP_ROLE_CAR)
-  {
-#if APP_ENABLE_CAR_MOTOR
-    Car_Motor_Process();
-    Car_Lap_Task_Process();
-    Car_Attitude_Control_Process();
-#endif
-  }
-  else
-  {
-    JY61P_Process();
-    Arm_Angle_Control_Process();
-  }
+  JY61P_Process();
+  Arm_Angle_Control_Process();
   Board_Link_Process();
   ANO_Host_Process();
   G030_I2C_Link_Process();
