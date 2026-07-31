@@ -18,6 +18,7 @@
 static arm_angle_control_config_t config;
 static arm_angle_control_debug_t debug;
 static PIDController controller;
+static PIDController motor_speed_controller;
 static uint32_t last_sequence;
 static uint32_t last_sample_ms;
 static uint8_t output_active;
@@ -52,6 +53,16 @@ static void apply_controller_config(void)
     controller.limMaxInt = config.maximum_speed_rpm;
     controller.T = 0.01f;
     PIDController_Init(&controller);
+    motor_speed_controller.Kp = config.motor_speed_kp;
+    motor_speed_controller.Ki = config.motor_speed_ki;
+    motor_speed_controller.Kd = config.motor_speed_kd;
+    motor_speed_controller.tau = config.derivative_filter_s;
+    motor_speed_controller.limMin = -config.motor_speed_limit;
+    motor_speed_controller.limMax = config.motor_speed_limit;
+    motor_speed_controller.limMinInt = -config.motor_speed_limit;
+    motor_speed_controller.limMaxInt = config.motor_speed_limit;
+    motor_speed_controller.T = 0.01f;
+    PIDController_Init(&motor_speed_controller);
 }
 
 void Arm_Angle_Control_Reset_Defaults(void)
@@ -63,6 +74,12 @@ void Arm_Angle_Control_Reset_Defaults(void)
     config.maximum_speed_rpm = 10.0f;
     config.deadzone_deg = 0.2f;
     config.direction_inverted = 0.0f;
+    config.motor_control_mode = 0.0f;
+    config.motor_position_limit = 3600.0f;
+    config.motor_speed_limit = 10.0f;
+    config.motor_speed_kp = 0.0f;
+    config.motor_speed_ki = 0.0f;
+    config.motor_speed_kd = 0.0f;
     apply_controller_config();
 }
 
@@ -86,7 +103,14 @@ bool Arm_Angle_Control_Apply_Config(const arm_angle_control_config_t *next)
         next->derivative_filter_s > 1.0f || !isfinite(next->maximum_speed_rpm) ||
         next->maximum_speed_rpm <= 0.0f || next->maximum_speed_rpm > 100.0f ||
         !isfinite(next->deadzone_deg) || next->deadzone_deg < 0.0f || next->deadzone_deg > 5.0f ||
-        (next->direction_inverted != 0.0f && next->direction_inverted != 1.0f))
+         (next->direction_inverted != 0.0f && next->direction_inverted != 1.0f) ||
+         (next->motor_control_mode != 0.0f && next->motor_control_mode != 1.0f) ||
+         !isfinite(next->motor_position_limit) || next->motor_position_limit <= 0.0f ||
+         next->motor_position_limit > 3600.0f || !isfinite(next->motor_speed_limit) ||
+         next->motor_speed_limit <= 0.0f || next->motor_speed_limit > 100.0f ||
+         !isfinite(next->motor_speed_kp) || next->motor_speed_kp < 0.0f || next->motor_speed_kp > 100.0f ||
+         !isfinite(next->motor_speed_ki) || next->motor_speed_ki < 0.0f || next->motor_speed_ki > 100.0f ||
+         !isfinite(next->motor_speed_kd) || next->motor_speed_kd < 0.0f || next->motor_speed_kd > 100.0f)
     {
         return false;
     }
@@ -181,16 +205,24 @@ void Arm_Angle_Control_Process(void)
     debug.measured_deg = (float)sample->angle.y * JY61P_ANGLE_RAW_TO_DEG;
     debug.error_deg = debug.target_deg - debug.measured_deg;
 
-    output = PIDController_Update(&controller, debug.target_deg, debug.measured_deg);
-    if (fabsf(debug.error_deg) <= config.deadzone_deg)
+    if (config.motor_control_mode == 1.0f && debug.vision_valid != 0U)
+    {
+        motor_speed_controller.T = (float)dt_ms * 0.001f;
+        output = PIDController_Update(&motor_speed_controller, 0.0f, debug.vision_velocity_cm_s);
+    }
+    else
+    {
+        output = PIDController_Update(&controller, debug.target_deg, debug.measured_deg);
+    }
+    if (config.motor_control_mode == 0.0f && fabsf(debug.error_deg) <= config.deadzone_deg)
     {
         output = 0.0f;
         PIDController_Init(&controller);
     }
     if (config.direction_inverted != 0.0f) output = -output;
-    if (motor->data.limits_enabled != 0U &&
-        ((motor->data.current_position <= motor->data.limit_min && output < 0.0f) ||
-         (motor->data.current_position >= motor->data.limit_max && output > 0.0f)))
+    if (fabsf(motor->data.current_position) >= config.motor_position_limit &&
+        ((motor->data.current_position < 0.0f && output < 0.0f) ||
+         (motor->data.current_position > 0.0f && output > 0.0f)))
     {
         fault_output(ARM_ANGLE_STATUS_LIMIT);
         return;

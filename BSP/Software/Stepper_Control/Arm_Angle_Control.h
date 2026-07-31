@@ -24,6 +24,12 @@ typedef struct
     float maximum_speed_rpm;
     float deadzone_deg;
     float direction_inverted;
+    float motor_control_mode;
+    float motor_position_limit;
+    float motor_speed_limit;
+    float motor_speed_kp;
+    float motor_speed_ki;
+    float motor_speed_kd;
 } arm_angle_control_config_t;
 
 typedef struct
