@@ -29,6 +29,17 @@
 #define ANO_COMMAND_ARM_DISABLE 0x38U
 #define ANO_COMMAND_ARM_APPLY_DRIVER 0x39U
 #define ANO_COMMAND_CAR_ROTATE_ANGLE 0x3AU
+#define ANO_COMMAND_ARM_TELEMETRY_ENABLE 0x3BU
+#define ANO_COMMAND_ARM_TELEMETRY_DISABLE 0x3CU
+
+#define ANO_ID_ARM_MOTOR_TELEMETRY 0xF9U
+
+#define ANO_ARM_MOTOR_SPEED_VALID 0x01U
+#define ANO_ARM_MOTOR_POSITION_VALID 0x02U
+
+/* F9 payload: version, motor ID, valid flags, status flags,
+ * speed RPM (float), position deg (float), speed/position age ms (u16),
+ * query/telemetry frequency Hz (u16). Multi-byte fields are little-endian. */
 
 void ANO_Host_Init(void);
 void ANO_Host_Process(void);
