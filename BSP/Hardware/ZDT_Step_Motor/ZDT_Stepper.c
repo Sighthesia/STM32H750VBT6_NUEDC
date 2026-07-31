@@ -423,6 +423,7 @@ void receive_motor_status(ZDTStepperMotor *motor, uint8_t *data, uint16_t size)
             motor->data.motor_position_reached = (data[2] & 0x02) >> 1;
             motor->data.motor_stall = (data[2] & 0x04) >> 2;
             motor->data.motor_stall_protection = (data[2] & 0x08) >> 3;
+            motor->data.motor_status_ms = HAL_GetTick();
             snprintf(message + strlen(message), sizeof(message) - strlen(message), "status=0x%02X", motor->data.motor_status_flags);
             break;
 
@@ -438,7 +439,8 @@ void receive_motor_status(ZDTStepperMotor *motor, uint8_t *data, uint16_t size)
             break;
         }
 
-        if (command_id != 0x35U && command_id != 0x36U && command_id != 0x3BU)
+        if (command_id != 0x35U && command_id != 0x36U &&
+            command_id != 0x3AU && command_id != 0x3BU)
         {
             printf("%s\n", message);
         }

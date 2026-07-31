@@ -31,15 +31,30 @@
 #define ANO_COMMAND_CAR_ROTATE_ANGLE 0x3AU
 #define ANO_COMMAND_ARM_TELEMETRY_ENABLE 0x3BU
 #define ANO_COMMAND_ARM_TELEMETRY_DISABLE 0x3CU
+#define ANO_COMMAND_ARM_ANGLE_ENABLE 0x3DU
+#define ANO_COMMAND_ARM_ANGLE_DISABLE 0x3EU
+#define ANO_COMMAND_ARM_CALIBRATION_START 0x3FU
+#define ANO_COMMAND_ARM_CALIBRATION_CAPTURE 0x40U
+#define ANO_COMMAND_ARM_CALIBRATION_CANCEL 0x41U
 
 #define ANO_ID_ARM_MOTOR_TELEMETRY 0xF9U
 
 #define ANO_ARM_MOTOR_SPEED_VALID 0x01U
 #define ANO_ARM_MOTOR_POSITION_VALID 0x02U
 
-/* F9 payload: version, motor ID, valid flags, status flags,
+#define ANO_ARM_CALIBRATION_IDLE 0U
+#define ANO_ARM_CALIBRATION_ACTIVE 1U
+#define ANO_ARM_CALIBRATION_COMPLETE 2U
+#define ANO_ARM_CALIBRATION_INVALID_POINTS 3U
+#define ANO_ARM_CALIBRATION_CANCELLED 4U
+#define ANO_ARM_CALIBRATION_STORAGE_ERROR 5U
+
+/* F9 payload v3: version, motor ID, valid flags, status flags,
  * speed RPM (float), position deg (float), speed/position age ms (u16),
- * query/telemetry frequency Hz (u16). Multi-byte fields are little-endian. */
+ * query/telemetry frequency Hz (u16), target/measured/error angle deg (float),
+ * angle output RPM (float), angle status/enabled/authorized/IMU-valid (u8),
+ * calibration status/stage/captured-mask/valid (u8).
+ * Multi-byte fields are little-endian. */
 
 void ANO_Host_Init(void);
 void ANO_Host_Process(void);

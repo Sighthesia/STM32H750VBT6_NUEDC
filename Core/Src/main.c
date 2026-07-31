@@ -34,11 +34,13 @@
 #include "WheelTec.h"
 #include "Car_IMU.h"
 #include "Stepper_PID.h"
+#include "Arm_Angle_Control.h"
 #include "lcd_driver.h"
 #include "lcd_wegui_driver.h"
 #include "wegui_menu_demo.h"
 #include "g030_i2c_link.h"
 #include "Tracking_Link.h"
+#include "Vision_Link.h"
 #include "Car_Attitude_Control.h"
 #include "App_Role.h"
 #include "Board_Link.h"
@@ -151,13 +153,16 @@ static void App_Peripheral_Init(void)
   }
   else
   {
+    MX_UART4_Init();
     MX_I2C1_Init();
 #if APP_ENABLE_ZDT_STEPPER
     ZDT_Stepper_Init();
     ZDT_Stepper_Enable(zdt_stepper_motors[0], ZDT_STEPPER_ENABLE, ZDT_STEPPER_SYNC_DISABLE);
 #endif
     Tracking_Link_Init();
+    Vision_Link_Init();
     JY61P_Init();
+    Arm_Angle_Control_Init();
   }
   Board_Link_Init();
   ANO_Host_Init();
@@ -184,6 +189,7 @@ static void App_Process(void)
   else
   {
     JY61P_Process();
+    Arm_Angle_Control_Process();
   }
   Board_Link_Process();
   ANO_Host_Process();

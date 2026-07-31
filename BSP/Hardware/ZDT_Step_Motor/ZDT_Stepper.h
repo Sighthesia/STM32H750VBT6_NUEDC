@@ -40,6 +40,7 @@ typedef struct
     uint32_t last_command_ms;
     uint32_t current_position_ms;
     uint32_t current_speed_ms;
+    uint32_t motor_status_ms;
     uint32_t homing_status_ms;
     float limit_min;
     float limit_max;
