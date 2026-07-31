@@ -206,7 +206,7 @@ static const ano_command_desc_t arm_commands[] = {
     {{0x03U, ANO_COMMAND_ARM_DISABLE, 0x00U}, "关闭保持力矩", "停止并关闭臂杆电机保持力矩"},
     {{0x03U, ANO_COMMAND_ARM_ENABLE, 0x00U}, "开启保持力矩", "开启臂杆电机保持力矩"},
     {{0x03U, ANO_COMMAND_ARM_ZERO_CONFIRM, 0x00U}, "设置当前位置为零点", "将当前位置清零并确认电机零点"},
-    {{0x03U, ANO_COMMAND_ARM_ANGLE_ENABLE, 0x00U}, "进入臂杆闭环", "启动臂杆位置闭环"},
+    {{0x03U, ANO_COMMAND_ARM_ANGLE_ENABLE, 0x00U}, "启用臂杆位置闭环", "启用已归零臂杆的位置闭环控制，不切换电机驱动模式"},
     {{0x03U, ANO_COMMAND_ARM_TELEMETRY_ENABLE, 0x00U}, "开启遥测", "上传臂杆电机实际转速、实际位置和反馈有效状态"},
     {{0x03U, ANO_COMMAND_ARM_TELEMETRY_DISABLE, 0x00U}, "关闭遥测", "停止上传臂杆电机状态"}
 };

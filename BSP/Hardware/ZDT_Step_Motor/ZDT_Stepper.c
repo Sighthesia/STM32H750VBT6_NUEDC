@@ -151,7 +151,7 @@ void assign_message_based_on_command(uint8_t command_id, char *message, size_t m
 void receive_motor_status(ZDTStepperMotor *motor, uint8_t *data, uint16_t size)
 {
     char message[50];       // 字符串缓冲区
-    char statu_message[13]; // 状态字符串缓冲区
+    char statu_message[24]; // 状态字符串缓冲区
     if (data == NULL || motor == NULL || size < 4U)
     {
         if (motor != NULL) motor->data.rx_invalid_count++;
@@ -183,7 +183,21 @@ void receive_motor_status(ZDTStepperMotor *motor, uint8_t *data, uint16_t size)
             }
             return;
         }
-        snprintf(statu_message, sizeof(statu_message), (status == 0x02) ? "执行成功" : "执行失败");
+        switch (status)
+        {
+        case 0x02U:
+            snprintf(statu_message, sizeof(statu_message), "执行成功");
+            break;
+        case 0xE2U:
+            snprintf(statu_message, sizeof(statu_message), "条件不满足");
+            break;
+        case 0xEEU:
+            snprintf(statu_message, sizeof(statu_message), "协议错误");
+            break;
+        default:
+            snprintf(statu_message, sizeof(statu_message), "失败0x%02X", status);
+            break;
+        }
         motor->data.last_command = command_id;
         motor->data.last_command_status = status;
         motor->data.last_command_ms = HAL_GetTick();
@@ -399,7 +413,9 @@ void ZDT_Stepper_FDCAN_RxFifo0_Callback(FDCAN_HandleTypeDef *hfdcan)
         }
         uint8_t response[9] = {0};
         response[0] = can_motors.motors[0].id;
-        response[1] = data[0];
+        /* Emm42 reports malformed control commands as 00 EE 6B. */
+        response[1] = data[0] == 0x00U && data[1] == 0xEEU ?
+                          can_motors.motors[0].data.pending_command : data[0];
         memcpy(&response[2], &data[1], length - 1U);
         receive_motor_status(&can_motors.motors[0], response, (uint16_t)length + 1U);
     }
