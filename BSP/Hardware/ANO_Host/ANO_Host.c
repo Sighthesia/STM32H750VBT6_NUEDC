@@ -477,6 +477,32 @@ typedef struct
 
 typedef struct
 {
+    float kp;
+    float ki;
+    float kd;
+    float derivative_filter_s;
+    float maximum_speed_rpm;
+    float deadzone_deg;
+    float direction_inverted;
+    float legacy_control_mode;
+    float motor_position_limit;
+    float motor_speed_limit;
+    float motor_speed_kp;
+    float motor_speed_ki;
+    float motor_speed_kd;
+} ano_arm_angle_control_config_v1_t;
+
+typedef struct
+{
+    uint32_t magic;
+    uint8_t version;
+    uint8_t reserved[3];
+    ano_arm_angle_control_config_v1_t config;
+    uint32_t checksum;
+} ano_arm_angle_storage_record_v1_t;
+
+typedef struct
+{
     uint32_t magic;
     uint8_t version;
     uint8_t valid;
@@ -624,6 +650,15 @@ static uint32_t arm_angle_storage_checksum(const ano_arm_angle_storage_record_t 
     return checksum;
 }
 
+static uint32_t arm_angle_storage_v1_checksum(const ano_arm_angle_storage_record_v1_t *record)
+{
+    const uint8_t *data = (const uint8_t *)record;
+    uint32_t checksum = 0x13579BDFU;
+    for (uint16_t i = 0U; i < sizeof(*record) - sizeof(record->checksum); i++)
+        checksum = (checksum << 5U) ^ (checksum >> 27U) ^ data[i];
+    return checksum;
+}
+
 static uint32_t arm_calibration_storage_checksum(const ano_arm_calibration_storage_record_t *record)
 {
     const uint8_t *data = (const uint8_t *)record;
@@ -708,15 +743,37 @@ static bool save_arm_angle_config(void)
 static void load_arm_angle_config(void)
 {
     ano_arm_angle_storage_record_t record = {0};
+    ano_arm_angle_storage_record_v1_t legacy = {0};
 
-    if (!W25Qxx_Read(ANO_ARM_ANGLE_STORAGE_ADDRESS, (uint8_t *)&record, sizeof(record)) ||
-        record.magic != ANO_ARM_ANGLE_STORAGE_MAGIC ||
-        record.version != ANO_ARM_ANGLE_STORAGE_VERSION ||
-        record.checksum != arm_angle_storage_checksum(&record)) return;
-    if (record.reserved[0] > 1U) return;
-    arm_pitch_inverted = (float)record.reserved[0];
+    if (W25Qxx_Read(ANO_ARM_ANGLE_STORAGE_ADDRESS, (uint8_t *)&record, sizeof(record)) &&
+        record.magic == ANO_ARM_ANGLE_STORAGE_MAGIC &&
+        record.version == ANO_ARM_ANGLE_STORAGE_VERSION &&
+        record.checksum == arm_angle_storage_checksum(&record) && record.reserved[0] <= 1U)
+    {
+        arm_pitch_inverted = (float)record.reserved[0];
+        Arm_Angle_Control_Set_Pitch_Inverted(arm_pitch_inverted != 0.0f);
+        (void)Arm_Angle_Control_Apply_Config(&record.config);
+        return;
+    }
+    if (!W25Qxx_Read(ANO_ARM_ANGLE_STORAGE_ADDRESS, (uint8_t *)&legacy, sizeof(legacy)) ||
+        legacy.magic != ANO_ARM_ANGLE_STORAGE_MAGIC || legacy.version != 1U ||
+        legacy.checksum != arm_angle_storage_v1_checksum(&legacy) || legacy.reserved[0] > 1U)
+    {
+        return;
+    }
+
+    arm_angle_control_config_t next = *Arm_Angle_Control_Get_Config();
+    next.ball_position_kp = legacy.config.kp;
+    next.ball_position_ki = legacy.config.ki;
+    next.ball_position_kd = legacy.config.kd;
+    next.ball_velocity_kp = legacy.config.motor_speed_kp;
+    next.ball_velocity_ki = legacy.config.motor_speed_ki;
+    next.ball_velocity_kd = legacy.config.motor_speed_kd;
+    next.derivative_filter_s = legacy.config.derivative_filter_s;
+    next.ball_velocity_limit_cm_s = legacy.config.maximum_speed_rpm;
+    arm_pitch_inverted = (float)legacy.reserved[0];
     Arm_Angle_Control_Set_Pitch_Inverted(arm_pitch_inverted != 0.0f);
-    (void)Arm_Angle_Control_Apply_Config(&record.config);
+    (void)Arm_Angle_Control_Apply_Config(&next);
 }
 
 static float *parameter(uint16_t id);

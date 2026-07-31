@@ -139,7 +139,6 @@ static void App_Peripheral_Init(void)
   MX_USART3_UART_Init();
   MX_USART2_UART_Init();
 
-  MX_UART4_Init();
   MX_I2C1_Init();
 #if APP_ENABLE_ZDT_STEPPER
   MX_FDCAN2_Init();

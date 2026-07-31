@@ -10,6 +10,7 @@ typedef enum
     ARM_ANGLE_STATUS_WAITING_STARTUP,
     ARM_ANGLE_STATUS_RUNNING,
     ARM_ANGLE_STATUS_IMU_TIMEOUT,
+    ARM_ANGLE_STATUS_VISION_TIMEOUT,
     ARM_ANGLE_STATUS_LIMIT,
     ARM_ANGLE_STATUS_STALL,
     ARM_ANGLE_STATUS_MANUAL_OVERRIDE
@@ -17,19 +18,24 @@ typedef enum
 
 typedef struct
 {
-    float kp;
-    float ki;
-    float kd;
+    float ball_position_loop_enabled;
+    float ball_velocity_loop_enabled;
+    float ball_target_position_cm;
+    float ball_position_kp;
+    float ball_position_ki;
+    float ball_position_kd;
+    float ball_velocity_kp;
+    float ball_velocity_ki;
+    float ball_velocity_kd;
     float derivative_filter_s;
-    float maximum_speed_rpm;
-    float deadzone_deg;
+    float ball_velocity_limit_cm_s;
+    float motor_position_offset_limit_deg;
+    float motor_position_speed_rpm;
+    float motor_position_command_threshold_deg;
+    float motor_position_command_period_ms;
     float direction_inverted;
-    float motor_control_mode;
-    float motor_position_limit;
-    float motor_speed_limit;
-    float motor_speed_kp;
-    float motor_speed_ki;
-    float motor_speed_kd;
+    float vision_kalman_enabled;
+    float vision_prediction_enabled;
 } arm_angle_control_config_t;
 
 typedef struct
@@ -44,6 +50,10 @@ typedef struct
     uint8_t imu_valid;
     float vision_position_cm;
     float vision_velocity_cm_s;
+    float ball_position_error_cm;
+    float ball_target_velocity_cm_s;
+    float ball_velocity_error_cm_s;
+    float motor_target_position_deg;
     uint8_t vision_valid;
     uint8_t status;
 } arm_angle_control_debug_t;
@@ -54,6 +64,9 @@ void Arm_Angle_Control_Set_Authorized(bool authorized);
 void Arm_Angle_Control_Set_Pitch_Inverted(bool inverted);
 bool Arm_Angle_Control_Set_Enabled(bool enabled);
 bool Arm_Angle_Control_Set_Target(float target_deg);
+bool Arm_Angle_Control_Set_Motor_Calibration(float high_position_deg,
+                                             float balance_position_deg,
+                                             float low_position_deg);
 bool Arm_Angle_Control_Apply_Config(const arm_angle_control_config_t *config);
 void Arm_Angle_Control_Reset_Defaults(void);
 arm_angle_control_config_t *Arm_Angle_Control_Get_Config(void);
