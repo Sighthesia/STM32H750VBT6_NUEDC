@@ -12,9 +12,8 @@
 #define BOARD_LINK_VERSION       1U
 #define BOARD_LINK_FRAME_SIZE    9U
 #define BOARD_LINK_PERIOD_MS     50U
-#define BOARD_LINK_TIMEOUT_MS    250U
+#define BOARD_LINK_TIMEOUT_MS    500U
 #define BOARD_LINK_SPI_TIMEOUT_MS 5U
-#define BOARD_LINK_SLAVE_STUCK_MS 20U
 #define BOARD_LINK_NSS_PORT      GPIOC
 #define BOARD_LINK_NSS_PIN       GPIO_PIN_3
 
@@ -60,17 +59,12 @@ static void Board_Link_SPI_Init(void)
     HAL_GPIO_Init(GPIOC, &gpio);
 
     gpio.Pin = BOARD_LINK_NSS_PIN;
-    gpio.Mode = App_Role_Get() == APP_ROLE_CAR ? GPIO_MODE_OUTPUT_PP : GPIO_MODE_IT_FALLING;
+    gpio.Mode = App_Role_Get() == APP_ROLE_CAR ? GPIO_MODE_OUTPUT_PP : GPIO_MODE_INPUT;
     gpio.Pull = GPIO_PULLUP;
     HAL_GPIO_Init(BOARD_LINK_NSS_PORT, &gpio);
     if (App_Role_Get() == APP_ROLE_CAR)
     {
         HAL_GPIO_WritePin(BOARD_LINK_NSS_PORT, BOARD_LINK_NSS_PIN, GPIO_PIN_SET);
-    }
-    else
-    {
-        HAL_NVIC_SetPriority(EXTI3_IRQn, 5, 0);
-        HAL_NVIC_EnableIRQ(EXTI3_IRQn);
     }
 
     hspi3.Instance = SPI3;
@@ -79,6 +73,7 @@ static void Board_Link_SPI_Init(void)
     hspi3.Init.DataSize = SPI_DATASIZE_8BIT;
     hspi3.Init.CLKPolarity = SPI_POLARITY_LOW;
     hspi3.Init.CLKPhase = SPI_PHASE_1EDGE;
+    /* PC3 is not an SPI3_NSS alternate-function pin; the slave remains selected in software. */
     hspi3.Init.NSS = SPI_NSS_SOFT;
     hspi3.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_32;
     hspi3.Init.FirstBit = SPI_FIRSTBIT_MSB;
@@ -156,6 +151,13 @@ static void Board_Link_Parse_Frame(void)
                 command_status = BOARD_LINK_COMMAND_OK;
             }
         }
+        else if (App_Role_Get() == APP_ROLE_ARM && command_pending != 0U &&
+                 rx_frame[7] == (uint8_t)(command_pending | 0x80U))
+        {
+            command_pending = 0U;
+            command_start_requested = 0U;
+            command_status = BOARD_LINK_COMMAND_REJECTED;
+        }
     }
 }
 
@@ -190,7 +192,7 @@ void Board_Link_Init(void)
     command_start_requested = 0U;
     command_test = 0U;
     command_status = BOARD_LINK_COMMAND_IDLE;
-
+    if (App_Role_Get() == APP_ROLE_ARM) Board_Link_Arm_Slave();
 }
 
 void Board_Link_Process(void)
@@ -221,12 +223,6 @@ void Board_Link_Process(void)
 
     if (App_Role_Get() == APP_ROLE_ARM)
     {
-        if (slave_transfer_active != 0U &&
-            (uint32_t)(now - slave_transfer_started_ms) > BOARD_LINK_SLAVE_STUCK_MS)
-        {
-            (void)HAL_SPI_Abort(&hspi3);
-            slave_transfer_active = 0U;
-        }
         return;
     }
     if ((uint32_t)(now - last_tx_ms) < BOARD_LINK_PERIOD_MS)
@@ -250,11 +246,7 @@ void Board_Link_Process(void)
 
 void Board_Link_NSS_Falling_Callback(void)
 {
-    if (App_Role_Get() == APP_ROLE_ARM && slave_transfer_active == 0U &&
-        HAL_SPI_GetState(&hspi3) == HAL_SPI_STATE_READY)
-    {
-        Board_Link_Arm_Slave();
-    }
+    /* The slave transfer is pre-armed, so this GPIO edge is informational only. */
 }
 
 void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi)
@@ -263,6 +255,7 @@ void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi)
     {
         slave_transfer_active = 0U;
         Board_Link_Parse_Frame();
+        Board_Link_Arm_Slave();
     }
 }
 
@@ -271,6 +264,7 @@ void HAL_SPI_ErrorCallback(SPI_HandleTypeDef *hspi)
     if (hspi->Instance == SPI3)
     {
         slave_transfer_active = 0U;
+        if (App_Role_Get() == APP_ROLE_ARM) Board_Link_Arm_Slave();
     }
 }
 

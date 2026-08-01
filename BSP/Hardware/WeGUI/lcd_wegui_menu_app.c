@@ -30,8 +30,10 @@ uint8_t Competition_Test_Refresh(uint8_t ui_frames, uint16_t elapsed_ms)
     const char *state = "IDLE";
     (void)ui_frames;
     (void)elapsed_ms;
-    if (Board_Link_Get_Command_Status() == BOARD_LINK_COMMAND_WAITING) state = "WAIT ACK";
+    if (!Board_Link_Is_Online()) state = "LINK OFF";
+    else if (Board_Link_Get_Command_Status() == BOARD_LINK_COMMAND_WAITING) state = "NO ACK";
     else if (Board_Link_Get_Command_Status() == BOARD_LINK_COMMAND_OK) state = "RUNNING";
+    else if (Board_Link_Get_Command_Status() == BOARD_LINK_COMMAND_REJECTED) state = "REJECTED";
     else if (Board_Link_Get_Command_Status() == BOARD_LINK_COMMAND_ERROR) state = "SPI ERROR";
     lcd_clear_gram();
     lcd_draw_utf8_string(4, 4, "TEST");
@@ -40,4 +42,3 @@ uint8_t Competition_Test_Refresh(uint8_t ui_frames, uint16_t elapsed_ms)
     lcd_draw_utf8_string(4, 70, "PRESS STOP");
     return 1U;
 }
-
