@@ -34,6 +34,8 @@ static uint8_t was_online;
 static uint8_t offline_stop_sent;
 static uint8_t last_command;
 static uint8_t command_ack;
+static uint8_t raw_command;
+static uint8_t raw_crc_valid;
 SPI_HandleTypeDef hspi3;
 
 #define BOARD_LINK_COMMAND_SELECT  0x10U
@@ -125,13 +127,18 @@ static void Board_Link_Build_Frame(void)
     tx_frame[3] = (uint8_t)App_Role_Get();
     tx_frame[4] = sequence++;
     tx_frame[5] = App_Role_Get() == APP_ROLE_CAR ? Gray_Sensor_Read() : 0U;
-    tx_frame[6] = App_Role_Get() == APP_ROLE_ARM && Tracking_Link_Is_Online() ? 0x01U : 0U;
+    tx_frame[6] = App_Role_Get() == APP_ROLE_CAR ? (uint8_t)(raw_command | (raw_crc_valid != 0U ? 0x80U : 0U)) :
+                  (Tracking_Link_Is_Online() ? 0x01U : 0U);
     tx_frame[7] = App_Role_Get() == APP_ROLE_CAR ? command_ack : 0U;
     tx_frame[8] = Board_Link_Crc8(tx_frame, BOARD_LINK_FRAME_SIZE - 1U);
 }
 
 static void Board_Link_Parse_Frame(void)
 {
+    raw_command = rx_frame[7];
+    raw_crc_valid = rx_frame[0] == BOARD_LINK_HEAD_0 && rx_frame[1] == BOARD_LINK_HEAD_1 &&
+                    rx_frame[2] == BOARD_LINK_VERSION && rx_frame[3] != (uint8_t)App_Role_Get() &&
+                    Board_Link_Crc8(rx_frame, BOARD_LINK_FRAME_SIZE - 1U) == rx_frame[8];
     if (rx_frame[0] == BOARD_LINK_HEAD_0 && rx_frame[1] == BOARD_LINK_HEAD_1 &&
         rx_frame[2] == BOARD_LINK_VERSION && rx_frame[3] != (uint8_t)App_Role_Get() &&
         Board_Link_Crc8(rx_frame, BOARD_LINK_FRAME_SIZE - 1U) == rx_frame[8])
@@ -187,6 +194,8 @@ void Board_Link_Init(void)
     offline_stop_sent = 0U;
     last_command = 0U;
     command_ack = 0U;
+    raw_command = 0U;
+    raw_crc_valid = 0U;
 
 }
 
