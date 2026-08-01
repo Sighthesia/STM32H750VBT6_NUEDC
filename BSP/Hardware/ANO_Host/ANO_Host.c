@@ -60,8 +60,8 @@
 #define ANO_ARM_ANGLE_STORAGE_VERSION 1U
 #define ANO_ARM_CALIBRATION_STORAGE_MAGIC 0x41433350UL
 #define ANO_ARM_CALIBRATION_STORAGE_VERSION 1U
-#define ANO_STORAGE_VERSION 23U
-#define ANO_TRACKING_DIAGNOSTIC_FLOAT_COUNT 20U
+#define ANO_STORAGE_VERSION 24U
+#define ANO_TRACKING_DIAGNOSTIC_FLOAT_COUNT 23U
 #define ANO_GEOMETRY_DIAGNOSTIC_FLOAT_COUNT 24U
 #define ARM_HOME_STATUS_PERIOD_MS 50U
 #define ARM_HOME_SETTLE_MS 100U
@@ -190,6 +190,21 @@ enum {
     ATTITUDE_START_RAMP_MS,
     CAR_ARC_WHEEL_TRACK,
     TRACKING_METHOD,
+    TRACKING_ANGLE_LAYER1,
+    TRACKING_ANGLE_LAYER2,
+    TRACKING_ANGLE_LAYER3,
+    TRACKING_ANGLE_LAYER4,
+    TRACKING_RATE_LAYER1,
+    TRACKING_RATE_LAYER2,
+    TRACKING_RATE_LAYER3,
+    TRACKING_RATE_LAYER4,
+    TRACKING_OPEN_LOOP_LAYER1,
+    TRACKING_OPEN_LOOP_LAYER2,
+    TRACKING_OPEN_LOOP_LAYER3,
+    TRACKING_OPEN_LOOP_LAYER4,
+    TRACKING_LOST_STRATEGY,
+    TRACKING_LOST_HOLD_MS,
+    TRACKING_LOST_SPEED_RATIO,
     ANO_PARAM_COUNT
 };
 
@@ -234,12 +249,27 @@ static const car_parameter_desc_t car_parameters[] = {
     {CAR_ARC_DIFFERENTIAL_SLEW, "差速变化率", "左右轮差速变化率，单位速度单位每秒"},
     {ATTITUDE_START_RAMP_MS, "缓启动时间", "基础速度从零爬升至设定值的时间，单位毫秒"},
     {CAR_ARC_WHEEL_TRACK, "两轮间距", "左右驱动轮中心距离，单位米；用于弯道理论轮速观测"},
-    {TRACKING_METHOD, "循迹方法", "0光电加IMU，1中间双路锁线，2几何惯导前馈"}
+    {TRACKING_METHOD, "循迹方法", "0光电IMU，1中间锁线，2几何，3角度，4角速度，5开环"},
+    {TRACKING_ANGLE_LAYER1, "角度第一层", "模式3：4和5号光电目标角度，单位度"},
+    {TRACKING_ANGLE_LAYER2, "角度第二层", "模式3：3和6号光电目标角度，单位度"},
+    {TRACKING_ANGLE_LAYER3, "角度第三层", "模式3：2和7号光电目标角度，单位度"},
+    {TRACKING_ANGLE_LAYER4, "角度第四层", "模式3：1和8号光电目标角度，单位度"},
+    {TRACKING_RATE_LAYER1, "角速度第一层", "模式4：4和5号光电目标角速度，单位度每秒"},
+    {TRACKING_RATE_LAYER2, "角速度第二层", "模式4：3和6号光电目标角速度，单位度每秒"},
+    {TRACKING_RATE_LAYER3, "角速度第三层", "模式4：2和7号光电目标角速度，单位度每秒"},
+    {TRACKING_RATE_LAYER4, "角速度第四层", "模式4：1和8号光电目标角速度，单位度每秒"},
+    {TRACKING_OPEN_LOOP_LAYER1, "开环第一层", "模式5：4和5号光电直接差速"},
+    {TRACKING_OPEN_LOOP_LAYER2, "开环第二层", "模式5：3和6号光电直接差速"},
+    {TRACKING_OPEN_LOOP_LAYER3, "开环第三层", "模式5：2和7号光电直接差速"},
+    {TRACKING_OPEN_LOOP_LAYER4, "开环第四层", "模式5：1和8号光电直接差速"},
+    {TRACKING_LOST_STRATEGY, "失线策略", "0保持后减速，1持续保持，2立即直行减速"},
+    {TRACKING_LOST_HOLD_MS, "失线保持时间", "策略0保持最后转向的时间，单位毫秒"},
+    {TRACKING_LOST_SPEED_RATIO, "失线速度比例", "失线减速后的基础速度比例，范围0至1"}
 };
 
 #define CAR_PARAMETER_COUNT ((uint16_t)(sizeof(car_parameters) / sizeof(car_parameters[0])))
-_Static_assert(CAR_PARAMETER_COUNT == 33U,
-               "Car protocol table must contain all 33 protocol parameters");
+_Static_assert(CAR_PARAMETER_COUNT == 48U,
+               "Car protocol table must contain all 48 protocol parameters");
 
 typedef struct { uint8_t state, source, destination, id, sum, checksum; uint16_t length, index; uint8_t data[ANO_DATA_MAX]; } ano_parser_t;
 typedef struct { uint8_t cid[3]; const char *name; const char *info; } ano_command_desc_t;
@@ -1379,7 +1409,7 @@ static float *parameter(uint16_t id)
         };
         return arm_angle_values[id - ARM_ANGLE_KP];
     }
-    if (id == TRACKING_METHOD) return NULL;
+    if (id >= TRACKING_METHOD && id <= TRACKING_LOST_SPEED_RATIO) return NULL;
     return id < ANO_PARAM_COUNT ? values[id] : NULL;
 }
 
@@ -1417,6 +1447,21 @@ static float *car_parameter_value(uint16_t id)
     case TRACKING_LAYER3_WEIGHT: return &tracking->layer3_weight_deg_s;
     case TRACKING_LAYER4_WEIGHT: return &tracking->layer4_weight_deg_s;
     case TRACKING_METHOD: return &tracking->method;
+    case TRACKING_ANGLE_LAYER1: return &tracking->angle_layer1_deg;
+    case TRACKING_ANGLE_LAYER2: return &tracking->angle_layer2_deg;
+    case TRACKING_ANGLE_LAYER3: return &tracking->angle_layer3_deg;
+    case TRACKING_ANGLE_LAYER4: return &tracking->angle_layer4_deg;
+    case TRACKING_RATE_LAYER1: return &tracking->rate_layer1_deg_s;
+    case TRACKING_RATE_LAYER2: return &tracking->rate_layer2_deg_s;
+    case TRACKING_RATE_LAYER3: return &tracking->rate_layer3_deg_s;
+    case TRACKING_RATE_LAYER4: return &tracking->rate_layer4_deg_s;
+    case TRACKING_OPEN_LOOP_LAYER1: return &tracking->open_loop_layer1;
+    case TRACKING_OPEN_LOOP_LAYER2: return &tracking->open_loop_layer2;
+    case TRACKING_OPEN_LOOP_LAYER3: return &tracking->open_loop_layer3;
+    case TRACKING_OPEN_LOOP_LAYER4: return &tracking->open_loop_layer4;
+    case TRACKING_LOST_STRATEGY: return &tracking->lost_strategy;
+    case TRACKING_LOST_HOLD_MS: return &tracking->lost_hold_ms;
+    case TRACKING_LOST_SPEED_RATIO: return &tracking->lost_speed_ratio;
     case GRAY_SENSOR_ACTIVE_LOW: return &gray_sensor_active_low;
     case CAR_ARC_STRAIGHT_LENGTH: return &arc->straight_length_m;
     case CAR_ARC_RADIUS: return &arc->arc_radius_m;
@@ -1581,6 +1626,21 @@ static bool write_tracking_parameter(uint16_t parameter_id, float value)
     case TRACKING_LAYER3_WEIGHT: next.layer3_weight_deg_s = value; break;
     case TRACKING_LAYER4_WEIGHT: next.layer4_weight_deg_s = value; break;
     case TRACKING_METHOD: next.method = value; break;
+    case TRACKING_ANGLE_LAYER1: next.angle_layer1_deg = value; break;
+    case TRACKING_ANGLE_LAYER2: next.angle_layer2_deg = value; break;
+    case TRACKING_ANGLE_LAYER3: next.angle_layer3_deg = value; break;
+    case TRACKING_ANGLE_LAYER4: next.angle_layer4_deg = value; break;
+    case TRACKING_RATE_LAYER1: next.rate_layer1_deg_s = value; break;
+    case TRACKING_RATE_LAYER2: next.rate_layer2_deg_s = value; break;
+    case TRACKING_RATE_LAYER3: next.rate_layer3_deg_s = value; break;
+    case TRACKING_RATE_LAYER4: next.rate_layer4_deg_s = value; break;
+    case TRACKING_OPEN_LOOP_LAYER1: next.open_loop_layer1 = value; break;
+    case TRACKING_OPEN_LOOP_LAYER2: next.open_loop_layer2 = value; break;
+    case TRACKING_OPEN_LOOP_LAYER3: next.open_loop_layer3 = value; break;
+    case TRACKING_OPEN_LOOP_LAYER4: next.open_loop_layer4 = value; break;
+    case TRACKING_LOST_STRATEGY: next.lost_strategy = value; break;
+    case TRACKING_LOST_HOLD_MS: next.lost_hold_ms = value; break;
+    case TRACKING_LOST_SPEED_RATIO: next.lost_speed_ratio = value; break;
     default: return false;
     }
     return Car_Attitude_Control_Apply_Tracking_Config(&next);
@@ -2775,6 +2835,9 @@ static void send_tracking_diagnostic(void)
     put_float(d, &i, control->arc_feedforward_rate);
     put_float(d, &i, control->arc_optical_rate);
     put_float(d, &i, Car_Attitude_Control_Get_Tracking_Config()->method);
+    put_float(d, &i, control->tracking_command);
+    put_float(d, &i, control->tracking_speed_scale);
+    put_float(d, &i, control->tracking_lost_elapsed_ms);
     send_frame(ANO_ID_TRACKING_DIAGNOSTIC, d, i);
 }
 
@@ -3008,7 +3071,7 @@ static void handle(uint8_t source, uint8_t id, const uint8_t *d, uint16_t n, uin
         } else if (parameter_id >= STEPPER_FF_ENABLE && parameter_id <= STEPPER_FF_OUTPUT_LIMIT) {
             accepted = write_feedforward_parameter(parameter_id, value);
         } else if ((parameter_id >= TRACKING_LAYER1_WEIGHT && parameter_id <= TRACKING_LAYER4_WEIGHT) ||
-                   parameter_id == TRACKING_METHOD) {
+                   (parameter_id >= TRACKING_METHOD && parameter_id <= TRACKING_LOST_SPEED_RATIO)) {
             accepted = write_tracking_parameter(parameter_id, value);
         } else if ((parameter_id >= CAR_ARC_STRAIGHT_LENGTH && parameter_id <= CAR_ARC_DIFFERENTIAL_SLEW) ||
                    parameter_id == CAR_ARC_WHEEL_TRACK) {

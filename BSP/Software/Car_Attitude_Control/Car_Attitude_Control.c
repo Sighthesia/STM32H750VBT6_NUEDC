@@ -23,13 +23,16 @@ static PIDController heading_pid;
 static PIDController rate_pid;
 static uint32_t last_sequence;
 static uint32_t last_sample_ms;
+static uint32_t last_open_loop_ms;
 static uint32_t enabled_ms;
+static uint32_t tracking_lost_since_ms;
 static float previous_heading;
 static float unwrapped_heading;
 static float target_heading;
 static float arc_target_rate;
 static float arc_commanded_rate;
 static float commanded_differential;
+static float last_tracking_command;
 static uint8_t heading_locked;
 static uint8_t enabled;
 static uint8_t stopped;
@@ -71,6 +74,8 @@ static void reset_tracking_state(void)
     target_heading = 0.0f;
     arc_target_rate = 0.0f;
     arc_commanded_rate = 0.0f;
+    last_tracking_command = 0.0f;
+    tracking_lost_since_ms = 0U;
     heading_locked = 0U;
 }
 
@@ -122,6 +127,21 @@ void Car_Attitude_Control_Reset_Defaults(void)
     tracking_config.layer2_weight_deg_s = 25.0f;
     tracking_config.layer3_weight_deg_s = 55.0f;
     tracking_config.layer4_weight_deg_s = 101.0f;
+    tracking_config.angle_layer1_deg = 0.35f;
+    tracking_config.angle_layer2_deg = 1.25f;
+    tracking_config.angle_layer3_deg = 2.75f;
+    tracking_config.angle_layer4_deg = 5.05f;
+    tracking_config.rate_layer1_deg_s = 7.0f;
+    tracking_config.rate_layer2_deg_s = 25.0f;
+    tracking_config.rate_layer3_deg_s = 55.0f;
+    tracking_config.rate_layer4_deg_s = 101.0f;
+    tracking_config.open_loop_layer1 = 7.0f;
+    tracking_config.open_loop_layer2 = 25.0f;
+    tracking_config.open_loop_layer3 = 60.0f;
+    tracking_config.open_loop_layer4 = 101.0f;
+    tracking_config.lost_strategy = (float)CAR_TRACKING_LOST_HOLD_THEN_SLOW;
+    tracking_config.lost_hold_ms = 150.0f;
+    tracking_config.lost_speed_ratio = 0.5f;
     configure_pid();
     reset_controllers();
     reset_tracking_state();
@@ -132,12 +152,42 @@ bool Car_Attitude_Control_Apply_Tracking_Config(const car_tracking_config_t *nex
     if (next == NULL || !isfinite(next->method) || !isfinite(next->layer1_weight_deg_s) || !isfinite(next->layer2_weight_deg_s) ||
         !isfinite(next->layer3_weight_deg_s) || !isfinite(next->layer4_weight_deg_s) ||
         next->method < (float)CAR_TRACKING_METHOD_OPTICAL_IMU ||
-        next->method > (float)CAR_TRACKING_METHOD_GEOMETRY || next->method != floorf(next->method) ||
-        next->layer1_weight_deg_s < 0.0f || next->layer4_weight_deg_s > 720.0f)
+        !isfinite(next->angle_layer1_deg) || !isfinite(next->angle_layer2_deg) ||
+        !isfinite(next->angle_layer3_deg) || !isfinite(next->angle_layer4_deg) ||
+        !isfinite(next->rate_layer1_deg_s) || !isfinite(next->rate_layer2_deg_s) ||
+        !isfinite(next->rate_layer3_deg_s) || !isfinite(next->rate_layer4_deg_s) ||
+        !isfinite(next->open_loop_layer1) || !isfinite(next->open_loop_layer2) ||
+        !isfinite(next->open_loop_layer3) || !isfinite(next->open_loop_layer4) ||
+        !isfinite(next->lost_strategy) || !isfinite(next->lost_hold_ms) ||
+        !isfinite(next->lost_speed_ratio) ||
+        next->method > (float)CAR_TRACKING_METHOD_OPEN_LOOP || next->method != floorf(next->method) ||
+        next->layer1_weight_deg_s < 0.0f || next->layer1_weight_deg_s > 720.0f ||
+        next->layer2_weight_deg_s < 0.0f || next->layer2_weight_deg_s > 720.0f ||
+        next->layer3_weight_deg_s < 0.0f || next->layer3_weight_deg_s > 720.0f ||
+        next->layer4_weight_deg_s < 0.0f || next->layer4_weight_deg_s > 720.0f ||
+        next->angle_layer1_deg < 0.0f || next->angle_layer1_deg > 180.0f ||
+        next->angle_layer2_deg < 0.0f || next->angle_layer2_deg > 180.0f ||
+        next->angle_layer3_deg < 0.0f || next->angle_layer3_deg > 180.0f ||
+        next->angle_layer4_deg < 0.0f || next->angle_layer4_deg > 180.0f ||
+        next->rate_layer1_deg_s < 0.0f || next->rate_layer1_deg_s > 720.0f ||
+        next->rate_layer2_deg_s < 0.0f || next->rate_layer2_deg_s > 720.0f ||
+        next->rate_layer3_deg_s < 0.0f || next->rate_layer3_deg_s > 720.0f ||
+        next->rate_layer4_deg_s < 0.0f || next->rate_layer4_deg_s > 720.0f ||
+        next->open_loop_layer1 < 0.0f || next->open_loop_layer1 > 1000.0f ||
+        next->open_loop_layer2 < 0.0f || next->open_loop_layer2 > 1000.0f ||
+        next->open_loop_layer3 < 0.0f || next->open_loop_layer3 > 1000.0f ||
+        next->open_loop_layer4 < 0.0f || next->open_loop_layer4 > 1000.0f ||
+        next->lost_strategy < (float)CAR_TRACKING_LOST_HOLD_THEN_SLOW ||
+        next->lost_strategy > (float)CAR_TRACKING_LOST_STRAIGHT_SLOW ||
+        next->lost_strategy != floorf(next->lost_strategy) ||
+        next->lost_hold_ms < 0.0f || next->lost_hold_ms > 5000.0f ||
+        next->lost_hold_ms != floorf(next->lost_hold_ms) ||
+        next->lost_speed_ratio < 0.0f || next->lost_speed_ratio > 1.0f)
     {
         return false;
     }
     tracking_config = *next;
+    reset_controllers();
     reset_tracking_state();
     return true;
 }
@@ -174,6 +224,7 @@ void Car_Attitude_Control_Init(void)
     stopped = 0U;
     last_sequence = 0U;
     last_sample_ms = HAL_GetTick();
+    last_open_loop_ms = last_sample_ms;
     enabled_ms = last_sample_ms;
     memset(&debug, 0, sizeof(debug));
     Car_Attitude_Control_Reset_Defaults();
@@ -185,6 +236,7 @@ bool Car_Attitude_Control_Set_Enabled(bool state)
     enabled = state ? 1U : 0U;
     stopped = 0U;
     enabled_ms = HAL_GetTick();
+    last_open_loop_ms = enabled_ms;
     reset_controllers();
     reset_tracking_state();
     memset(&debug, 0, sizeof(debug));
@@ -230,24 +282,111 @@ car_attitude_control_config_t *Car_Attitude_Control_Get_Config(void) { return &c
 car_tracking_config_t *Car_Attitude_Control_Get_Tracking_Config(void) { return &tracking_config; }
 const car_attitude_control_debug_t *Car_Attitude_Control_Get_Debug(void) { return &debug; }
 
+static float tracking_direct_command(uint8_t sensor_state, uint8_t method)
+{
+    if (method == (uint8_t)CAR_TRACKING_METHOD_DIRECT_ANGLE)
+        return Car_Tracking_Direct_Command(sensor_state, tracking_config.angle_layer1_deg,
+            tracking_config.angle_layer2_deg, tracking_config.angle_layer3_deg, tracking_config.angle_layer4_deg);
+    if (method == (uint8_t)CAR_TRACKING_METHOD_DIRECT_RATE)
+        return Car_Tracking_Direct_Command(sensor_state, tracking_config.rate_layer1_deg_s,
+            tracking_config.rate_layer2_deg_s, tracking_config.rate_layer3_deg_s, tracking_config.rate_layer4_deg_s);
+    return Car_Tracking_Direct_Command(sensor_state, tracking_config.open_loop_layer1,
+        tracking_config.open_loop_layer2, tracking_config.open_loop_layer3, tracking_config.open_loop_layer4);
+}
+
+static float update_direct_tracking(uint8_t sensor_state, uint8_t method, uint32_t now, float *speed_scale)
+{
+    if (sensor_state != 0U)
+    {
+        last_tracking_command = tracking_direct_command(sensor_state, method);
+        tracking_lost_since_ms = 0U;
+        *speed_scale = 1.0f;
+        return last_tracking_command;
+    }
+
+    if (tracking_lost_since_ms == 0U) tracking_lost_since_ms = now;
+    const uint32_t elapsed_ms = now - tracking_lost_since_ms;
+    const uint8_t strategy = (uint8_t)tracking_config.lost_strategy;
+    *speed_scale = Car_Tracking_Lost_Speed_Scale(strategy, elapsed_ms,
+        (uint32_t)tracking_config.lost_hold_ms, tracking_config.lost_speed_ratio);
+    return Car_Tracking_Lost_Command(last_tracking_command, strategy, elapsed_ms,
+                                     (uint32_t)tracking_config.lost_hold_ms);
+}
+
 void Car_Attitude_Control_Process(void)
 {
     car_imu_sample_t imu;
     const uint32_t now = HAL_GetTick();
+    const uint8_t tracking_method = (uint8_t)tracking_config.method;
+    const uint8_t sensor_state = Gray_Sensor_Get_Stable();
     const bool sample_valid = Car_IMU_Get_Sample(&imu);
     const bool new_sample = sample_valid && imu.sequence != last_sequence;
 
-    memset(&debug, 0, sizeof(debug));
-    if (enabled) debug.status |= CAR_ATTITUDE_STATUS_ENABLED;
-    if (sample_valid && (uint32_t)(now - last_sample_ms) <= CAR_CONTROL_IMU_TIMEOUT_MS)
-        debug.status |= CAR_ATTITUDE_STATUS_IMU_VALID;
-    if (Gray_Sensor_Get_Stable() != 0U) debug.status |= CAR_ATTITUDE_STATUS_TRACKING_ONLINE;
-    if (heading_locked) debug.status |= CAR_ATTITUDE_STATUS_HEADING_LOCKED;
-    if (!enabled) { stop_output(); return; }
+    if (!enabled)
+    {
+        memset(&debug, 0, sizeof(debug));
+        stop_output();
+        return;
+    }
+    if (tracking_method == (uint8_t)CAR_TRACKING_METHOD_OPEN_LOOP)
+    {
+        if ((uint32_t)(now - last_open_loop_ms) < 10U) return;
+        last_open_loop_ms = now;
+        memset(&debug, 0, sizeof(debug));
+        debug.status = CAR_ATTITUDE_STATUS_ENABLED | CAR_ATTITUDE_STATUS_OPEN_LOOP;
+        if (sensor_state != 0U) debug.status |= CAR_ATTITUDE_STATUS_TRACKING_ONLINE;
+        if (new_sample)
+        {
+            last_sequence = imu.sequence;
+            last_sample_ms = now;
+            const float heading = apply_axis_direction(imu.angle_rad.z, config.invert_z) * CAR_CONTROL_RAD_TO_DEG;
+            debug.measured_rate = apply_axis_direction(imu.angular_velocity_rad_s.z,
+                                                       config.rate_feedback_inverted) * CAR_CONTROL_RAD_TO_DEG;
+            if (!heading_locked)
+            {
+                previous_heading = heading;
+                heading_locked = 1U;
+            }
+            else
+            {
+                unwrapped_heading += wrap_angle(heading - previous_heading);
+                previous_heading = heading;
+            }
+        }
+        if (sample_valid && (uint32_t)(now - last_sample_ms) <= CAR_CONTROL_IMU_TIMEOUT_MS)
+            debug.status |= CAR_ATTITUDE_STATUS_IMU_VALID;
+        if (heading_locked) debug.status |= CAR_ATTITUDE_STATUS_HEADING_LOCKED;
+        float speed_scale;
+        const float tracking_command = update_direct_tracking(sensor_state, tracking_method, now, &speed_scale);
+        const float differential = clampf(tracking_command, -config.max_differential, config.max_differential);
+        const float step = Car_Lap_Task_Get_Arc_Config()->differential_slew_s2 * CAR_CONTROL_PERIOD_S;
+        const float limited = Car_Tracking_Approach(commanded_differential, differential, step);
+        if (limited != differential) debug.status |= CAR_ATTITUDE_STATUS_DIFFERENTIAL_SLEW_LIMITED;
+        if (sensor_state == 0U) debug.status |= CAR_ATTITUDE_STATUS_TRACKING_LOST;
+        commanded_differential = limited;
+        const float ramp = config.start_ramp_ms <= 0.0f ? 1.0f :
+            clampf((float)(now - enabled_ms) / config.start_ramp_ms, 0.0f, 1.0f);
+        const float base_speed = config.base_speed * ramp * speed_scale;
+        const int16_t left = (int16_t)clampf(base_speed - limited, -1000.0f, 1000.0f);
+        const int16_t right = (int16_t)clampf(base_speed + limited, -1000.0f, 1000.0f);
+        debug.commanded_base_speed = base_speed;
+        debug.tracking_angle = unwrapped_heading;
+        debug.target_heading = unwrapped_heading;
+        debug.differential = limited;
+        debug.left_target = (float)left;
+        debug.right_target = (float)right;
+        debug.tracking_command = tracking_command;
+        debug.tracking_speed_scale = speed_scale;
+        debug.tracking_lost_elapsed_ms = tracking_lost_since_ms == 0U ? 0.0f : (float)(now - tracking_lost_since_ms);
+        if (Car_Motor_Set_Speed(left, right, 0, 0)) stopped = 0U;
+        return;
+    }
     if (!new_sample)
     {
         if ((uint32_t)(now - last_sample_ms) > CAR_CONTROL_IMU_TIMEOUT_MS)
         {
+            memset(&debug, 0, sizeof(debug));
+            debug.status = CAR_ATTITUDE_STATUS_ENABLED;
             reset_controllers();
             reset_tracking_state();
             stop_output();
@@ -255,6 +394,10 @@ void Car_Attitude_Control_Process(void)
         return;
     }
 
+    memset(&debug, 0, sizeof(debug));
+    debug.status = CAR_ATTITUDE_STATUS_ENABLED | CAR_ATTITUDE_STATUS_IMU_VALID;
+    if (sensor_state != 0U) debug.status |= CAR_ATTITUDE_STATUS_TRACKING_ONLINE;
+    if (heading_locked) debug.status |= CAR_ATTITUDE_STATUS_HEADING_LOCKED;
     last_sequence = imu.sequence;
     last_sample_ms = now;
     const float heading = apply_axis_direction(imu.angle_rad.z, config.invert_z) * CAR_CONTROL_RAD_TO_DEG;
@@ -269,14 +412,24 @@ void Car_Attitude_Control_Process(void)
     }
     unwrapped_heading += wrap_angle(heading - previous_heading);
     previous_heading = heading;
-    const uint8_t tracking_method = (uint8_t)tracking_config.method;
-    const float optical = Car_Tracking_Method_Target_Offset(Gray_Sensor_Get_Stable(), tracking_method,
+    float speed_scale = 1.0f;
+    float tracking_command;
+    const float optical = Car_Tracking_Method_Target_Offset(sensor_state, tracking_method,
         tracking_config.layer1_weight_deg_s,
         tracking_config.layer2_weight_deg_s, tracking_config.layer3_weight_deg_s, tracking_config.layer4_weight_deg_s,
         CAR_CONTROL_TRACKING_LOOKAHEAD_S);
-    target_heading = unwrapped_heading + optical;
+    if (tracking_method >= (uint8_t)CAR_TRACKING_METHOD_DIRECT_ANGLE)
+    {
+        tracking_command = update_direct_tracking(sensor_state, tracking_method, now, &speed_scale);
+        if (sensor_state == 0U) debug.status |= CAR_ATTITUDE_STATUS_TRACKING_LOST;
+    }
+    else tracking_command = optical;
+    if (tracking_method == (uint8_t)CAR_TRACKING_METHOD_DIRECT_RATE) target_heading = unwrapped_heading;
+    else target_heading = unwrapped_heading +
+        (tracking_method == (uint8_t)CAR_TRACKING_METHOD_DIRECT_ANGLE ? tracking_command : optical);
     const float heading_error = unwrapped_heading - target_heading;
-    float target_rate = PIDController_Update(&heading_pid, 0.0f, heading_error);
+    float target_rate = tracking_method == (uint8_t)CAR_TRACKING_METHOD_DIRECT_RATE ? tracking_command :
+                        PIDController_Update(&heading_pid, 0.0f, heading_error);
     if (tracking_method == (uint8_t)CAR_TRACKING_METHOD_GEOMETRY &&
         (arc_target_rate != 0.0f || arc_commanded_rate != 0.0f))
     {
@@ -298,7 +451,7 @@ void Car_Attitude_Control_Process(void)
     commanded_differential = limited;
     const float ramp = config.start_ramp_ms <= 0.0f ? 1.0f :
         clampf((float)(now - enabled_ms) / config.start_ramp_ms, 0.0f, 1.0f);
-    const float base_speed = config.base_speed * ramp;
+    const float base_speed = config.base_speed * ramp * speed_scale;
     const float left_unclamped = base_speed - limited;
     const float right_unclamped = base_speed + limited;
     const int16_t left = (int16_t)clampf(left_unclamped, -1000.0f, 1000.0f);
@@ -318,5 +471,8 @@ void Car_Attitude_Control_Process(void)
     debug.differential = limited;
     debug.left_target = (float)left;
     debug.right_target = (float)right;
+    debug.tracking_command = tracking_command;
+    debug.tracking_speed_scale = speed_scale;
+    debug.tracking_lost_elapsed_ms = tracking_lost_since_ms == 0U ? 0.0f : (float)(now - tracking_lost_since_ms);
     if (Car_Motor_Set_Speed(left, right, 0, 0)) stopped = 0U;
 }

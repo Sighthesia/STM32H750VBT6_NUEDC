@@ -36,6 +36,36 @@ static inline float Car_Tracking_Method_Target_Offset(uint8_t sensor_state,
                                       layer3_weight, layer4_weight, lookahead_time_s);
 }
 
+static inline float Car_Tracking_Direct_Command(uint8_t sensor_state,
+                                                float layer1,
+                                                float layer2,
+                                                float layer3,
+                                                float layer4)
+{
+    return Car_Tracking_Target_Offset(sensor_state, layer1, layer2, layer3, layer4, 1.0f);
+}
+
+static inline float Car_Tracking_Lost_Command(float last_command,
+                                              uint8_t strategy,
+                                              uint32_t elapsed_ms,
+                                              uint32_t hold_ms)
+{
+    if (strategy == 2U) return 0.0f;
+    (void)elapsed_ms;
+    (void)hold_ms;
+    return last_command;
+}
+
+static inline float Car_Tracking_Lost_Speed_Scale(uint8_t strategy,
+                                                  uint32_t elapsed_ms,
+                                                  uint32_t hold_ms,
+                                                  float slow_ratio)
+{
+    if (strategy == 1U) return 1.0f;
+    if (strategy == 2U || elapsed_ms >= hold_ms) return slow_ratio;
+    return 1.0f;
+}
+
 static inline float Car_Tracking_Display_Correction(float target_offset)
 {
     return target_offset;

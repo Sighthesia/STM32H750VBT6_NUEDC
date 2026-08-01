@@ -55,14 +55,39 @@ typedef struct
     float layer2_weight_deg_s;
     float layer3_weight_deg_s;
     float layer4_weight_deg_s;
+    float angle_layer1_deg;
+    float angle_layer2_deg;
+    float angle_layer3_deg;
+    float angle_layer4_deg;
+    float rate_layer1_deg_s;
+    float rate_layer2_deg_s;
+    float rate_layer3_deg_s;
+    float rate_layer4_deg_s;
+    float open_loop_layer1;
+    float open_loop_layer2;
+    float open_loop_layer3;
+    float open_loop_layer4;
+    float lost_strategy;
+    float lost_hold_ms;
+    float lost_speed_ratio;
 } car_tracking_config_t;
 
 typedef enum
 {
     CAR_TRACKING_METHOD_OPTICAL_IMU = 0,
     CAR_TRACKING_METHOD_CENTER_LOCK = 1,
-    CAR_TRACKING_METHOD_GEOMETRY = 2
+    CAR_TRACKING_METHOD_GEOMETRY = 2,
+    CAR_TRACKING_METHOD_DIRECT_ANGLE = 3,
+    CAR_TRACKING_METHOD_DIRECT_RATE = 4,
+    CAR_TRACKING_METHOD_OPEN_LOOP = 5
 } car_tracking_method_t;
+
+typedef enum
+{
+    CAR_TRACKING_LOST_HOLD_THEN_SLOW = 0,
+    CAR_TRACKING_LOST_HOLD = 1,
+    CAR_TRACKING_LOST_STRAIGHT_SLOW = 2
+} car_tracking_lost_strategy_t;
 
 enum
 {
@@ -75,7 +100,9 @@ enum
     CAR_ATTITUDE_STATUS_RIGHT_SPEED_LIMITED = 1U << 6,
     CAR_ATTITUDE_STATUS_HEADING_LOCKED = 1U << 7,
     CAR_ATTITUDE_STATUS_ARC_ACTIVE = 1U << 8,
-    CAR_ATTITUDE_STATUS_DIFFERENTIAL_SLEW_LIMITED = 1U << 9
+    CAR_ATTITUDE_STATUS_DIFFERENTIAL_SLEW_LIMITED = 1U << 9,
+    CAR_ATTITUDE_STATUS_TRACKING_LOST = 1U << 10,
+    CAR_ATTITUDE_STATUS_OPEN_LOOP = 1U << 11
 };
 
 typedef struct
@@ -100,6 +127,9 @@ typedef struct
     float ladrc_output;
     float arc_feedforward_rate;
     float arc_optical_rate;
+    float tracking_command;
+    float tracking_speed_scale;
+    float tracking_lost_elapsed_ms;
     uint32_t status;
 } car_attitude_control_debug_t;
 

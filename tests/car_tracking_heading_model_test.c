@@ -1,10 +1,21 @@
 #include "Car_Tracking_Model.h"
+#include "Car_Attitude_Control.h"
 
 #include <assert.h>
 #include <stdio.h>
 
 int main(void)
 {
+    assert(CAR_TRACKING_METHOD_OPTICAL_IMU == 0);
+    assert(CAR_TRACKING_METHOD_CENTER_LOCK == 1);
+    assert(CAR_TRACKING_METHOD_GEOMETRY == 2);
+    assert(CAR_TRACKING_METHOD_DIRECT_ANGLE == 3);
+    assert(CAR_TRACKING_METHOD_DIRECT_RATE == 4);
+    assert(CAR_TRACKING_METHOD_OPEN_LOOP == 5);
+    assert(CAR_TRACKING_LOST_HOLD_THEN_SLOW == 0);
+    assert(CAR_TRACKING_LOST_HOLD == 1);
+    assert(CAR_TRACKING_LOST_STRAIGHT_SLOW == 2);
+
     const float layer1 = 7.0f;
     const float layer2 = 25.0f;
     const float layer3 = 55.0f;
@@ -31,6 +42,20 @@ int main(void)
                                              lookahead_s) == 0.0f);
     assert(Car_Tracking_Method_Target_Offset(0x08U, 1U, layer1, layer2, layer3, layer4,
                                              lookahead_s) == 0.35f);
+    assert(Car_Tracking_Direct_Command(0x08U, 7.0f, 25.0f, 60.0f, 101.0f) == 7.0f);
+    assert(Car_Tracking_Direct_Command(0x10U, 7.0f, 25.0f, 60.0f, 101.0f) == -7.0f);
+    assert(Car_Tracking_Direct_Command(0x04U, 7.0f, 25.0f, 60.0f, 101.0f) == 25.0f);
+    assert(Car_Tracking_Direct_Command(0x40U, 7.0f, 25.0f, 60.0f, 101.0f) == -60.0f);
+    assert(Car_Tracking_Direct_Command(0x01U, 7.0f, 25.0f, 60.0f, 101.0f) == 101.0f);
+    assert(Car_Tracking_Direct_Command(0x80U, 7.0f, 25.0f, 60.0f, 101.0f) == -101.0f);
+    assert(Car_Tracking_Direct_Command(0x18U, 7.0f, 25.0f, 60.0f, 101.0f) == 0.0f);
+    assert(Car_Tracking_Lost_Command(60.0f, 0U, 200U, 150U) == 60.0f);
+    assert(Car_Tracking_Lost_Command(-60.0f, 1U, 1000U, 150U) == -60.0f);
+    assert(Car_Tracking_Lost_Command(60.0f, 2U, 0U, 150U) == 0.0f);
+    assert(Car_Tracking_Lost_Speed_Scale(0U, 149U, 150U, 0.5f) == 1.0f);
+    assert(Car_Tracking_Lost_Speed_Scale(0U, 150U, 150U, 0.5f) == 0.5f);
+    assert(Car_Tracking_Lost_Speed_Scale(1U, 1000U, 150U, 0.5f) == 1.0f);
+    assert(Car_Tracking_Lost_Speed_Scale(2U, 0U, 150U, 0.5f) == 0.5f);
     assert(Car_Tracking_Display_Correction(0.35f) == 0.35f);
     assert(Car_Tracking_Display_Correction(-0.35f) == -0.35f);
     assert(Car_Tracking_Display_Correction(0.0f) == 0.0f);
