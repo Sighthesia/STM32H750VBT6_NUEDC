@@ -67,6 +67,7 @@ typedef struct
 void Car_Lap_Task_Init(void);
 void Car_Lap_Task_Process(void);
 bool Car_Lap_Task_Start(void);
+bool Car_Lap_Task_Start_Test(uint8_t test_id);
 bool Car_Lap_Task_Stop(void);
 bool Car_Lap_Task_Set_Stop_Delay(uint32_t delay_ms);
 uint32_t Car_Lap_Task_Get_Stop_Delay(void);

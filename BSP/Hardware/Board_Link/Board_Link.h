@@ -6,8 +6,6 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-extern SPI_HandleTypeDef hspi3;
-
 void Board_Link_Init(void);
 void Board_Link_Process(void);
 void Board_Link_NSS_Falling_Callback(void);
