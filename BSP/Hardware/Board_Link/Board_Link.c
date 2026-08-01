@@ -4,6 +4,7 @@
 #include "Gray_Sensor.h"
 #include "Tracking_Link.h"
 #include "ZDT_Stepper.h"
+#include "Car_Lap_Task.h"
 
 #include <string.h>
 
@@ -31,7 +32,13 @@ static uint32_t initialized_ms;
 static uint8_t sequence;
 static uint8_t was_online;
 static uint8_t offline_stop_sent;
+static uint8_t last_command;
+static uint8_t command_ack;
 SPI_HandleTypeDef hspi3;
+
+#define BOARD_LINK_COMMAND_SELECT  0x10U
+#define BOARD_LINK_COMMAND_START   0x20U
+#define BOARD_LINK_COMMAND_STOP    0x30U
 
 static void Board_Link_SPI_Init(void)
 {
@@ -119,7 +126,7 @@ static void Board_Link_Build_Frame(void)
     tx_frame[4] = sequence++;
     tx_frame[5] = App_Role_Get() == APP_ROLE_CAR ? Gray_Sensor_Read() : 0U;
     tx_frame[6] = App_Role_Get() == APP_ROLE_ARM && Tracking_Link_Is_Online() ? 0x01U : 0U;
-    tx_frame[7] = 0U;
+    tx_frame[7] = App_Role_Get() == APP_ROLE_CAR ? command_ack : 0U;
     tx_frame[8] = Board_Link_Crc8(tx_frame, BOARD_LINK_FRAME_SIZE - 1U);
 }
 
@@ -133,6 +140,21 @@ static void Board_Link_Parse_Frame(void)
         peer_gray = rx_frame[5];
         peer_flags = rx_frame[6];
         last_rx_ms = HAL_GetTick();
+        if (App_Role_Get() == APP_ROLE_CAR && rx_frame[7] != 0U && rx_frame[7] != last_command)
+        {
+            uint8_t command = rx_frame[7] & 0xF0U;
+            uint8_t test_id = rx_frame[7] & 0x0FU;
+            bool accepted = false;
+
+            if (test_id >= 1U && test_id <= 6U)
+            {
+                if (command == BOARD_LINK_COMMAND_SELECT) accepted = true;
+                else if (command == BOARD_LINK_COMMAND_STOP) accepted = Car_Lap_Task_Stop();
+                else if (command == BOARD_LINK_COMMAND_START) accepted = test_id < 4U || Car_Lap_Task_Start();
+            }
+            last_command = rx_frame[7];
+            command_ack = accepted ? rx_frame[7] : 0U;
+        }
     }
 }
 
@@ -163,6 +185,8 @@ void Board_Link_Init(void)
     sequence = 0U;
     was_online = 0U;
     offline_stop_sent = 0U;
+    last_command = 0U;
+    command_ack = 0U;
 
 }
 

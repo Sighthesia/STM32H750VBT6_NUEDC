@@ -44,6 +44,7 @@ typedef struct
     float feedforward_rate_max_deg_s;
     float feedforward_rate_slew_deg_s2;
     float differential_slew_s2;
+    float wheel_track_m;
 } car_lap_arc_config_t;
 
 typedef struct
@@ -53,6 +54,7 @@ typedef struct
     uint32_t stop_delay_ms;
     float distance_m;
     float average_speed_mps;
+    float current_speed_mps;
     float relative_yaw_deg;
     uint8_t gray_state;
     uint8_t half_turn_armed;

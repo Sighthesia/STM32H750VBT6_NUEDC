@@ -40,6 +40,7 @@
 #define ANO_ID_TRACKING_DIAGNOSTIC 0xF4U
 #define ANO_ID_DIAGNOSTIC 0xF5U
 #define ANO_ID_STEPPER_FF_DIAGNOSTIC 0xF6U
+#define ANO_ID_GEOMETRY_DIAGNOSTIC 0xF7U
 #define ANO_ID_B0_CALIBRATION 0xF8U
 #define ANO_RX_QUEUE_SIZE 128U
 #define ANO_DATA_MAX 96U
@@ -59,7 +60,8 @@
 #define ANO_ARM_ANGLE_STORAGE_VERSION 1U
 #define ANO_ARM_CALIBRATION_STORAGE_MAGIC 0x41433350UL
 #define ANO_ARM_CALIBRATION_STORAGE_VERSION 1U
-#define ANO_STORAGE_VERSION 19U
+#define ANO_STORAGE_VERSION 20U
+#define ANO_GEOMETRY_DIAGNOSTIC_FLOAT_COUNT 23U
 #define ARM_HOME_STATUS_PERIOD_MS 50U
 #define ARM_HOME_SETTLE_MS 100U
 #define ARM_STARTUP_HOME_TIMEOUT_MS 22000U
@@ -185,6 +187,7 @@ enum {
     ATTITUDE_LADRC_TARGET_RATE_SLEW,
     ATTITUDE_LADRC_DIFFERENTIAL_SLEW,
     ATTITUDE_START_RAMP_MS,
+    CAR_ARC_WHEEL_TRACK,
     ANO_PARAM_COUNT
 };
 
@@ -1302,6 +1305,7 @@ static float *parameter(uint16_t id)
         };
         return arc_values[id - CAR_ARC_STRAIGHT_LENGTH];
     }
+    if (id == CAR_ARC_WHEEL_TRACK) return &Car_Lap_Task_Get_Arc_Config()->wheel_track_m;
     if (id == IMU_RATE_Z_INVERTED) return &attitude->rate_feedback_inverted;
     if (id == ATTITUDE_START_RAMP_MS) return &attitude->start_ramp_ms;
     if (id == ATTITUDE_LADRC_TARGET_RATE_SLEW)
@@ -1496,6 +1500,7 @@ static bool write_arc_parameter(uint16_t parameter_id, float value)
     case CAR_ARC_FEEDFORWARD_MAX: next.feedforward_rate_max_deg_s = value; break;
     case CAR_ARC_FEEDFORWARD_SLEW: next.feedforward_rate_slew_deg_s2 = value; break;
     case CAR_ARC_DIFFERENTIAL_SLEW: next.differential_slew_s2 = value; break;
+    case CAR_ARC_WHEEL_TRACK: next.wheel_track_m = value; break;
     default: return false;
     }
     return Car_Lap_Task_Apply_Arc_Config(&next);
@@ -1647,6 +1652,7 @@ static bool parameter_is_visible(uint16_t parameter_id)
         case CAR_ARC_FEEDFORWARD_SLEW:
         case CAR_ARC_DIFFERENTIAL_SLEW:
         case ATTITUDE_START_RAMP_MS:
+        case CAR_ARC_WHEEL_TRACK:
             return true;
         default:
             return false;
@@ -1792,6 +1798,22 @@ static void send_param_info(uint16_t protocol_index)
     {
         static const char name[] = "缓启动时间";
         static const char info[] = "基础速度从零爬升至设定值的时间，单位毫秒";
+        uint8_t d[ANO_DATA_MAX] = {0};
+        uint16_t i = 0U;
+
+        put_u16(d, &i, protocol_index);
+        d[i++] = 8U;
+        strncpy((char *)&d[i], name, 20U);
+        i += 20U;
+        strncpy((char *)&d[i], info, sizeof(d) - i - 1U);
+        i += (uint16_t)strlen((const char *)&d[i]);
+        send_frame(ANO_ID_PARAM_INFO, d, i);
+        return;
+    }
+    if (id == CAR_ARC_WHEEL_TRACK)
+    {
+        static const char name[] = "两轮间距";
+        static const char info[] = "左右驱动轮中心距离，单位米；用于弯道理论轮速观测";
         uint8_t d[ANO_DATA_MAX] = {0};
         uint16_t i = 0U;
 
@@ -2659,6 +2681,62 @@ static void send_tracking_diagnostic(void)
     send_frame(ANO_ID_TRACKING_DIAGNOSTIC, d, i);
 }
 
+/* 0xF7 geometry diagnostic V1, 50 Hz. Theoretical wheel speeds are m/s;
+ * motor speeds retain the motor driver's native unit for direct comparison. */
+static void send_geometry_diagnostic(void)
+{
+    const car_attitude_control_debug_t *control = Car_Attitude_Control_Get_Debug();
+    const car_lap_arc_config_t *arc = Car_Lap_Task_Get_Arc_Config();
+    const car_motor_telemetry_t *motor = Car_Motor_Get_Telemetry();
+    car_lap_status_t lap;
+    uint8_t d[ANO_DATA_MAX];
+    uint16_t i = 0U;
+    float omega_theory_deg_s = 0.0f;
+    float left_theory_mps = 0.0f;
+    float right_theory_mps = 0.0f;
+    bool arc_active;
+
+    _Static_assert(ANO_GEOMETRY_DIAGNOSTIC_FLOAT_COUNT * sizeof(float) <= ANO_DATA_MAX,
+                   "Geometry diagnostic frame exceeds ANO data capacity");
+
+    if (!tx_has_capacity(1U)) return;
+    Car_Lap_Task_Get_Status(&lap);
+    arc_active = lap.segment == CAR_LAP_SEGMENT_ARC_BC || lap.segment == CAR_LAP_SEGMENT_ARC_DA;
+    if (arc_active && arc->arc_radius_m > 0.0f)
+    {
+        omega_theory_deg_s = lap.current_speed_mps / arc->arc_radius_m * 57.2957795f;
+        left_theory_mps = lap.current_speed_mps -
+                          omega_theory_deg_s / 57.2957795f * arc->wheel_track_m * 0.5f;
+        right_theory_mps = lap.current_speed_mps +
+                           omega_theory_deg_s / 57.2957795f * arc->wheel_track_m * 0.5f;
+    }
+
+    put_float(d, &i, 1.0f); /* Frame format version. */
+    put_float(d, &i, (float)lap.state);
+    put_float(d, &i, (float)lap.segment);
+    put_float(d, &i, (float)lap.elapsed_ms * 0.001f);
+    put_float(d, &i, lap.distance_m);
+    put_float(d, &i, lap.current_speed_mps);
+    put_float(d, &i, arc->arc_radius_m);
+    put_float(d, &i, arc->wheel_track_m);
+    put_float(d, &i, omega_theory_deg_s);
+    put_float(d, &i, control->target_rate);
+    put_float(d, &i, control->measured_rate);
+    put_float(d, &i, control->tracking_angle);
+    put_float(d, &i, control->target_heading);
+    put_float(d, &i, (float)((control->status & CAR_ATTITUDE_STATUS_HEADING_LOCKED) != 0U));
+    put_float(d, &i, (float)lap.geometry_tracking_valid);
+    put_float(d, &i, left_theory_mps);
+    put_float(d, &i, right_theory_mps);
+    put_float(d, &i, control->left_target);
+    put_float(d, &i, control->right_target);
+    put_float(d, &i, motor->speed[0]);
+    put_float(d, &i, motor->speed[1]);
+    put_float(d, &i, control->differential);
+    put_float(d, &i, (float)control->status);
+    send_frame(ANO_ID_GEOMETRY_DIAGNOSTIC, d, i);
+}
+
 static int16_t float_to_i16(float value)
 {
     if (value > 32767.0f) return INT16_MAX;
@@ -2828,7 +2906,8 @@ static void handle(uint8_t source, uint8_t id, const uint8_t *d, uint16_t n, uin
             accepted = write_feedforward_parameter(parameter_id, value);
         } else if (parameter_id >= TRACKING_LAYER1_WEIGHT && parameter_id <= TRACKING_LAYER4_WEIGHT) {
             accepted = write_tracking_parameter(parameter_id, value);
-        } else if (parameter_id >= CAR_ARC_STRAIGHT_LENGTH && parameter_id <= CAR_ARC_DIFFERENTIAL_SLEW) {
+        } else if ((parameter_id >= CAR_ARC_STRAIGHT_LENGTH && parameter_id <= CAR_ARC_DIFFERENTIAL_SLEW) ||
+                   parameter_id == CAR_ARC_WHEEL_TRACK) {
             accepted = write_arc_parameter(parameter_id, value);
         } else if (parameter_id >= ARM_LIMIT_MIN && parameter_id <= ARM_BALANCE_POSITION) {
             accepted = write_arm_parameter(parameter_id, value);
@@ -2949,6 +3028,7 @@ void ANO_Host_Process(void)
         {
             send_control_telemetry();
             send_tracking_diagnostic();
+            send_geometry_diagnostic();
         }
         else send_stepper_feedforward_diagnostic();
     }

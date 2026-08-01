@@ -49,10 +49,11 @@ void Car_Lap_Task_Reset_Arc_Config(void)
     arc_config.arc_length_m = 1.5707963f;
     arc_config.arc_exit_yaw_deg = 165.0f;
     arc_config.optical_rate_limit_deg_s = 15.0f;
-    arc_config.feedforward_rate_min_deg_s = 15.0f;
+    arc_config.feedforward_rate_min_deg_s = 0.0f;
     arc_config.feedforward_rate_max_deg_s = 120.0f;
     arc_config.feedforward_rate_slew_deg_s2 = 300.0f;
     arc_config.differential_slew_s2 = 1500.0f;
+    arc_config.wheel_track_m = 0.15f;
 }
 
 bool Car_Lap_Task_Apply_Arc_Config(const car_lap_arc_config_t *next)
@@ -63,7 +64,7 @@ bool Car_Lap_Task_Apply_Arc_Config(const car_lap_arc_config_t *next)
         !isfinite(next->feedforward_rate_min_deg_s) ||
         !isfinite(next->feedforward_rate_max_deg_s) ||
         !isfinite(next->feedforward_rate_slew_deg_s2) ||
-        !isfinite(next->differential_slew_s2) ||
+        !isfinite(next->differential_slew_s2) || !isfinite(next->wheel_track_m) ||
         next->straight_length_m <= 0.1f || next->straight_length_m > 10.0f ||
         next->arc_radius_m <= 0.1f || next->arc_radius_m > 5.0f ||
         next->arc_length_m <= 0.1f || next->arc_length_m > 20.0f ||
@@ -75,7 +76,8 @@ bool Car_Lap_Task_Apply_Arc_Config(const car_lap_arc_config_t *next)
         next->feedforward_rate_max_deg_s > 720.0f ||
         next->feedforward_rate_slew_deg_s2 <= 0.0f ||
         next->feedforward_rate_slew_deg_s2 > 5000.0f ||
-        next->differential_slew_s2 <= 0.0f || next->differential_slew_s2 > 20000.0f)
+        next->differential_slew_s2 <= 0.0f || next->differential_slew_s2 > 20000.0f ||
+        next->wheel_track_m <= 0.05f || next->wheel_track_m > 0.50f)
     {
         return false;
     }
@@ -413,6 +415,7 @@ void Car_Lap_Task_Get_Status(car_lap_status_t *status)
     status->stop_delay_ms = stop_delay_ms;
     status->distance_m = distance_m;
     status->average_speed_mps = average_speed_mps;
+    status->current_speed_mps = current_speed_mps;
     status->relative_yaw_deg = Car_Attitude_Control_Get_Debug()->tracking_angle;
     status->gray_state = Gray_Sensor_Get_Stable() & CAR_LAP_CROSS_PATTERN;
     status->half_turn_armed = half_turn_armed;
