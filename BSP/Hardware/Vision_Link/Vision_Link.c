@@ -11,9 +11,6 @@
 #define VISION_LINK_LINE_MAX_LENGTH 48U
 #define VISION_LINK_TIMEOUT_MS 100U
 #define VISION_LINK_MAX_POSITION_STEP_CM 8.0f
-#define VISION_LINK_KALMAN_MEASUREMENT_NOISE 0.04f
-#define VISION_LINK_KALMAN_PROCESS_NOISE_POSITION 0.02f
-#define VISION_LINK_KALMAN_PROCESS_NOISE_VELOCITY 1.0f
 
 static uint8_t vision_rx_byte;
 static uint8_t vision_rx_line[VISION_LINK_LINE_MAX_LENGTH];
@@ -30,6 +27,16 @@ static float kalman_covariance[2][2];
 static uint8_t kalman_initialized;
 static uint8_t kalman_enabled = 1U;
 static uint32_t kalman_last_update_ms;
+static float kalman_measurement_noise = 0.02f;
+static float kalman_process_noise_position = 0.02f;
+static float kalman_process_noise_velocity = 0.3f;
+
+void Vision_Link_Set_Kalman_Parameters(float measurement_noise, float process_noise_position, float process_noise_velocity)
+{
+    kalman_measurement_noise = measurement_noise;
+    kalman_process_noise_position = process_noise_position;
+    kalman_process_noise_velocity = process_noise_velocity;
+}
 
 static void Vision_Link_Reset_Kalman_State(float position)
 {
@@ -63,12 +70,12 @@ static void Vision_Link_Update_Kalman(float measurement, float dt)
     if (dt > 0.2f) dt = 0.2f;
     predicted_position = kalman_position + dt * kalman_velocity;
     predicted_covariance00 = kalman_covariance[0][0] + dt * (kalman_covariance[1][0] + kalman_covariance[0][1]) +
-                             dt * dt * kalman_covariance[1][1] + VISION_LINK_KALMAN_PROCESS_NOISE_POSITION;
+                             dt * dt * kalman_covariance[1][1] + kalman_process_noise_position;
     predicted_covariance01 = kalman_covariance[0][1] + dt * kalman_covariance[1][1];
     predicted_covariance10 = kalman_covariance[1][0] + dt * kalman_covariance[1][1];
-    predicted_covariance11 = kalman_covariance[1][1] + VISION_LINK_KALMAN_PROCESS_NOISE_VELOCITY * dt;
+    predicted_covariance11 = kalman_covariance[1][1] + kalman_process_noise_velocity * dt;
     innovation = measurement - predicted_position;
-    innovation_covariance = predicted_covariance00 + VISION_LINK_KALMAN_MEASUREMENT_NOISE;
+    innovation_covariance = predicted_covariance00 + kalman_measurement_noise;
     gain_position = predicted_covariance00 / innovation_covariance;
     gain_velocity = predicted_covariance10 / innovation_covariance;
     kalman_position = predicted_position + gain_position * innovation;
@@ -121,6 +128,13 @@ void Vision_Link_Set_Kalman_Enabled(bool enabled)
 {
     kalman_enabled = enabled ? 1U : 0U;
     Vision_Link_Reset_Kalman();
+}
+
+void Vision_Link_Set_Kalman_Parameters(float measurement_noise, float process_noise_position, float process_noise_velocity)
+{
+    kalman_measurement_noise = measurement_noise;
+    kalman_process_noise_position = process_noise_position;
+    kalman_process_noise_velocity = process_noise_velocity;
 }
 
 void Vision_Link_Reset_Kalman(void)

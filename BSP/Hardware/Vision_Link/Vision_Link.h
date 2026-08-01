@@ -27,6 +27,7 @@ void Vision_Link_Process(void);
 void Vision_Link_UART_RxCplt_Callback(void);
 void Vision_Link_UART_Error_Callback(void);
 void Vision_Link_Set_Kalman_Enabled(bool enabled);
+void Vision_Link_Set_Kalman_Parameters(float measurement_noise, float process_noise_position, float process_noise_velocity);
 void Vision_Link_Reset_Kalman(void);
 bool Vision_Link_Get_Sample(vision_link_sample_t *sample);
 bool Vision_Link_Get_Last_Sample(vision_link_sample_t *sample);
