@@ -18,8 +18,7 @@
 #define CAR_LAP_ARM_YAW_DEG           180.0f
 #define CAR_LAP_CROSS_CONFIRM_MS      50U
 #define CAR_LAP_RAD_TO_DEG             57.2957795f
-#define CAR_LAP_TEST4_STOP_SENSOR_MASK 0xC0U
-#define CAR_LAP_DEFAULT_RAMP_MS        600U
+#define CAR_LAP_LINE_STOP_SENSOR_MASK  0x3CU
 
 static car_lap_state_t state;
 static uint32_t started_ms;
@@ -43,23 +42,35 @@ static float current_speed_mps;
 static car_lap_segment_t segment;
 static uint8_t geometry_tracking_valid;
 static car_lap_arc_config_t arc_config;
-static uint8_t test4_active;
-static uint32_t test4_stop_started_ms;
-static uint32_t test4_ramp_ms;
+static uint8_t line_stop_test;
 static float test4_cruise_speed;
 static float test4_saved_tracking_method;
 
+static void update_odometry(void);
+
 static void reset_test4_control(void)
 {
-    if (test4_active != 0U)
+    if (line_stop_test == 4U)
     {
         car_attitude_control_config_t *control = Car_Attitude_Control_Get_Config();
 
         control->base_speed = test4_cruise_speed;
         Car_Attitude_Control_Get_Tracking_Config()->method = test4_saved_tracking_method;
     }
-    test4_active = 0U;
-    test4_stop_started_ms = 0U;
+    line_stop_test = 0U;
+}
+
+static void finish_line_stop_task(uint32_t now)
+{
+    elapsed_ms = now - started_ms;
+    update_odometry();
+    segment = CAR_LAP_SEGMENT_FINISH;
+    reset_test4_control();
+    condition_started_ms = 0U;
+    half_turn_armed = 0U;
+    (void)Car_Attitude_Control_Set_Arc_Rate(0.0f);
+    (void)Car_Attitude_Control_Set_Enabled(false);
+    state = CAR_LAP_STATE_FINISHED;
 }
 
 void Car_Lap_Task_Reset_Arc_Config(void)
@@ -217,9 +228,7 @@ void Car_Lap_Task_Init(void)
     current_speed_mps = 0.0f;
     segment = CAR_LAP_SEGMENT_WAIT_START;
     geometry_tracking_valid = 0U;
-    test4_active = 0U;
-    test4_stop_started_ms = 0U;
-    test4_ramp_ms = 0U;
+    line_stop_test = 0U;
     test4_cruise_speed = 0.0f;
     test4_saved_tracking_method = 0.0f;
     Car_Lap_Task_Reset_Arc_Config();
@@ -278,16 +287,15 @@ bool Car_Lap_Task_Start_Test(uint8_t test_id)
 {
     car_attitude_control_config_t *control;
 
-    if (test_id != 4U) return Car_Lap_Task_Start();
+    if (test_id != 2U && test_id != 4U) return Car_Lap_Task_Start();
     if (!Car_Lap_Task_Start()) return false;
 
+    line_stop_test = test_id;
+    if (test_id != 4U) return true;
+
     control = Car_Attitude_Control_Get_Config();
-    test4_active = 1U;
-    test4_stop_started_ms = 0U;
     test4_cruise_speed = control->base_speed;
     test4_saved_tracking_method = Car_Attitude_Control_Get_Tracking_Config()->method;
-    test4_ramp_ms = control->start_ramp_ms > 0.0f ?
-                    (uint32_t)control->start_ramp_ms : CAR_LAP_DEFAULT_RAMP_MS;
     Car_Attitude_Control_Get_Tracking_Config()->method =
         (float)CAR_TRACKING_METHOD_OPTICAL_IMU;
     return true;
@@ -369,7 +377,10 @@ void Car_Lap_Task_Process(void)
 
     if (state == CAR_LAP_STATE_WAIT_LEAVE)
     {
-        if (is_cross(CAR_LAP_CROSS_PATTERN))
+        const uint8_t leave_pattern = line_stop_test != 0U ?
+                                      CAR_LAP_LINE_STOP_SENSOR_MASK : CAR_LAP_CROSS_PATTERN;
+
+        if (is_cross(leave_pattern))
         {
             condition_started_ms = 0U;
         }
@@ -393,12 +404,11 @@ void Car_Lap_Task_Process(void)
         const float segment_distance = distance_m - segment_started_distance_m;
         const float segment_yaw = absolute_value(control->tracking_angle - segment_started_yaw_deg);
 
-        if (test4_active != 0U)
+        if (line_stop_test != 0U)
         {
-            if ((Gray_Sensor_Get_Stable() & CAR_LAP_TEST4_STOP_SENSOR_MASK) != 0U)
+            if (is_cross(CAR_LAP_LINE_STOP_SENSOR_MASK))
             {
-                test4_stop_started_ms = now;
-                state = CAR_LAP_STATE_STOP_DELAY;
+                finish_line_stop_task(now);
             }
             return;
         }
@@ -449,25 +459,6 @@ void Car_Lap_Task_Process(void)
             stop_delay_started_ms = now;
             condition_started_ms = 0U;
         }
-    }
-    else if (state == CAR_LAP_STATE_STOP_DELAY && test4_active != 0U)
-    {
-        const uint32_t elapsed_stop_ms = now - test4_stop_started_ms;
-        car_attitude_control_config_t *control = Car_Attitude_Control_Get_Config();
-
-        if (elapsed_stop_ms < test4_ramp_ms)
-        {
-            control->base_speed = test4_cruise_speed *
-                                  (float)(test4_ramp_ms - elapsed_stop_ms) /
-                                  (float)test4_ramp_ms;
-            return;
-        }
-        elapsed_ms = now - started_ms;
-        segment = CAR_LAP_SEGMENT_FINISH;
-        reset_test4_control();
-        (void)Car_Attitude_Control_Set_Arc_Rate(0.0f);
-        (void)Car_Attitude_Control_Set_Enabled(false);
-        state = CAR_LAP_STATE_FINISHED;
     }
     else if (state == CAR_LAP_STATE_STOP_DELAY &&
              (uint32_t)(now - stop_delay_started_ms) >= stop_delay_ms)
