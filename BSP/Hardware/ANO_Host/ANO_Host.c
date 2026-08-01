@@ -59,7 +59,7 @@
 #define ANO_ARM_ANGLE_STORAGE_VERSION 1U
 #define ANO_ARM_CALIBRATION_STORAGE_MAGIC 0x41433350UL
 #define ANO_ARM_CALIBRATION_STORAGE_VERSION 1U
-#define ANO_STORAGE_VERSION 18U
+#define ANO_STORAGE_VERSION 19U
 #define ARM_HOME_STATUS_PERIOD_MS 50U
 #define ARM_HOME_SETTLE_MS 100U
 #define ARM_STARTUP_HOME_TIMEOUT_MS 22000U
@@ -184,6 +184,7 @@ enum {
     CAR_ARC_DIFFERENTIAL_SLEW,
     ATTITUDE_LADRC_TARGET_RATE_SLEW,
     ATTITUDE_LADRC_DIFFERENTIAL_SLEW,
+    ATTITUDE_START_RAMP_MS,
     ANO_PARAM_COUNT
 };
 
@@ -191,22 +192,12 @@ typedef struct { uint8_t state, source, destination, id, sum, checksum; uint16_t
 typedef struct { uint8_t cid[3]; const char *name; const char *info; } ano_command_desc_t;
 
 static const ano_command_desc_t car_commands[] = {
-    {{0x03U, 0x03U, 0x00U}, "四驱停止", "将四路电机速度设为零"},
-    {{0x03U, ANO_COMMAND_CAR_READ_FLASH, 0x00U}, "读取四驱配置", "请求四路电机驱动读取保存的配置"},
-    {{0x03U, ANO_COMMAND_CAR_FACTORY_RESET, 0x00U}, "四驱恢复出厂", "请求四路电机驱动恢复出厂配置"},
-    {{0x03U, ANO_COMMAND_CAR_APPLY_CONFIG, 0x00U}, "下发四驱配置", "按类型、死区、相位线、减速比、轮径和PID下发当前配置"},
-    {{0x03U, ANO_COMMAND_CAR_DEBUG_ENTER, 0x00U}, "进入M1M2调试", "四路PWM置零后允许M1和M2调试"},
-    {{0x03U, ANO_COMMAND_CAR_DEBUG_START, 0x00U}, "启动M1M2调试", "按调试参数仅输出M1和M2，M3和M4为零"},
-    {{0x03U, ANO_COMMAND_CAR_DEBUG_STOP, 0x00U}, "停止M1M2调试", "四路PWM置零并退出M1和M2调试模式"},
-    {{0x03U, ANO_COMMAND_CAR_RESTORE_DEFAULTS, 0x00U}, "完整恢复默认", "清除本机配置并恢复电机驱动默认设置"},
-    {{0x03U, ANO_COMMAND_ATTITUDE_ENABLE, 0x00U}, "启动陀螺仪控制", "启动航向和角速度双环控制"},
-    {{0x03U, ANO_COMMAND_ATTITUDE_DISABLE, 0x00U}, "停止陀螺仪控制", "停止双环控制并将M1和M2速度置零"},
-    {{0x03U, ANO_COMMAND_RATE_STEP_TEST, 0x00U}, "角速度诊断", "唯一绕过航向角外环的诊断命令，按配置幅度执行角速度阶跃和回零"},
-    {{0x03U, ANO_COMMAND_ANGLE_STEP_TEST, 0x00U}, "航向角阶跃测试", "按配置幅度执行相对航向角正阶跃和回零响应"},
-    {{0x03U, ANO_COMMAND_STEPPER_FF_CALIBRATE, 0x00U}, "前馈零偏校准", "保持小车静止并重新采集一秒IMU加速度零偏"},
-    {{0x03U, ANO_COMMAND_CAR_LAP_START, 0x00U}, "启动一圈停车", "启用循迹并计时，返回A点十字后按补偿停车"},
-    {{0x03U, ANO_COMMAND_CAR_LAP_STOP, 0x00U}, "停止一圈任务", "立即停止循迹并冻结本圈时间、里程和平均速度"},
-    {{0x03U, ANO_COMMAND_CAR_B0_CALIBRATE, 0x00U}, "b0开环标定", "按b0标定参数执行正反差速脉冲并上传标定遥测"}
+    {{0x03U, 0x03U, 0x00U}, "停止循迹任务", "立即停止任务2、5、6循迹并冻结任务状态"},
+    {{0x03U, ANO_COMMAND_CAR_RESTORE_DEFAULTS, 0x00U}, "恢复循迹默认", "恢复惯导循迹、任务几何与里程标定默认值"},
+    {{0x03U, ANO_COMMAND_ATTITUDE_ENABLE, 0x00U}, "启动任务2循迹", "启动惯导闭环循迹，基础速度按缓启动参数爬升"},
+    {{0x03U, ANO_COMMAND_ATTITUDE_DISABLE, 0x00U}, "停止任务2循迹", "停止惯导闭环循迹并将驱动速度置零"},
+    {{0x03U, ANO_COMMAND_CAR_LAP_START, 0x00U}, "启动任务5/6一圈", "启动一圈循迹、里程、弯道前馈和回A停车"},
+    {{0x03U, ANO_COMMAND_CAR_LAP_STOP, 0x00U}, "停止任务5/6一圈", "立即停止一圈任务并冻结时间、里程和平均速度"}
 };
 
 static uint8_t rx_byte;
@@ -437,7 +428,6 @@ static void put_i16(uint8_t *d, uint16_t *i, int16_t v) { put_u16(d, i, (uint16_
 static void put_i32(uint8_t *d, uint16_t *i, int32_t v) { memcpy(&d[*i], &v, 4U); *i += 4U; }
 static void put_float(uint8_t *d, uint16_t *i, float v) { memcpy(&d[*i], &v, 4U); *i += 4U; }
 static uint16_t get_u16(const uint8_t *d) { return (uint16_t)d[0] | ((uint16_t)d[1] << 8U); }
-static int16_t get_i16(const uint8_t *d) { return (int16_t)get_u16(d); }
 static float get_float(const uint8_t *d) { float v; memcpy(&v, d, 4U); return v; }
 
 static bool baud_rate_is_valid(uint32_t baud_rate)
@@ -461,8 +451,8 @@ static void reset_local_defaults(void)
     car_debug_m1_direction = 0.0f;
     car_debug_m2_value = 0.0f;
     car_debug_m2_direction = 0.0f;
-    car_m1_direction = 0.0f;
-    car_m2_direction = 1.0f;
+    car_m1_direction = 1.0f;
+    car_m2_direction = 0.0f;
     car_b0_start_differential = 100.0f;
     car_b0_differential_step = 50.0f;
     car_b0_level_count = 3.0f;
@@ -473,8 +463,8 @@ static void reset_local_defaults(void)
     arm_motor_telemetry_hz = ARM_MOTOR_TELEMETRY_DEFAULT_HZ;
     arm_angle_target = 0.0f;
     (void)Arm_Angle_Control_Set_Target(arm_angle_target);
-    (void)Car_Motor_Set_Direction(0U, false);
-    (void)Car_Motor_Set_Direction(1U, true);
+    (void)Car_Motor_Set_Direction(0U, true);
+    (void)Car_Motor_Set_Direction(1U, false);
     car_debug_active = 0U;
     arm_limit_min = 0.0f;
     arm_limit_max = 0.0f;
@@ -693,6 +683,8 @@ static void load_storage(void)
     }
     if (record.version == 17U)
     {
+        /* v17 stores the old LADRC-bearing layout; do not reinterpret it as PID-only config. */
+        return;
         ano_storage_record_v17_t legacy = {0};
         if (!W25Qxx_Read(ANO_STORAGE_ADDRESS, (uint8_t *)&legacy, sizeof(legacy)) ||
             !baud_rate_is_valid(legacy.baud_rate) ||
@@ -730,8 +722,11 @@ static void load_storage(void)
             if (target == NULL || !isfinite(value)) continue;
             *target = value;
         }
-        if (record.directions[0] == 0.0f || record.directions[0] == 1.0f) car_m1_direction = record.directions[0];
-        if (record.directions[1] == 0.0f || record.directions[1] == 1.0f) car_m2_direction = record.directions[1];
+        /* Physical drive orientation is a board property, never a saved tuning value. */
+        car_m1_direction = 1.0f;
+        car_m2_direction = 0.0f;
+        (void)Car_Motor_Set_Direction(0U, true);
+        (void)Car_Motor_Set_Direction(1U, false);
         if (isfinite(record.arm_debug.limit_min) && isfinite(record.arm_debug.balance_position) &&
             isfinite(record.arm_debug.limit_max) && record.arm_debug.limit_min < record.arm_debug.balance_position &&
             record.arm_debug.balance_position < record.arm_debug.limit_max)
@@ -1296,7 +1291,19 @@ static float *parameter(uint16_t id)
         };
         return tracking_values[id - TRACKING_LAYER1_WEIGHT];
     }
+    if (id >= CAR_ARC_STRAIGHT_LENGTH && id <= CAR_ARC_DIFFERENTIAL_SLEW)
+    {
+        car_lap_arc_config_t *arc = Car_Lap_Task_Get_Arc_Config();
+        float *const arc_values[] = {
+            &arc->straight_length_m, &arc->arc_radius_m, &arc->arc_length_m,
+            &arc->arc_exit_yaw_deg, &arc->optical_rate_limit_deg_s,
+            &arc->feedforward_rate_min_deg_s, &arc->feedforward_rate_max_deg_s,
+            &arc->feedforward_rate_slew_deg_s2, &arc->differential_slew_s2
+        };
+        return arc_values[id - CAR_ARC_STRAIGHT_LENGTH];
+    }
     if (id == IMU_RATE_Z_INVERTED) return &attitude->rate_feedback_inverted;
+    if (id == ATTITUDE_START_RAMP_MS) return &attitude->start_ramp_ms;
     if (id == ATTITUDE_LADRC_TARGET_RATE_SLEW)
         return &attitude->ladrc_target_rate_slew_deg_s2;
     if (id == ATTITUDE_LADRC_DIFFERENTIAL_SLEW)
@@ -1438,29 +1445,20 @@ static bool write_attitude_parameter(uint16_t parameter_id, float value)
     if (!isfinite(value)) return false;
     switch (parameter_id)
     {
-    case ATTITUDE_MODE: next.mode = value; break;
     case ATTITUDE_BASE_SPEED: next.base_speed = value; break;
+    case ATTITUDE_START_RAMP_MS: next.start_ramp_ms = value; break;
     case ATTITUDE_HEADING_KP: next.heading_kp = value; break;
     case ATTITUDE_HEADING_KI: next.heading_ki = value; break;
     case ATTITUDE_HEADING_KD: next.heading_kd = value; break;
     case ATTITUDE_RATE_KP: next.rate_kp = value; break;
     case ATTITUDE_RATE_KI: next.rate_ki = value; break;
     case ATTITUDE_RATE_KD: next.rate_kd = value; break;
-    case ATTITUDE_LADRC_WO: next.ladrc_observer_bandwidth = value; break;
-    case ATTITUDE_LADRC_WC: next.ladrc_controller_bandwidth = value; break;
-    case ATTITUDE_LADRC_B0: next.ladrc_plant_gain = value; break;
     case ATTITUDE_MAX_RATE: next.max_rate = value; break;
     case ATTITUDE_MAX_DIFF: next.max_differential = value; break;
     case IMU_INVERT_X: next.invert_x = value; break;
     case IMU_INVERT_Y: next.invert_y = value; break;
     case IMU_INVERT_Z: next.invert_z = value; break;
-    case STEP_RATE_AMPLITUDE: next.step_rate_amplitude = value; break;
-    case STEP_ANGLE_AMPLITUDE: next.step_angle_amplitude = value; break;
-    case STEP_HOLD_MS: next.step_hold_ms = value; break;
-    case STEP_ANGLE_FEEDBACK_INVERTED: next.step_angle_feedback_inverted = value; break;
     case IMU_RATE_Z_INVERTED: next.rate_feedback_inverted = value; break;
-    case ATTITUDE_LADRC_TARGET_RATE_SLEW: next.ladrc_target_rate_slew_deg_s2 = value; break;
-    case ATTITUDE_LADRC_DIFFERENTIAL_SLEW: next.ladrc_differential_slew_s2 = value; break;
     default: return false;
     }
     return Car_Attitude_Control_Apply_Config(&next);
@@ -1614,6 +1612,46 @@ static bool write_car_b0_calibration_parameter(uint16_t parameter_id, float valu
 
 static bool parameter_is_visible(uint16_t parameter_id)
 {
+    if (App_Role_Get() == APP_ROLE_CAR)
+    {
+        switch (parameter_id)
+        {
+        case HOST_BAUD:
+        case ATTITUDE_BASE_SPEED:
+        case ATTITUDE_HEADING_KP:
+        case ATTITUDE_HEADING_KI:
+        case ATTITUDE_HEADING_KD:
+        case ATTITUDE_RATE_KP:
+        case ATTITUDE_RATE_KI:
+        case ATTITUDE_RATE_KD:
+        case ATTITUDE_MAX_RATE:
+        case ATTITUDE_MAX_DIFF:
+        case IMU_INVERT_X:
+        case IMU_INVERT_Y:
+        case IMU_INVERT_Z:
+        case IMU_RATE_Z_INVERTED:
+        case GRAY_SENSOR_ACTIVE_LOW:
+        case CAR_LAP_STOP_DELAY_MS:
+        case CAR_LAP_COUNTS_PER_METER:
+        case TRACKING_LAYER1_WEIGHT:
+        case TRACKING_LAYER2_WEIGHT:
+        case TRACKING_LAYER3_WEIGHT:
+        case TRACKING_LAYER4_WEIGHT:
+        case CAR_ARC_STRAIGHT_LENGTH:
+        case CAR_ARC_RADIUS:
+        case CAR_ARC_LENGTH:
+        case CAR_ARC_EXIT_YAW:
+        case CAR_ARC_OPTICAL_LIMIT:
+        case CAR_ARC_FEEDFORWARD_MIN:
+        case CAR_ARC_FEEDFORWARD_MAX:
+        case CAR_ARC_FEEDFORWARD_SLEW:
+        case CAR_ARC_DIFFERENTIAL_SLEW:
+        case ATTITUDE_START_RAMP_MS:
+            return true;
+        default:
+            return false;
+        }
+    }
     if (parameter_id == BOARD_ROLE ||
         (parameter_id >= ARM_LIMIT_MIN && parameter_id <= ARM_HOME_MODE) ||
         parameter_id == ARM_BALANCE_POSITION ||
@@ -1750,6 +1788,22 @@ static void send_param_info(uint16_t protocol_index)
 {
     uint16_t id = parameter_id_from_protocol_index(protocol_index);
     if (id >= ANO_PARAM_COUNT) return;
+    if (id == ATTITUDE_START_RAMP_MS)
+    {
+        static const char name[] = "缓启动时间";
+        static const char info[] = "基础速度从零爬升至设定值的时间，单位毫秒";
+        uint8_t d[ANO_DATA_MAX] = {0};
+        uint16_t i = 0U;
+
+        put_u16(d, &i, protocol_index);
+        d[i++] = 8U;
+        strncpy((char *)&d[i], name, 20U);
+        i += 20U;
+        strncpy((char *)&d[i], info, sizeof(d) - i - 1U);
+        i += (uint16_t)strlen((const char *)&d[i]);
+        send_frame(ANO_ID_PARAM_INFO, d, i);
+        return;
+    }
     if (id == ATTITUDE_LADRC_TARGET_RATE_SLEW ||
         id == ATTITUDE_LADRC_DIFFERENTIAL_SLEW)
     {
@@ -1997,7 +2051,7 @@ static bool stop_car_debug(void)
     return Car_Motor_Set_PWM(0, 0, 0, 0);
 }
 
-static bool enter_car_debug(void)
+static __attribute__((unused)) bool enter_car_debug(void)
 {
     (void)Car_Lap_Task_Stop();
     if (!Car_Motor_Set_PWM(0, 0, 0, 0))
@@ -2008,7 +2062,7 @@ static bool enter_car_debug(void)
     return true;
 }
 
-static bool start_car_debug(void)
+static __attribute__((unused)) bool start_car_debug(void)
 {
     int16_t m1;
     int16_t m2;
@@ -2029,7 +2083,7 @@ static bool start_car_debug(void)
     return Car_Motor_Set_PWM(m1, m2, 0, 0);
 }
 
-static bool start_attitude_step(car_attitude_step_mode_t mode)
+static __attribute__((unused)) bool start_attitude_step(car_attitude_step_mode_t mode)
 {
     (void)Car_Lap_Task_Stop();
     if (!Car_Attitude_Control_Start_Step(mode)) return false;
@@ -2461,7 +2515,7 @@ static void stop_car_b0_calibration(uint8_t status)
     (void)Car_Motor_Set_Speed(0, 0, 0, 0);
 }
 
-static bool start_car_b0_calibration(void)
+static __attribute__((unused)) bool start_car_b0_calibration(void)
 {
     if (App_Role_Get() != APP_ROLE_CAR || car_b0_calibration_active != 0U)
     {
@@ -2534,32 +2588,6 @@ static void process_car_b0_calibration(void)
     car_b0_phase_started_ms = now;
 }
 
-static void send_car_b0_calibration_telemetry(void)
-{
-    car_imu_sample_t imu;
-    const car_motor_telemetry_t *motor = Car_Motor_Get_Telemetry();
-    uint8_t d[56];
-    uint16_t i = 0U;
-    const bool imu_valid = Car_IMU_Get_Sample(&imu);
-
-    if (!tx_has_capacity(1U)) return;
-    put_float(d, &i, (float)car_b0_calibration_active);
-    put_float(d, &i, (float)car_b0_calibration_phase);
-    put_float(d, &i, (float)car_b0_calibration_index);
-    put_float(d, &i, (float)car_b0_requested_differential);
-    put_float(d, &i, (float)car_b0_applied_differential);
-    put_float(d, &i, (float)motor->applied_speed[0]);
-    put_float(d, &i, (float)motor->applied_speed[1]);
-    put_float(d, &i, motor->speed[0]);
-    put_float(d, &i, motor->speed[1]);
-    put_float(d, &i, imu_valid ? imu.angular_velocity_rad_s.z * 57.2957795f : 0.0f);
-    put_float(d, &i, imu_valid ? imu.angle_rad.z * 57.2957795f : 0.0f);
-    put_float(d, &i, motor->voltage);
-    put_float(d, &i, (float)motor->command_status);
-    put_float(d, &i, (float)car_b0_calibration_command_status);
-    send_frame(ANO_ID_B0_CALIBRATION, d, i);
-}
-
 static void send_telemetry(void)
 {
     const car_motor_telemetry_t *car = Car_Motor_Get_Telemetry(); uint8_t d[ANO_DATA_MAX]; uint16_t i = 0U;
@@ -2574,7 +2602,6 @@ static void send_telemetry(void)
 static void send_control_telemetry(void)
 {
     const car_attitude_control_debug_t *control = Car_Attitude_Control_Get_Debug();
-    const car_attitude_control_config_t *control_config = Car_Attitude_Control_Get_Config();
     uint8_t d[40];
     uint16_t i = 0U;
 
@@ -2596,10 +2623,9 @@ static void send_control_telemetry(void)
     put_float(d, &i, control->differential);
     put_float(d, &i, control->left_target);
     put_float(d, &i, control->right_target);
-    put_float(d, &i, control->ladrc_z1);
-    put_float(d, &i, control->ladrc_z2);
-    put_float(d, &i, control->ladrc_output);
-    put_float(d, &i, control_config->mode);
+    put_float(d, &i, control->commanded_base_speed);
+    put_float(d, &i, control->optical_heading_correction_deg_s);
+    put_float(d, &i, control->arc_feedforward_rate);
     put_float(d, &i, (float)control->status);
     send_frame(ANO_ID_CONTROL_OUTPUT, d, i);
 }
@@ -2724,25 +2750,26 @@ static void send_stepper_feedforward_diagnostic(void)
 
 static bool command(const uint8_t *d, uint16_t n)
 {
-    if (n == 3U && d[0] == 0x03U && d[1] == 0x03U && d[2] == 0x00U) { (void)Car_Lap_Task_Stop(); if (car_b0_calibration_active != 0U) { stop_car_b0_calibration(4U); return true; } return car_debug_active ? stop_car_debug() : Car_Motor_Set_Speed(0, 0, 0, 0); }
+    if (App_Role_Get() == APP_ROLE_CAR)
+    {
+        if (n == 3U && d[0] == 0x03U && d[1] == 0x03U && d[2] == 0x00U) return Car_Lap_Task_Stop();
+        if (n == 3U && d[0] == 0x03U && d[1] == ANO_COMMAND_CAR_RESTORE_DEFAULTS && d[2] == 0x00U) return restore_defaults();
+        if (n == 3U && d[0] == 0x03U && d[1] == ANO_COMMAND_ATTITUDE_ENABLE && d[2] == 0x00U) return Car_Attitude_Control_Set_Enabled(true);
+        if (n == 3U && d[0] == 0x03U && d[1] == ANO_COMMAND_ATTITUDE_DISABLE && d[2] == 0x00U) return Car_Lap_Task_Stop();
+        if (n == 3U && d[0] == 0x03U && d[1] == ANO_COMMAND_CAR_LAP_START && d[2] == 0x00U) return Car_Lap_Task_Start();
+        if (n == 3U && d[0] == 0x03U && d[1] == ANO_COMMAND_CAR_LAP_STOP && d[2] == 0x00U) return Car_Lap_Task_Stop();
+        return false;
+    }
     if (n == 3U && d[0] == 0x03U && d[1] == ANO_COMMAND_CAR_READ_FLASH && d[2] == 0x00U) return Car_Motor_Read_Flash();
     if (n == 3U && d[0] == 0x03U && d[1] == ANO_COMMAND_CAR_FACTORY_RESET && d[2] == 0x00U) return Car_Motor_Factory_Reset();
     if (n == 3U && d[0] == 0x03U && d[1] == ANO_COMMAND_CAR_APPLY_CONFIG && d[2] == 0x00U) return apply_car_config();
-    if (n == 3U && d[0] == 0x03U && d[1] == ANO_COMMAND_CAR_DEBUG_ENTER && d[2] == 0x00U && car_b0_calibration_active == 0U) return enter_car_debug();
-    if (n == 3U && d[0] == 0x03U && d[1] == ANO_COMMAND_CAR_DEBUG_START && d[2] == 0x00U && car_b0_calibration_active == 0U) return start_car_debug();
-    if (n == 3U && d[0] == 0x03U && d[1] == ANO_COMMAND_CAR_DEBUG_STOP && d[2] == 0x00U) { if (car_b0_calibration_active != 0U) { stop_car_b0_calibration(4U); return true; } return stop_car_debug(); }
     if (n == 3U && d[0] == 0x03U && d[1] == ANO_COMMAND_CAR_RESTORE_DEFAULTS && d[2] == 0x00U) return restore_defaults();
     if (n == 3U && d[0] == 0x03U && d[1] == ANO_COMMAND_ATTITUDE_ENABLE && d[2] == 0x00U && car_b0_calibration_active == 0U) { car_debug_active = 0U; return Car_Attitude_Control_Set_Enabled(true); }
     if (n == 3U && d[0] == 0x03U && d[1] == ANO_COMMAND_ATTITUDE_DISABLE && d[2] == 0x00U) { if (car_b0_calibration_active != 0U) { stop_car_b0_calibration(4U); return true; } return Car_Lap_Task_Stop(); }
-    if (n == 3U && d[0] == 0x03U && d[1] == ANO_COMMAND_RATE_STEP_TEST && d[2] == 0x00U && car_b0_calibration_active == 0U) return start_attitude_step(CAR_ATTITUDE_STEP_RATE);
-    if (n == 3U && d[0] == 0x03U && d[1] == ANO_COMMAND_ANGLE_STEP_TEST && d[2] == 0x00U && car_b0_calibration_active == 0U) return start_attitude_step(CAR_ATTITUDE_STEP_ANGLE);
     if (n == 3U && d[0] == 0x03U && d[1] == ANO_COMMAND_STEPPER_FF_CALIBRATE && d[2] == 0x00U) { Stepper_Feedforward_Reset_Bias(); return true; }
     if (n == 3U && d[0] == 0x03U && d[1] == ANO_COMMAND_CAR_LAP_START && d[2] == 0x00U && car_b0_calibration_active == 0U) { if (car_debug_active) (void)stop_car_debug(); return Car_Lap_Task_Start(); }
     if (n == 3U && d[0] == 0x03U && d[1] == ANO_COMMAND_CAR_LAP_STOP && d[2] == 0x00U) { if (car_b0_calibration_active != 0U) { stop_car_b0_calibration(4U); return true; } return Car_Lap_Task_Stop(); }
-    if (n == 3U && d[0] == 0x03U && d[1] == ANO_COMMAND_CAR_B0_CALIBRATE && d[2] == 0x00U) return start_car_b0_calibration();
     if (n == 3U && d[0] == 0x03U && d[1] == ANO_COMMAND_CAR_ROTATE_ANGLE && d[2] == 0x00U && car_b0_calibration_active == 0U) return start_attitude_rotation();
-    if (n == 9U && d[0] == 1U && !car_debug_active && !Car_Attitude_Control_Is_Enabled() && car_b0_calibration_active == 0U) return Car_Motor_Set_Speed(get_i16(&d[1]), get_i16(&d[3]), get_i16(&d[5]), get_i16(&d[7]));
-    if (n == 9U && d[0] == 2U && !car_debug_active && !Car_Attitude_Control_Is_Enabled() && car_b0_calibration_active == 0U) return Car_Motor_Set_PWM(get_i16(&d[1]), get_i16(&d[3]), get_i16(&d[5]), get_i16(&d[7]));
     return false;
 }
 
@@ -2783,6 +2810,8 @@ static void handle(uint8_t source, uint8_t id, const uint8_t *d, uint16_t n, uin
             baud_rate_is_valid((uint32_t)value)) {
             requested_baud_rate = (uint32_t)value;
             accepted = true;
+        } else if (App_Role_Get() == APP_ROLE_CAR && !parameter_is_visible(parameter_id)) {
+            accepted = false;
         } else if (parameter_id >= CAR_M1_DIRECTION && parameter_id <= CAR_M2_DIRECTION) {
             accepted = write_car_parameter(parameter_id, value);
         } else if (parameter_id > HOST_BAUD && parameter_id < CAR_M1_DIRECTION) {
@@ -2793,9 +2822,7 @@ static void handle(uint8_t source, uint8_t id, const uint8_t *d, uint16_t n, uin
         } else if (parameter_id >= CAR_B0_START_DIFFERENTIAL && parameter_id <= CAR_B0_REPEAT_COUNT) {
             accepted = write_car_b0_calibration_parameter(parameter_id, value);
         } else if ((parameter_id >= ATTITUDE_MODE && parameter_id <= STEP_ANGLE_FEEDBACK_INVERTED) ||
-                   parameter_id == IMU_RATE_Z_INVERTED ||
-                   parameter_id == ATTITUDE_LADRC_TARGET_RATE_SLEW ||
-                   parameter_id == ATTITUDE_LADRC_DIFFERENTIAL_SLEW) {
+                   parameter_id == IMU_RATE_Z_INVERTED || parameter_id == ATTITUDE_START_RAMP_MS) {
             accepted = write_attitude_parameter(parameter_id, value);
         } else if (parameter_id >= STEPPER_FF_ENABLE && parameter_id <= STEPPER_FF_OUTPUT_LIMIT) {
             accepted = write_feedforward_parameter(parameter_id, value);
@@ -2922,7 +2949,6 @@ void ANO_Host_Process(void)
         {
             send_control_telemetry();
             send_tracking_diagnostic();
-            send_car_b0_calibration_telemetry();
         }
         else send_stepper_feedforward_diagnostic();
     }

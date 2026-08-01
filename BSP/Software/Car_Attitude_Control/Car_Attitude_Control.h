@@ -6,22 +6,25 @@
 
 typedef enum
 {
-    CAR_ATTITUDE_CONTROL_PID = 0,
-    CAR_ATTITUDE_CONTROL_LADRC = 1
-} car_attitude_control_mode_t;
-
-typedef enum
-{
     CAR_ATTITUDE_STEP_NONE = 0,
     CAR_ATTITUDE_STEP_RATE,
     CAR_ATTITUDE_STEP_ANGLE,
     CAR_ATTITUDE_STEP_ROTATE
 } car_attitude_step_mode_t;
 
+/* Compatibility identifiers are retained for the shared host source only.
+ * Car control always executes the PID path. */
+typedef enum
+{
+    CAR_ATTITUDE_CONTROL_PID = 0,
+    CAR_ATTITUDE_CONTROL_LADRC = 1
+} car_attitude_control_mode_t;
+
 typedef struct
 {
     float mode;
     float base_speed;
+    float start_ramp_ms;
     float heading_kp;
     float heading_ki;
     float heading_kd;
@@ -62,16 +65,9 @@ enum
     CAR_ATTITUDE_STATUS_DIFFERENTIAL_LIMITED = 1U << 4,
     CAR_ATTITUDE_STATUS_LEFT_SPEED_LIMITED = 1U << 5,
     CAR_ATTITUDE_STATUS_RIGHT_SPEED_LIMITED = 1U << 6,
-    CAR_ATTITUDE_STATUS_STEP_ACTIVE = 1U << 7,
-    CAR_ATTITUDE_STATUS_ANGLE_STEP = 1U << 8,
-    CAR_ATTITUDE_STATUS_LINE_SEARCH = 1U << 9,
-    CAR_ATTITUDE_STATUS_PATTERN_INVALID = 1U << 10,
-    CAR_ATTITUDE_STATUS_HEADING_TRACKING = 1U << 11,
-    CAR_ATTITUDE_STATUS_ROTATION_ACTIVE = 1U << 12,
-    CAR_ATTITUDE_STATUS_ARC_ACTIVE = 1U << 13,
-    CAR_ATTITUDE_STATUS_DIFFERENTIAL_SLEW_LIMITED = 1U << 14,
-    CAR_ATTITUDE_STATUS_LADRC_TARGET_SLEW_LIMITED = 1U << 15,
-    CAR_ATTITUDE_STATUS_LADRC_OUTPUT_SLEW_LIMITED = 1U << 16
+    CAR_ATTITUDE_STATUS_HEADING_LOCKED = 1U << 7,
+    CAR_ATTITUDE_STATUS_ARC_ACTIVE = 1U << 8,
+    CAR_ATTITUDE_STATUS_DIFFERENTIAL_SLEW_LIMITED = 1U << 9
 };
 
 typedef struct

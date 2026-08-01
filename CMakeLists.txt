@@ -62,6 +62,7 @@ file(GLOB_RECURSE BSP_SOURCES CONFIGURE_DEPENDS
     "BSP/Hardware/Vision_Link/*.c"
     "BSP/Hardware/Gray_Sensor/*.c"
     "BSP/Hardware/Board_Link/*.c"
+    "BSP/Hardware/Board_Spi_Link/*.c"
     "BSP/Software/PID/*.c"
     "BSP/Software/Car_Attitude_Control/*.c"
     "BSP/Software/Car_Lap_Task/*.c"
