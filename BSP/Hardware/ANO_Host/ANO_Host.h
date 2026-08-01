@@ -64,7 +64,7 @@
  * Ball-loop and velocity-loop debug fields moved to 0xF6 (v7).
  * Multi-byte fields are little-endian. */
 
-/* F6 payload v3 (was stepper-feedforward diagnostic): ball position target
+/* F6 payload v4 (was stepper-feedforward diagnostic): ball position target
  * cm (float), position-loop P output cm/s (float), velocity-loop target
  * velocity cm/s (float), velocity-loop P output deg (float), measured
  * velocity cm/s (float), mapped beam angle deg (float), gravity feedforward
@@ -72,7 +72,10 @@
  * cm/s (float), velocity-loop I output deg (float), velocity-loop D output
  * deg (float), un-clamped P+I+D output deg (float), final motor position
  * offset deg (float), trajectory position deg (float), trajectory velocity
- * deg/s (float), output-limit flags
+ * deg/s (float), raw vision position cm (float), raw vision velocity cm/s
+ * (float), brake target acceleration cm/s2 (float), raw brake beam angle deg
+ * (float), limited brake beam angle deg (float), combined motor offset deg
+ * (float), motor target position deg (float), output-limit flags
  * (u8), speed-step active (u8), speed-step phase 0~4 (u8).
  * Multi-byte fields are little-endian. */
 

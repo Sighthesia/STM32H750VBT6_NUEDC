@@ -58,7 +58,7 @@
 #define ANO_ARM_CALIBRATION_STORAGE_B FLASH_ARM_CALIBRATION_STORAGE_B
 #define ANO_STORAGE_MAGIC 0x414E4F57UL
 #define ANO_ARM_ANGLE_STORAGE_MAGIC 0x41414331UL
-#define ANO_ARM_ANGLE_STORAGE_VERSION 7U
+#define ANO_ARM_ANGLE_STORAGE_VERSION 8U
 #define ANO_ARM_CALIBRATION_STORAGE_MAGIC 0x41433350UL
 #define ANO_ARM_CALIBRATION_STORAGE_VERSION 2U
 #define ANO_STORAGE_VERSION 18U
@@ -203,6 +203,13 @@ enum {
     ARM_VISION_KALMAN_PROCESS_NOISE_POSITION,
     ARM_VISION_KALMAN_PROCESS_NOISE_VELOCITY,
     ARM_BALL_VELOCITY_OUTPUT_INVERTED,
+    ARM_BALL_BRAKE_FEEDFORWARD_ENABLED,
+    ARM_BALL_BRAKE_STOP_TIME_S,
+    ARM_BALL_BRAKE_GAIN,
+    ARM_BALL_BRAKE_MAX_ACCELERATION_CM_S2,
+    ARM_BALL_BRAKE_ANGLE_LIMIT_DEG,
+    ARM_BALL_BRAKE_SPEED_DEADZONE_CM_S,
+    ARM_BALL_BRAKE_OUTPUT_INVERTED,
     ANO_PARAM_COUNT
 };
 
@@ -229,6 +236,10 @@ static const uint16_t arm_parameter_ids[] = {
     ARM_VISION_KALMAN_PROCESS_NOISE_POSITION,
     ARM_VISION_KALMAN_PROCESS_NOISE_VELOCITY,
     ARM_BALL_VELOCITY_OUTPUT_INVERTED
+    , ARM_BALL_BRAKE_FEEDFORWARD_ENABLED, ARM_BALL_BRAKE_STOP_TIME_S,
+    ARM_BALL_BRAKE_GAIN, ARM_BALL_BRAKE_MAX_ACCELERATION_CM_S2,
+    ARM_BALL_BRAKE_ANGLE_LIMIT_DEG, ARM_BALL_BRAKE_SPEED_DEADZONE_CM_S,
+    ARM_BALL_BRAKE_OUTPUT_INVERTED
 };
 
 static const ano_command_desc_t arm_commands[] = {
@@ -514,6 +525,18 @@ typedef struct
     arm_angle_control_config_t config;
     uint32_t checksum;
 } ano_arm_angle_storage_record_t;
+
+typedef struct
+{
+    uint32_t magic;
+    uint8_t version;
+    uint8_t reserved[3];
+    struct
+    {
+        float values[30];
+    } config;
+    uint32_t checksum;
+} ano_arm_angle_storage_record_v7_t;
 
 typedef struct
 {
@@ -822,6 +845,15 @@ static uint32_t arm_angle_storage_v6_checksum(const ano_arm_angle_storage_record
     return checksum;
 }
 
+static uint32_t arm_angle_storage_v7_checksum(const ano_arm_angle_storage_record_v7_t *record)
+{
+    const uint8_t *data = (const uint8_t *)record;
+    uint32_t checksum = 0x13579BDFU;
+    for (uint16_t i = 0U; i < sizeof(*record) - sizeof(record->checksum); i++)
+        checksum = (checksum << 5U) ^ (checksum >> 27U) ^ data[i];
+    return checksum;
+}
+
 static uint32_t arm_calibration_storage_checksum(const ano_arm_calibration_storage_record_t *record)
 {
     const uint8_t *data = (const uint8_t *)record;
@@ -907,6 +939,7 @@ static bool save_arm_angle_config(void)
 static void load_arm_angle_config(void)
 {
     ano_arm_angle_storage_record_t record = {0};
+    ano_arm_angle_storage_record_v7_t v7 = {0};
     ano_arm_angle_storage_record_v6_t v6 = {0};
     ano_arm_angle_storage_record_v5_t v5 = {0};
     ano_arm_angle_storage_record_v4_t v4 = {0};
@@ -921,6 +954,17 @@ static void load_arm_angle_config(void)
         arm_pitch_inverted = (float)record.reserved[0];
         Arm_Angle_Control_Set_Pitch_Inverted(arm_pitch_inverted != 0.0f);
         (void)Arm_Angle_Control_Apply_Config(&record.config);
+        return;
+    }
+    if (W25Qxx_Read(ANO_ARM_ANGLE_STORAGE_ADDRESS, (uint8_t *)&v7, sizeof(v7)) &&
+        v7.magic == ANO_ARM_ANGLE_STORAGE_MAGIC && v7.version == 7U &&
+        v7.checksum == arm_angle_storage_v7_checksum(&v7) && v7.reserved[0] <= 1U)
+    {
+        arm_angle_control_config_t next = *Arm_Angle_Control_Get_Config();
+        memcpy(&next, &v7.config, sizeof(v7.config));
+        arm_pitch_inverted = (float)v7.reserved[0];
+        Arm_Angle_Control_Set_Pitch_Inverted(arm_pitch_inverted != 0.0f);
+        (void)Arm_Angle_Control_Apply_Config(&next);
         return;
     }
     if (W25Qxx_Read(ANO_ARM_ANGLE_STORAGE_LEGACY_ADDRESS, (uint8_t *)&record, sizeof(record)) &&
@@ -1711,6 +1755,13 @@ static float *parameter(uint16_t id)
     if (id == ARM_VISION_KALMAN_PROCESS_NOISE_POSITION) return &arm_angle->vision_kalman_process_noise_position;
     if (id == ARM_VISION_KALMAN_PROCESS_NOISE_VELOCITY) return &arm_angle->vision_kalman_process_noise_velocity;
     if (id == ARM_BALL_VELOCITY_OUTPUT_INVERTED) return &arm_angle->ball_velocity_output_inverted;
+    if (id == ARM_BALL_BRAKE_FEEDFORWARD_ENABLED) return &arm_angle->ball_brake_feedforward_enabled;
+    if (id == ARM_BALL_BRAKE_STOP_TIME_S) return &arm_angle->ball_brake_stop_time_s;
+    if (id == ARM_BALL_BRAKE_GAIN) return &arm_angle->ball_brake_gain;
+    if (id == ARM_BALL_BRAKE_MAX_ACCELERATION_CM_S2) return &arm_angle->ball_brake_max_acceleration_cm_s2;
+    if (id == ARM_BALL_BRAKE_ANGLE_LIMIT_DEG) return &arm_angle->ball_brake_angle_limit_deg;
+    if (id == ARM_BALL_BRAKE_SPEED_DEADZONE_CM_S) return &arm_angle->ball_brake_speed_deadzone_cm_s;
+    if (id == ARM_BALL_BRAKE_OUTPUT_INVERTED) return &arm_angle->ball_brake_output_inverted;
     if (id == ARM_MOTOR_SPEED_KP) return &arm_angle->ball_velocity_kp;
     if (id == ARM_MOTOR_SPEED_KI) return &arm_angle->ball_velocity_ki;
     if (id == ARM_MOTOR_SPEED_KD) return &arm_angle->ball_velocity_kd;
@@ -1865,6 +1916,25 @@ static bool write_arm_parameter(uint16_t parameter_id, float value)
     case ARM_BALL_VELOCITY_OUTPUT_INVERTED:
         if (value != 0.0f && value != 1.0f) return false;
         break;
+    case ARM_BALL_BRAKE_FEEDFORWARD_ENABLED:
+    case ARM_BALL_BRAKE_OUTPUT_INVERTED:
+        if (value != 0.0f && value != 1.0f) return false;
+        break;
+    case ARM_BALL_BRAKE_STOP_TIME_S:
+        if (value < 0.05f || value > 5.0f) return false;
+        break;
+    case ARM_BALL_BRAKE_GAIN:
+        if (value < 0.0f || value > 5.0f) return false;
+        break;
+    case ARM_BALL_BRAKE_MAX_ACCELERATION_CM_S2:
+        if (value < 1.0f || value > 500.0f) return false;
+        break;
+    case ARM_BALL_BRAKE_ANGLE_LIMIT_DEG:
+        if (value < 0.1f || value > 15.0f) return false;
+        break;
+    case ARM_BALL_BRAKE_SPEED_DEADZONE_CM_S:
+        if (value < 0.0f || value > 10.0f) return false;
+        break;
     case ARM_MOTOR_SPEED_KP:
     case ARM_MOTOR_SPEED_KI:
     case ARM_MOTOR_SPEED_KD:
@@ -1892,7 +1962,7 @@ static bool write_arm_parameter(uint16_t parameter_id, float value)
         parameter_id == ARM_VISION_KALMAN_ENABLED ||
         parameter_id == ARM_VISION_PREDICTION_ENABLED ||
          (parameter_id >= ARM_MOTOR_POSITION_SPEED_RPM &&
-          parameter_id <= ARM_BALL_VELOCITY_OUTPUT_INVERTED))
+          parameter_id <= ARM_BALL_BRAKE_OUTPUT_INVERTED))
     {
         if (!Arm_Angle_Control_Apply_Config(Arm_Angle_Control_Get_Config()))
         {
@@ -1904,7 +1974,7 @@ static bool write_arm_parameter(uint16_t parameter_id, float value)
          parameter_id == ARM_VISION_KALMAN_ENABLED ||
          parameter_id == ARM_VISION_PREDICTION_ENABLED ||
          (parameter_id >= ARM_VISION_FIXED_DELAY_MS &&
-          parameter_id <= ARM_BALL_VELOCITY_OUTPUT_INVERTED)) &&
+          parameter_id <= ARM_BALL_BRAKE_OUTPUT_INVERTED)) &&
         !save_arm_angle_config())
     {
         *target = previous;
@@ -2220,7 +2290,7 @@ static void apply_parameter_after_ack(uint16_t parameter_id)
         else if ((parameter_id >= ARM_BALL_POSITION_LOOP_ENABLE && parameter_id <= ARM_MOTOR_SPEED_KD) ||
                  parameter_id == ARM_VISION_KALMAN_ENABLED || parameter_id == ARM_VISION_PREDICTION_ENABLED ||
                  parameter_id == ARM_BALL_TARGET_VELOCITY ||
-                 (parameter_id >= ARM_MOTOR_POSITION_SPEED_RPM && parameter_id <= ARM_BALL_VELOCITY_OUTPUT_INVERTED))
+                 (parameter_id >= ARM_MOTOR_POSITION_SPEED_RPM && parameter_id <= ARM_BALL_BRAKE_OUTPUT_INVERTED))
             (void)Arm_Angle_Control_Apply_Config(Arm_Angle_Control_Get_Config());
         else if (parameter_id == ARM_PITCH_INVERTED)
             Arm_Angle_Control_Set_Pitch_Inverted(arm_pitch_inverted != 0.0f);
@@ -2332,7 +2402,9 @@ static void send_param_info(uint16_t protocol_index)
              "重力前馈增益", "杆角死区", "预测时长上限", "位置轨迹开关",
              "位置跟随速度", "位置跟随加速度",
              "卡尔曼测量噪声", "卡尔曼位置噪声", "卡尔曼速度噪声",
-             "速度环输出反向"
+             "速度环输出反向",
+             "刹车前馈开关", "刹车目标时间", "刹车前馈增益", "刹车最大加速度",
+             "刹车角度限幅", "刹车速度死区", "刹车输出反向"
         };
         static const char *const infos[] = {
              "0关闭，1启用位置外环", "0关闭，1启用速度内环", "位置环目标，单位厘米", "位置环关闭时的速度目标，单位厘米每秒",
@@ -2357,7 +2429,14 @@ static void send_param_info(uint16_t protocol_index)
              "卡尔曼测量噪声，0.001至0.2，过大回正慢，过小跟随跳变，静止时减小",
              "卡尔曼位置过程噪声，0.001至0.2，值越大跟随越快",
              "卡尔曼速度过程噪声，0.01至5，过大静止时速度估计大，过小运动跟踪滞后",
-             "0速度与电机修正同号，1反向"
+             "0速度与电机修正同号，1反向",
+             "0关闭，1启用速度误差刹车前馈",
+             "期望刹停时间，单位秒，0.05至5，越小刹车越猛",
+             "刹车前馈增益，0至5",
+             "刹车最大加速度，单位厘米每秒平方，1至500",
+             "刹车角度限幅，单位度，0.1至15",
+             "刹车速度误差死区，单位厘米每秒，0至10，避免小误差抖动",
+             "0原方向，1反向刹车角度"
         };
         uint8_t d[ANO_DATA_MAX] = {0};
         uint16_t i = 0U;
@@ -3279,6 +3358,13 @@ static void send_arm_ball_telemetry(void)
     put_float(d, &i, angle->motor_position_offset_deg);
     put_float(d, &i, angle->motor_trajectory_position_deg);
     put_float(d, &i, angle->motor_trajectory_velocity_deg_s);
+    put_float(d, &i, angle->vision_raw_position_cm);
+    put_float(d, &i, angle->vision_raw_velocity_cm_s);
+    put_float(d, &i, angle->ball_brake_target_acceleration_cm_s2);
+    put_float(d, &i, angle->ball_brake_raw_angle_deg);
+    put_float(d, &i, angle->ball_brake_angle_deg);
+    put_float(d, &i, angle->ball_combined_position_offset_deg);
+    put_float(d, &i, angle->motor_target_position_deg);
     d[i++] = angle->ball_velocity_output_limited;
     d[i++] = arm_ball_speed_step_active;
     d[i++] = arm_ball_speed_step_phase;
@@ -3730,7 +3816,7 @@ static void handle(uint8_t source, uint8_t id, const uint8_t *d, uint16_t n, uin
         } else if ((parameter_id >= ARM_BALL_POSITION_LOOP_ENABLE && parameter_id <= ARM_MOTOR_SPEED_KD) ||
                    parameter_id == ARM_VISION_KALMAN_ENABLED || parameter_id == ARM_VISION_PREDICTION_ENABLED ||
                    parameter_id == ARM_BALL_TARGET_VELOCITY ||
-                    (parameter_id >= ARM_MOTOR_POSITION_SPEED_RPM && parameter_id <= ARM_BALL_VELOCITY_OUTPUT_INVERTED)) {
+                    (parameter_id >= ARM_MOTOR_POSITION_SPEED_RPM && parameter_id <= ARM_BALL_BRAKE_OUTPUT_INVERTED)) {
             accepted = write_arm_parameter(parameter_id, value);
         } else if (parameter_id == ARM_PITCH_INVERTED) {
             accepted = write_arm_parameter(parameter_id, value);
