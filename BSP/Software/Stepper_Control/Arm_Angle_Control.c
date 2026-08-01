@@ -393,6 +393,23 @@ bool Arm_Angle_Control_Set_Target(float target_deg)
     return true;
 }
 
+bool Arm_Angle_Control_Return_To_Balance(void)
+{
+    ZDTStepperMotor *motor = zdt_stepper_motors[0];
+    uint8_t direction;
+
+    if (motor == NULL || motor_calibration_valid == 0U) return false;
+    direction = motor_position_balance_deg >= 0.0f ? ZDT_STEPPER_CCW : ZDT_STEPPER_CW;
+    ZDT_Stepper_Set_position(motor, direction, config.motor_position_speed_rpm,
+                             fabsf(motor_position_balance_deg),
+                             ZDT_STEPPER_ABS_POS_MODE, ZDT_STEPPER_SYNC_DISABLE);
+    desired_motor_target_deg = motor_position_balance_deg;
+    last_motor_target_deg = motor_position_balance_deg;
+    position_command_active = 0U;
+    trajectory_initialized = 0U;
+    return true;
+}
+
 bool Arm_Angle_Control_Set_Ball_Velocity_Target(float target_cm_s)
 {
     if (!isfinite(target_cm_s) || fabsf(target_cm_s) > config.ball_velocity_limit_cm_s) return false;

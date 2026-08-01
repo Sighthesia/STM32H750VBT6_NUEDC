@@ -67,6 +67,7 @@ file(GLOB_RECURSE BSP_SOURCES CONFIGURE_DEPENDS
     "BSP/Software/Car_Lap_Task/*.c"
     "BSP/Software/Stepper_Control/Stepper_PID.c"
     "BSP/Software/Stepper_Control/Arm_Angle_Control.c"
+    "BSP/Software/Arm_Competition_Task/*.c"
     "BSP/Software/G030_I2C_Link/*.c"
     "BSP/Software/App_Role/*.c"
 )
@@ -96,10 +97,12 @@ target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE)
 
 # Add compiler flags for disabling semihosting
 target_compile_options(${CMAKE_PROJECT_NAME} PRIVATE
+    -flto
 )
 
 # Add linker flags for disabling semihosting
 target_link_options(${CMAKE_PROJECT_NAME} PRIVATE
+-flto
 -u _printf_float
 )
 

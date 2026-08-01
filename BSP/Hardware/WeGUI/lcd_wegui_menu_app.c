@@ -29,7 +29,7 @@ static void begin_test(uint8_t test_id)
     if (test_id >= 3U)
     {
         (void)Arm_Competition_Task_Select((arm_competition_task_id_t)test_id);
-        (void)Arm_Competition_Task_Start();
+        if (!Arm_Competition_Task_Start()) return;
     }
     Board_Link_Select_Test(test_id);
     Board_Link_Start_Test();

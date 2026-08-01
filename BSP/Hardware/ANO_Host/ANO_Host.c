@@ -10,6 +10,7 @@
 #include "JY61P.h"
 #include "Stepper_PID.h"
 #include "Arm_Angle_Control.h"
+#include "Arm_Competition_Task.h"
 #include "Tracking_Link.h"
 #include "Vision_Link.h"
 #include "W25Qxx.h"
@@ -251,6 +252,9 @@ static const ano_command_desc_t arm_commands[] = {
     {{0x03U, ANO_COMMAND_ARM_BALL_LOOP_STOP, 0x00U}, "停止小球闭环", "立即撤销闭环授权、停止电机并清零PID"},
     {{0x03U, ANO_COMMAND_ARM_BALL_SPEED_STEP, 0x00U}, "小球速度阶跃", "按当前目标速度幅值执行0、正、0、负、0阶跃"},
     {{0x03U, ANO_COMMAND_ARM_BALL_POSITION_STEP, 0x00U}, "小球位置阶跃", "按位置到达判定执行0、+5cm、-5cm阶跃并最终保持"},
+    {{0x03U, ANO_COMMAND_ARM_COMPETITION_SELECT, 0x03U}, "选择竞赛题3", "选择题3后等待竞赛启动命令"},
+    {{0x03U, ANO_COMMAND_ARM_COMPETITION_START, 0x00U}, "启动竞赛摆杆", "按已选择题目启动小球闭环；题6锁存启动瞬间位置"},
+    {{0x03U, ANO_COMMAND_ARM_COMPETITION_CANCEL, 0x00U}, "停止竞赛摆杆", "撤销小球闭环并使摆杆返回平衡原点"},
     {{0x03U, ANO_COMMAND_ARM_DISABLE, 0x00U}, "关闭保持力矩", "停止并关闭臂杆电机保持力矩"},
     {{0x03U, ANO_COMMAND_ARM_ENABLE, 0x00U}, "开启保持力矩", "开启臂杆电机保持力矩"},
     {{0x03U, ANO_COMMAND_ARM_CAPTURE_LOW, 0x00U}, "设置当前为最低点", "采集当前电机绝对位置和有效IMU Pitch并写入Flash"},
@@ -2828,7 +2832,7 @@ static bool stop_arm_debug(bool exit_debug)
     if (exit_debug && arm_calibration_status == ANO_ARM_CALIBRATION_ACTIVE)
         cancel_arm_calibration(ANO_ARM_CALIBRATION_CANCELLED);
     if (exit_debug) arm_debug_active = 0U;
-    if (exit_debug) Arm_Angle_Control_Set_Authorized(arm_angle_ready());
+    if (exit_debug) Arm_Competition_Task_Set_Ready(arm_angle_ready());
     return true;
 }
 
@@ -2898,7 +2902,7 @@ static void fail_arm_startup(void)
     float motor_limit_min;
     float motor_limit_max;
 
-    Arm_Angle_Control_Set_Authorized(false);
+    Arm_Competition_Task_Set_Ready(false);
     if (zdt_stepper_motors[0] != NULL)
     {
         if (arm_home_active) ZDT_Stepper_abort_zero_return(zdt_stepper_motors[0]);
@@ -3059,7 +3063,7 @@ static void process_arm_startup(ZDTStepperMotor *motor, uint32_t now)
     {
         arm_motion_active = 0U;
         arm_startup_state = ARM_STARTUP_DONE;
-        Arm_Angle_Control_Set_Authorized(true);
+        Arm_Competition_Task_Set_Ready(true);
     }
 }
 
@@ -3075,7 +3079,7 @@ static bool handle_arm_command(uint8_t command_id)
         return true;
     case ANO_COMMAND_ARM_DISABLE:
         if (zdt_stepper_motors[0] == NULL) return false;
-        Arm_Angle_Control_Set_Authorized(false);
+        Arm_Competition_Task_Set_Ready(false);
         arm_ball_position_step_active = 0U;
         arm_ball_speed_step_active = 0U;
         (void)stop_arm_debug(false);
@@ -3134,6 +3138,11 @@ static bool handle_arm_command(uint8_t command_id)
             arm_ball_position_step_active = 1U;
             return true;
         }
+    case ANO_COMMAND_ARM_COMPETITION_START:
+        return Arm_Competition_Task_Start();
+    case ANO_COMMAND_ARM_COMPETITION_CANCEL:
+        Arm_Competition_Task_Cancel();
+        return true;
     default: return false;
     }
 }
@@ -3779,6 +3788,8 @@ static bool command(const uint8_t *d, uint16_t n)
 {
     if (App_Role_Get() == APP_ROLE_ARM)
     {
+        if (n == 3U && d[0] == 0x03U && d[1] == ANO_COMMAND_ARM_COMPETITION_SELECT)
+            return Arm_Competition_Task_Select((arm_competition_task_id_t)d[2]);
         if (n == 3U && d[0] == 0x03U && d[2] == 0x00U) {
             return d[1] == ANO_COMMAND_ARM_CAPTURE_HIGH ||
                    d[1] == ANO_COMMAND_ARM_DISABLE ||
@@ -3788,7 +3799,9 @@ static bool command(const uint8_t *d, uint16_t n)
                    d[1] == ANO_COMMAND_ARM_BALL_LOOP_START ||
                    d[1] == ANO_COMMAND_ARM_BALL_LOOP_STOP ||
                    d[1] == ANO_COMMAND_ARM_BALL_SPEED_STEP ||
-                   d[1] == ANO_COMMAND_ARM_BALL_POSITION_STEP ||
+                    d[1] == ANO_COMMAND_ARM_BALL_POSITION_STEP ||
+                    d[1] == ANO_COMMAND_ARM_COMPETITION_START ||
+                    d[1] == ANO_COMMAND_ARM_COMPETITION_CANCEL ||
                    d[1] == ANO_COMMAND_ARM_TELEMETRY_ENABLE ||
                    d[1] == ANO_COMMAND_ARM_TELEMETRY_DISABLE ? handle_arm_command(d[1]) : false;
         }
@@ -3801,7 +3814,9 @@ static bool command(const uint8_t *d, uint16_t n)
                    d[0] == ANO_COMMAND_ARM_BALL_LOOP_START ||
                    d[0] == ANO_COMMAND_ARM_BALL_LOOP_STOP ||
                    d[0] == ANO_COMMAND_ARM_BALL_SPEED_STEP ||
-                   d[0] == ANO_COMMAND_ARM_BALL_POSITION_STEP ||
+                    d[0] == ANO_COMMAND_ARM_BALL_POSITION_STEP ||
+                    d[0] == ANO_COMMAND_ARM_COMPETITION_START ||
+                    d[0] == ANO_COMMAND_ARM_COMPETITION_CANCEL ||
                    d[0] == ANO_COMMAND_ARM_TELEMETRY_ENABLE ||
                    d[0] == ANO_COMMAND_ARM_TELEMETRY_DISABLE ? handle_arm_command(d[0]) : false;
         }

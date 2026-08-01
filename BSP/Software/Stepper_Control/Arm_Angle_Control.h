@@ -102,6 +102,7 @@ void Arm_Angle_Control_Set_Authorized(bool authorized);
 void Arm_Angle_Control_Set_Pitch_Inverted(bool inverted);
 bool Arm_Angle_Control_Set_Enabled(bool enabled);
 bool Arm_Angle_Control_Set_Target(float target_deg);
+bool Arm_Angle_Control_Return_To_Balance(void);
 bool Arm_Angle_Control_Set_Ball_Velocity_Target(float target_cm_s);
 bool Arm_Angle_Control_Set_Motor_Calibration(float high_position_deg,
                                              float high_pitch_deg,
