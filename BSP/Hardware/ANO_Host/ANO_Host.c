@@ -1875,7 +1875,7 @@ static bool write_arm_parameter(uint16_t parameter_id, float value)
         if (value < -100.0f || value > 100.0f) return false;
         break;
     case ARM_MOTOR_POSITION_SPEED_RPM:
-        if (value <= 0.0f || value > 100.0f) return false;
+        if (value <= 0.0f || value > 300.0f) return false;
         break;
     case ARM_MOTOR_POSITION_OFFSET_LIMIT_DEG:
         if (value <= 0.0f || value > 180.0f) return false;
@@ -2416,7 +2416,7 @@ static void send_param_info(uint16_t protocol_index)
             "0正常，1仅反转臂杆控制和标定的Pitch角度",
             "0关闭，1使用MCU二维卡尔曼估计位置和速度",
             "0关闭，1使用视觉帧间位置预测",
-            "闭环电机位置命令转速，单位RPM，1至100",
+            "闭环电机位置命令转速，单位RPM，1至300",
             "速度环输出到电机角度的最大修正量，单位度，1至180",
              "电机位置命令最小间隔，单位毫秒，10至1000",
              "视觉固定延迟，单位毫秒，0至200",

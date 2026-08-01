@@ -316,7 +316,7 @@ bool Arm_Angle_Control_Apply_Config(const arm_angle_control_config_t *next)
         next->derivative_filter_s > 1.0f ||
         !isfinite(next->ball_velocity_limit_cm_s) || next->ball_velocity_limit_cm_s <= 0.0f || next->ball_velocity_limit_cm_s > 100.0f ||
         !isfinite(next->motor_position_offset_limit_deg) || next->motor_position_offset_limit_deg <= 0.0f || next->motor_position_offset_limit_deg > 180.0f ||
-        !isfinite(next->motor_position_speed_rpm) || next->motor_position_speed_rpm <= 0.0f || next->motor_position_speed_rpm > 100.0f ||
+        !isfinite(next->motor_position_speed_rpm) || next->motor_position_speed_rpm <= 0.0f || next->motor_position_speed_rpm > 300.0f ||
         !isfinite(next->motor_position_command_threshold_deg) || next->motor_position_command_threshold_deg < 0.01f || next->motor_position_command_threshold_deg > 10.0f ||
         !isfinite(next->motor_position_command_period_ms) || next->motor_position_command_period_ms < 10.0f || next->motor_position_command_period_ms > 1000.0f ||
         (next->direction_inverted != 0.0f && next->direction_inverted != 1.0f) ||
