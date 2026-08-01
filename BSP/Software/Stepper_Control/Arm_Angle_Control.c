@@ -78,6 +78,17 @@ static float beam_angle_from_motor_position(float motor_position_deg)
     return pitch - motor_pitch_balance_deg;
 }
 
+static float motor_position_from_beam_angle(float beam_angle_deg)
+{
+    float pitch = beam_angle_deg + motor_pitch_balance_deg;
+    if ((pitch - motor_pitch_min_deg) *
+        (pitch - motor_pitch_balance_deg) <= 0.0f)
+        return interpolate(pitch, motor_pitch_min_deg, motor_pitch_balance_deg,
+                           motor_position_min_deg, motor_position_balance_deg);
+    return interpolate(pitch, motor_pitch_balance_deg, motor_pitch_max_deg,
+                       motor_position_balance_deg, motor_position_max_deg);
+}
+
 static float move_towards(float value, float target, float maximum_delta)
 {
     if (value < target) return fminf(value + maximum_delta, target);
@@ -185,6 +196,10 @@ static void stop_output(arm_angle_status_t status)
     debug.ball_velocity_i_output_deg = 0.0f;
     debug.ball_velocity_d_output_deg = 0.0f;
     debug.ball_velocity_raw_output_deg = 0.0f;
+    debug.ball_brake_target_acceleration_cm_s2 = 0.0f;
+    debug.ball_brake_raw_angle_deg = 0.0f;
+    debug.ball_brake_angle_deg = 0.0f;
+    debug.ball_combined_position_offset_deg = 0.0f;
     debug.motor_position_offset_deg = 0.0f;
     debug.ball_velocity_output_limited = 0U;
     debug.status = (uint8_t)status;
@@ -257,6 +272,13 @@ void Arm_Angle_Control_Reset_Defaults(void)
     config.vision_kalman_process_noise_position = 0.02f;
     config.vision_kalman_process_noise_velocity = 0.3f;
     config.ball_velocity_output_inverted = 0.0f;
+    config.ball_brake_feedforward_enabled = 0.0f;
+    config.ball_brake_stop_time_s = 0.6f;
+    config.ball_brake_gain = 1.0f;
+    config.ball_brake_max_acceleration_cm_s2 = 80.0f;
+    config.ball_brake_angle_limit_deg = 3.0f;
+    config.ball_brake_speed_deadzone_cm_s = 0.3f;
+    config.ball_brake_output_inverted = 0.0f;
     apply_controller_config();
 }
 
@@ -310,7 +332,14 @@ bool Arm_Angle_Control_Apply_Config(const arm_angle_control_config_t *next)
         !isfinite(next->vision_kalman_measurement_noise) || next->vision_kalman_measurement_noise < 0.001f || next->vision_kalman_measurement_noise > 0.2f ||
         !isfinite(next->vision_kalman_process_noise_position) || next->vision_kalman_process_noise_position < 0.001f || next->vision_kalman_process_noise_position > 0.2f ||
         !isfinite(next->vision_kalman_process_noise_velocity) || next->vision_kalman_process_noise_velocity < 0.01f || next->vision_kalman_process_noise_velocity > 5.0f ||
-        (next->ball_velocity_output_inverted != 0.0f && next->ball_velocity_output_inverted != 1.0f))
+        (next->ball_velocity_output_inverted != 0.0f && next->ball_velocity_output_inverted != 1.0f) ||
+        (next->ball_brake_feedforward_enabled != 0.0f && next->ball_brake_feedforward_enabled != 1.0f) ||
+        !isfinite(next->ball_brake_stop_time_s) || next->ball_brake_stop_time_s < 0.05f || next->ball_brake_stop_time_s > 5.0f ||
+        !isfinite(next->ball_brake_gain) || next->ball_brake_gain < 0.0f || next->ball_brake_gain > 5.0f ||
+        !isfinite(next->ball_brake_max_acceleration_cm_s2) || next->ball_brake_max_acceleration_cm_s2 < 1.0f || next->ball_brake_max_acceleration_cm_s2 > 500.0f ||
+        !isfinite(next->ball_brake_angle_limit_deg) || next->ball_brake_angle_limit_deg < 0.1f || next->ball_brake_angle_limit_deg > 15.0f ||
+        !isfinite(next->ball_brake_speed_deadzone_cm_s) || next->ball_brake_speed_deadzone_cm_s < 0.0f || next->ball_brake_speed_deadzone_cm_s > 10.0f ||
+        (next->ball_brake_output_inverted != 0.0f && next->ball_brake_output_inverted != 1.0f))
     {
         return false;
     }
@@ -428,6 +457,8 @@ void Arm_Angle_Control_Process(void)
     debug.vision_valid = Vision_Link_Get_Sample(&vision_sample) ? 1U : 0U;
     if (debug.vision_valid != 0U)
     {
+        debug.vision_raw_position_cm = vision_sample.position_cm;
+        debug.vision_raw_velocity_cm_s = vision_sample.velocity_cm_s;
         debug.vision_position_cm = vision_sample.position_cm;
         debug.vision_velocity_cm_s = vision_sample.velocity_cm_s;
         debug.vision_beam_angle_deg = 0.0f;
@@ -553,7 +584,43 @@ void Arm_Angle_Control_Process(void)
     debug.ball_velocity_output_limited =
         fabsf(debug.ball_velocity_raw_output_deg - position_offset) > 0.001f ? 1U : 0U;
     if (config.ball_velocity_output_inverted == 0.0f) position_offset = -position_offset;
+    debug.ball_brake_target_acceleration_cm_s2 = 0.0f;
+    debug.ball_brake_raw_angle_deg = 0.0f;
+    debug.ball_brake_angle_deg = 0.0f;
+    if (config.ball_brake_feedforward_enabled != 0.0f &&
+        fabsf(debug.vision_velocity_cm_s - target_velocity) >
+            config.ball_brake_speed_deadzone_cm_s &&
+        config.ball_brake_stop_time_s > 0.0f && motor_calibration_valid != 0U)
+    {
+        float brake_acceleration = (target_velocity - debug.vision_velocity_cm_s) /
+                                   config.ball_brake_stop_time_s * config.ball_brake_gain;
+        float brake_angle;
+        brake_acceleration = clampf(brake_acceleration,
+                                    -config.ball_brake_max_acceleration_cm_s2,
+                                    config.ball_brake_max_acceleration_cm_s2);
+        brake_angle = asinf(clampf(brake_acceleration /
+                                   (ARM_BALL_ROLLING_ACCELERATION_RATIO *
+                                    ARM_BALL_GRAVITY_CM_S2), -1.0f, 1.0f)) /
+                      DEG_TO_RAD;
+        if (config.ball_brake_output_inverted != 0.0f) brake_angle = -brake_angle;
+        debug.ball_brake_target_acceleration_cm_s2 = brake_acceleration;
+        debug.ball_brake_raw_angle_deg = brake_angle;
+        debug.ball_brake_angle_deg = clampf(brake_angle,
+                                            -config.ball_brake_angle_limit_deg,
+                                            config.ball_brake_angle_limit_deg);
+        if (fabsf(debug.ball_brake_raw_angle_deg -
+                  debug.ball_brake_angle_deg) > 0.001f)
+            debug.ball_velocity_output_limited |= 0x04U;
+        position_offset += motor_position_from_beam_angle(debug.ball_brake_angle_deg) -
+                           motor_position_balance_deg;
+    }
+    if (fabsf(position_offset) > config.motor_position_offset_limit_deg)
+        debug.ball_velocity_output_limited |= 0x08U;
+    position_offset = clampf(position_offset,
+                             -config.motor_position_offset_limit_deg,
+                             config.motor_position_offset_limit_deg);
     debug.motor_position_offset_deg = position_offset;
+    debug.ball_combined_position_offset_deg = position_offset;
     motor_target = clampf(motor_position_balance_deg + position_offset,
                           motor_position_min_deg, motor_position_max_deg);
     if (fabsf(motor_target - (motor_position_balance_deg + position_offset)) > 0.001f)

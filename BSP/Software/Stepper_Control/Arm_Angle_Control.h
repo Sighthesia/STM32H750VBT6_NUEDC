@@ -48,6 +48,13 @@ typedef struct
     float vision_kalman_process_noise_position;
     float vision_kalman_process_noise_velocity;
     float ball_velocity_output_inverted;
+    float ball_brake_feedforward_enabled;
+    float ball_brake_stop_time_s;
+    float ball_brake_gain;
+    float ball_brake_max_acceleration_cm_s2;
+    float ball_brake_angle_limit_deg;
+    float ball_brake_speed_deadzone_cm_s;
+    float ball_brake_output_inverted;
 } arm_angle_control_config_t;
 
 typedef struct
@@ -62,6 +69,8 @@ typedef struct
     uint8_t imu_valid;
     float vision_position_cm;
     float vision_velocity_cm_s;
+    float vision_raw_position_cm;
+    float vision_raw_velocity_cm_s;
     float vision_beam_angle_deg;
     float vision_feedforward_acceleration_cm_s2;
     float vision_prediction_ms;
@@ -79,6 +88,10 @@ typedef struct
     float motor_target_position_deg;
     float motor_trajectory_position_deg;
     float motor_trajectory_velocity_deg_s;
+    float ball_brake_target_acceleration_cm_s2;
+    float ball_brake_raw_angle_deg;
+    float ball_brake_angle_deg;
+    float ball_combined_position_offset_deg;
     uint8_t vision_valid;
     uint8_t status;
 } arm_angle_control_debug_t;
