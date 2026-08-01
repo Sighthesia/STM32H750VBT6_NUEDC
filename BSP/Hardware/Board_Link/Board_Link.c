@@ -153,7 +153,7 @@ static void Board_Link_Parse_Frame(void)
                 else if (command == BOARD_LINK_COMMAND_START) accepted = test_id < 4U || Car_Lap_Task_Start();
             }
             last_command = rx_frame[7];
-            command_ack = accepted ? rx_frame[7] : 0U;
+            command_ack = accepted ? rx_frame[7] : (uint8_t)(rx_frame[7] | 0x80U);
         }
     }
 }
