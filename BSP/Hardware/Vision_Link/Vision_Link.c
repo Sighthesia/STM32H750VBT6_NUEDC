@@ -220,7 +220,11 @@ void Vision_Link_Process(void)
     received_ms = HAL_GetTick();
     if (kalman_enabled != 0U)
     {
-        if (kalman_initialized != 0U && fabsf(position_cm - kalman_position) > VISION_LINK_MAX_POSITION_STEP_CM)
+        uint32_t update_gap_ms = kalman_last_update_ms == 0U ? 0U :
+                                  (uint32_t)(received_ms - kalman_last_update_ms);
+        if (kalman_initialized != 0U &&
+            (fabsf(position_cm - kalman_position) > VISION_LINK_MAX_POSITION_STEP_CM ||
+             (kalman_last_update_ms != 0U && update_gap_ms > VISION_LINK_TIMEOUT_MS)))
             Vision_Link_Reset_Kalman_State(position_cm);
         Vision_Link_Update_Kalman(position_cm, kalman_last_update_ms == 0U ? 0.05f :
                                    (float)(received_ms - kalman_last_update_ms) * 0.001f);
