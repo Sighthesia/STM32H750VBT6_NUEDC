@@ -587,12 +587,13 @@ void Arm_Angle_Control_Process(void)
     debug.ball_brake_target_acceleration_cm_s2 = 0.0f;
     debug.ball_brake_raw_angle_deg = 0.0f;
     debug.ball_brake_angle_deg = 0.0f;
+    float brake_velocity_error = target_velocity - debug.vision_velocity_cm_s;
     if (config.ball_brake_feedforward_enabled != 0.0f &&
-        fabsf(debug.vision_velocity_cm_s - target_velocity) >
-            config.ball_brake_speed_deadzone_cm_s &&
+        fabsf(brake_velocity_error) > config.ball_brake_speed_deadzone_cm_s &&
+        brake_velocity_error * debug.vision_velocity_cm_s < 0.0f &&
         config.ball_brake_stop_time_s > 0.0f && motor_calibration_valid != 0U)
     {
-        float brake_acceleration = (target_velocity - debug.vision_velocity_cm_s) /
+        float brake_acceleration = brake_velocity_error /
                                    config.ball_brake_stop_time_s * config.ball_brake_gain;
         float brake_angle;
         brake_acceleration = clampf(brake_acceleration,
