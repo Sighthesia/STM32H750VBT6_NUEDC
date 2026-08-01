@@ -60,7 +60,7 @@
 #define ANO_ARM_ANGLE_STORAGE_VERSION 1U
 #define ANO_ARM_CALIBRATION_STORAGE_MAGIC 0x41433350UL
 #define ANO_ARM_CALIBRATION_STORAGE_VERSION 1U
-#define ANO_STORAGE_VERSION 20U
+#define ANO_STORAGE_VERSION 22U
 #define ANO_GEOMETRY_DIAGNOSTIC_FLOAT_COUNT 23U
 #define ARM_HOME_STATUS_PERIOD_MS 50U
 #define ARM_HOME_SETTLE_MS 100U
@@ -190,6 +190,53 @@ enum {
     CAR_ARC_WHEEL_TRACK,
     ANO_PARAM_COUNT
 };
+
+typedef struct
+{
+    uint16_t id;
+    const char *name;
+    const char *info;
+} car_parameter_desc_t;
+
+/* The table is the car-side protocol contract: index, ID and metadata move together. */
+static const car_parameter_desc_t car_parameters[] = {
+    {ATTITUDE_MODE, "PID控制模式", "固定为0：PID惯导循迹；该项只读"},
+    {ATTITUDE_BASE_SPEED, "基础轮速", "M1和M2共同前进速度"},
+    {ATTITUDE_HEADING_KP, "航向Kp", "航向外环比例"},
+    {ATTITUDE_HEADING_KI, "航向Ki", "航向外环积分"},
+    {ATTITUDE_HEADING_KD, "航向Kd", "航向外环微分"},
+    {ATTITUDE_RATE_KP, "角速度Kp", "角速度内环比例"},
+    {ATTITUDE_RATE_KI, "角速度Ki", "角速度内环积分"},
+    {ATTITUDE_RATE_KD, "角速度Kd", "角速度内环微分"},
+    {ATTITUDE_MAX_RATE, "最大角速度", "航向外环目标角速度限幅"},
+    {ATTITUDE_MAX_DIFF, "最大差速", "左右轮速度差限幅"},
+    {IMU_INVERT_X, "IMU X轴倒置", "0正常，1倒置"},
+    {IMU_INVERT_Y, "IMU Y轴倒置", "0正常，1倒置"},
+    {IMU_INVERT_Z, "IMU Z轴倒置", "0正常，1倒置"},
+    {IMU_RATE_Z_INVERTED, "Z轴角速度反馈倒置", "0原方向，1倒置，仅作用于Z轴角速度反馈"},
+    {CAR_LAP_STOP_DELAY_MS, "一圈停车补偿", "终点横线后继续行驶时间，单位毫秒"},
+    {CAR_LAP_COUNTS_PER_METER, "里程每米计数", "单轮前进一米对应的累计编码器计数"},
+    {TRACKING_LAYER1_WEIGHT, "光电第一层权重", "4和5号光电的修正速度，单位度每秒"},
+    {TRACKING_LAYER2_WEIGHT, "光电第二层权重", "3和6号光电的修正速度，单位度每秒"},
+    {TRACKING_LAYER3_WEIGHT, "光电第三层权重", "2和7号光电的修正速度，单位度每秒"},
+    {TRACKING_LAYER4_WEIGHT, "光电第四层权重", "1和8号光电的修正速度，单位度每秒"},
+    {GRAY_SENSOR_ACTIVE_LOW, "光电低电平有效", "0高电平黑线有效，1低电平黑线有效"},
+    {CAR_ARC_STRAIGHT_LENGTH, "直道长度", "AB和CD直道长度，单位米"},
+    {CAR_ARC_RADIUS, "圆弧半径", "BC和DA圆弧半径，单位米"},
+    {CAR_ARC_LENGTH, "圆弧长度", "BC和DA圆弧长度，单位米"},
+    {CAR_ARC_EXIT_YAW, "圆弧退出航向", "圆弧退出所需的最小IMU相对航向，单位度"},
+    {CAR_ARC_OPTICAL_LIMIT, "光电纠偏上限", "圆弧中光电纠偏角速度上限，单位度每秒"},
+    {CAR_ARC_FEEDFORWARD_MIN, "前馈最小角速度", "圆弧前馈角速度下限，单位度每秒"},
+    {CAR_ARC_FEEDFORWARD_MAX, "前馈最大角速度", "圆弧前馈角速度上限，单位度每秒"},
+    {CAR_ARC_FEEDFORWARD_SLEW, "前馈变化率", "前馈角速度变化率，单位度每秒平方"},
+    {CAR_ARC_DIFFERENTIAL_SLEW, "差速变化率", "左右轮差速变化率，单位速度单位每秒"},
+    {ATTITUDE_START_RAMP_MS, "缓启动时间", "基础速度从零爬升至设定值的时间，单位毫秒"},
+    {CAR_ARC_WHEEL_TRACK, "两轮间距", "左右驱动轮中心距离，单位米；用于弯道理论轮速观测"}
+};
+
+#define CAR_PARAMETER_COUNT ((uint16_t)(sizeof(car_parameters) / sizeof(car_parameters[0])))
+_Static_assert(CAR_PARAMETER_COUNT == 32U,
+               "Car protocol table must contain all 32 protocol parameters");
 
 typedef struct { uint8_t state, source, destination, id, sum, checksum; uint16_t length, index; uint8_t data[ANO_DATA_MAX]; } ano_parser_t;
 typedef struct { uint8_t cid[3]; const char *name; const char *info; } ano_command_desc_t;
@@ -1116,7 +1163,7 @@ static void load_storage(void)
         }
     }
 #endif
-    host_baud_rate = record.baud_rate;
+    if (App_Role_Get() == APP_ROLE_ARM) host_baud_rate = record.baud_rate;
     (void)Car_Motor_Set_Direction(0U, car_m1_direction != 0.0f);
     (void)Car_Motor_Set_Direction(1U, car_m2_direction != 0.0f);
     if (record.version == ANO_STORAGE_VERSION)
@@ -1330,6 +1377,55 @@ static float *parameter(uint16_t id)
         return arm_angle_values[id - ARM_ANGLE_KP];
     }
     return id < ANO_PARAM_COUNT ? values[id] : NULL;
+}
+
+static const car_parameter_desc_t *car_parameter_from_index(uint16_t index)
+{
+    return index < CAR_PARAMETER_COUNT ? &car_parameters[index] : NULL;
+}
+
+static float *car_parameter_value(uint16_t id)
+{
+    car_attitude_control_config_t *attitude = Car_Attitude_Control_Get_Config();
+    car_tracking_config_t *tracking = Car_Attitude_Control_Get_Tracking_Config();
+    car_lap_arc_config_t *arc = Car_Lap_Task_Get_Arc_Config();
+
+    switch (id)
+    {
+    case ATTITUDE_MODE: return &attitude->mode;
+    case ATTITUDE_BASE_SPEED: return &attitude->base_speed;
+    case ATTITUDE_HEADING_KP: return &attitude->heading_kp;
+    case ATTITUDE_HEADING_KI: return &attitude->heading_ki;
+    case ATTITUDE_HEADING_KD: return &attitude->heading_kd;
+    case ATTITUDE_RATE_KP: return &attitude->rate_kp;
+    case ATTITUDE_RATE_KI: return &attitude->rate_ki;
+    case ATTITUDE_RATE_KD: return &attitude->rate_kd;
+    case ATTITUDE_MAX_RATE: return &attitude->max_rate;
+    case ATTITUDE_MAX_DIFF: return &attitude->max_differential;
+    case IMU_INVERT_X: return &attitude->invert_x;
+    case IMU_INVERT_Y: return &attitude->invert_y;
+    case IMU_INVERT_Z: return &attitude->invert_z;
+    case IMU_RATE_Z_INVERTED: return &attitude->rate_feedback_inverted;
+    case CAR_LAP_STOP_DELAY_MS: return &car_lap_stop_delay_ms;
+    case CAR_LAP_COUNTS_PER_METER: return &car_lap_counts_per_meter;
+    case TRACKING_LAYER1_WEIGHT: return &tracking->layer1_weight_deg_s;
+    case TRACKING_LAYER2_WEIGHT: return &tracking->layer2_weight_deg_s;
+    case TRACKING_LAYER3_WEIGHT: return &tracking->layer3_weight_deg_s;
+    case TRACKING_LAYER4_WEIGHT: return &tracking->layer4_weight_deg_s;
+    case GRAY_SENSOR_ACTIVE_LOW: return &gray_sensor_active_low;
+    case CAR_ARC_STRAIGHT_LENGTH: return &arc->straight_length_m;
+    case CAR_ARC_RADIUS: return &arc->arc_radius_m;
+    case CAR_ARC_LENGTH: return &arc->arc_length_m;
+    case CAR_ARC_EXIT_YAW: return &arc->arc_exit_yaw_deg;
+    case CAR_ARC_OPTICAL_LIMIT: return &arc->optical_rate_limit_deg_s;
+    case CAR_ARC_FEEDFORWARD_MIN: return &arc->feedforward_rate_min_deg_s;
+    case CAR_ARC_FEEDFORWARD_MAX: return &arc->feedforward_rate_max_deg_s;
+    case CAR_ARC_FEEDFORWARD_SLEW: return &arc->feedforward_rate_slew_deg_s2;
+    case CAR_ARC_DIFFERENTIAL_SLEW: return &arc->differential_slew_s2;
+    case ATTITUDE_START_RAMP_MS: return &attitude->start_ramp_ms;
+    case CAR_ARC_WHEEL_TRACK: return &arc->wheel_track_m;
+    default: return NULL;
+    }
 }
 
 static bool write_feedforward_parameter(uint16_t parameter_id, float value)
@@ -1619,44 +1715,9 @@ static bool parameter_is_visible(uint16_t parameter_id)
 {
     if (App_Role_Get() == APP_ROLE_CAR)
     {
-        switch (parameter_id)
-        {
-        case HOST_BAUD:
-        case ATTITUDE_BASE_SPEED:
-        case ATTITUDE_HEADING_KP:
-        case ATTITUDE_HEADING_KI:
-        case ATTITUDE_HEADING_KD:
-        case ATTITUDE_RATE_KP:
-        case ATTITUDE_RATE_KI:
-        case ATTITUDE_RATE_KD:
-        case ATTITUDE_MAX_RATE:
-        case ATTITUDE_MAX_DIFF:
-        case IMU_INVERT_X:
-        case IMU_INVERT_Y:
-        case IMU_INVERT_Z:
-        case IMU_RATE_Z_INVERTED:
-        case GRAY_SENSOR_ACTIVE_LOW:
-        case CAR_LAP_STOP_DELAY_MS:
-        case CAR_LAP_COUNTS_PER_METER:
-        case TRACKING_LAYER1_WEIGHT:
-        case TRACKING_LAYER2_WEIGHT:
-        case TRACKING_LAYER3_WEIGHT:
-        case TRACKING_LAYER4_WEIGHT:
-        case CAR_ARC_STRAIGHT_LENGTH:
-        case CAR_ARC_RADIUS:
-        case CAR_ARC_LENGTH:
-        case CAR_ARC_EXIT_YAW:
-        case CAR_ARC_OPTICAL_LIMIT:
-        case CAR_ARC_FEEDFORWARD_MIN:
-        case CAR_ARC_FEEDFORWARD_MAX:
-        case CAR_ARC_FEEDFORWARD_SLEW:
-        case CAR_ARC_DIFFERENTIAL_SLEW:
-        case ATTITUDE_START_RAMP_MS:
-        case CAR_ARC_WHEEL_TRACK:
-            return true;
-        default:
-            return false;
-        }
+        for (uint16_t index = 0U; index < CAR_PARAMETER_COUNT; index++)
+            if (car_parameters[index].id == parameter_id) return true;
+        return false;
     }
     if (parameter_id == BOARD_ROLE ||
         (parameter_id >= ARM_LIMIT_MIN && parameter_id <= ARM_HOME_MODE) ||
@@ -1670,6 +1731,11 @@ static bool parameter_is_visible(uint16_t parameter_id)
 
 static uint16_t parameter_id_from_protocol_index(uint16_t index)
 {
+    if (App_Role_Get() == APP_ROLE_CAR)
+    {
+        const car_parameter_desc_t *desc = car_parameter_from_index(index);
+        return desc != NULL ? desc->id : ANO_PARAM_COUNT;
+    }
     for (uint16_t id = 0U; id < ANO_PARAM_COUNT; id++)
     {
         if (!parameter_is_visible(id)) continue;
@@ -1681,6 +1747,7 @@ static uint16_t parameter_id_from_protocol_index(uint16_t index)
 
 static uint16_t parameter_protocol_count(void)
 {
+    if (App_Role_Get() == APP_ROLE_CAR) return CAR_PARAMETER_COUNT;
     uint16_t count = 0U;
     for (uint16_t id = 0U; id < ANO_PARAM_COUNT; id++)
     {
@@ -1718,7 +1785,8 @@ static void send_check(uint8_t destination, uint8_t id, uint8_t sum, uint8_t add
 
 static bool save_all_parameters(void)
 {
-    uint32_t baud_rate = requested_baud_rate != 0U ? requested_baud_rate : host_baud_rate;
+    uint32_t baud_rate = App_Role_Get() == APP_ROLE_CAR ? ANO_DEFAULT_BAUD_RATE :
+                         (requested_baud_rate != 0U ? requested_baud_rate : host_baud_rate);
 
     if (!storage_ready || !save_storage(baud_rate)) return false;
     if (App_Role_Get() == APP_ROLE_ARM && !save_arm_angle_config())
@@ -1726,7 +1794,7 @@ static bool save_all_parameters(void)
         storage_operation = 3U;
         return false;
     }
-    if (baud_rate != host_baud_rate)
+    if (App_Role_Get() == APP_ROLE_ARM && baud_rate != host_baud_rate)
     {
         pending_baud_rate = baud_rate;
         baud_switch_at_ms = HAL_GetTick() + ANO_BAUD_SWITCH_DELAY_MS;
@@ -1761,11 +1829,14 @@ static bool parameter_session_active(void)
 static void restore_parameter_defaults(void)
 {
     reset_local_defaults();
-    requested_baud_rate = ANO_DEFAULT_BAUD_RATE;
-    if (host_baud_rate != ANO_DEFAULT_BAUD_RATE)
+    if (App_Role_Get() == APP_ROLE_ARM)
     {
-        pending_baud_rate = ANO_DEFAULT_BAUD_RATE;
-        baud_switch_at_ms = HAL_GetTick() + ANO_BAUD_SWITCH_DELAY_MS;
+        requested_baud_rate = ANO_DEFAULT_BAUD_RATE;
+        if (host_baud_rate != ANO_DEFAULT_BAUD_RATE)
+        {
+            pending_baud_rate = ANO_DEFAULT_BAUD_RATE;
+            baud_switch_at_ms = HAL_GetTick() + ANO_BAUD_SWITCH_DELAY_MS;
+        }
     }
     if (App_Role_Get() == APP_ROLE_CAR) (void)apply_car_config();
     else if (zdt_stepper_motors[0] != NULL) invalidate_arm_reference();
@@ -1775,7 +1846,7 @@ static void send_param(uint16_t protocol_index)
     uint16_t id = parameter_id_from_protocol_index(protocol_index);
     uint8_t d[6]; uint16_t i = 0U; float *v;
     if (id >= ANO_PARAM_COUNT) return;
-    v = parameter(id);
+    v = App_Role_Get() == APP_ROLE_CAR ? car_parameter_value(id) : parameter(id);
     if (id == HOST_BAUD) { put_u16(d, &i, protocol_index); put_float(d, &i, (float)(requested_baud_rate != 0U ? requested_baud_rate : host_baud_rate)); send_frame(ANO_ID_PARAM_VALUE, d, i); return; }
     if (v == NULL) return;
     put_u16(d, &i, protocol_index); put_float(d, &i, *v); send_frame(ANO_ID_PARAM_VALUE, d, i);
@@ -1794,6 +1865,22 @@ static void send_param_info(uint16_t protocol_index)
 {
     uint16_t id = parameter_id_from_protocol_index(protocol_index);
     if (id >= ANO_PARAM_COUNT) return;
+    if (App_Role_Get() == APP_ROLE_CAR)
+    {
+        const car_parameter_desc_t *desc = car_parameter_from_index(protocol_index);
+        uint8_t d[ANO_DATA_MAX] = {0};
+        uint16_t i = 0U;
+
+        if (desc == NULL || car_parameter_value(desc->id) == NULL) return;
+        put_u16(d, &i, protocol_index);
+        d[i++] = 8U;
+        strncpy((char *)&d[i], desc->name, 20U);
+        i += 20U;
+        strncpy((char *)&d[i], desc->info, sizeof(d) - i - 1U);
+        i += (uint16_t)strlen((const char *)&d[i]);
+        send_frame(ANO_ID_PARAM_INFO, d, i);
+        return;
+    }
     if (id == ATTITUDE_START_RAMP_MS)
     {
         static const char name[] = "缓启动时间";
@@ -2876,7 +2963,9 @@ static void handle(uint8_t source, uint8_t id, const uint8_t *d, uint16_t n, uin
         bool accepted = false;
         uint16_t protocol_index = get_u16(d);
         uint16_t parameter_id = parameter_id_from_protocol_index(protocol_index);
-        float value = get_float(&d[2]); float *v = parameter(parameter_id);
+        float value = get_float(&d[2]);
+        float *v = App_Role_Get() == APP_ROLE_CAR ? car_parameter_value(parameter_id) :
+                   parameter(parameter_id);
         parameter_session_until_ms = HAL_GetTick() + ANO_PARAMETER_SESSION_MS;
         if (parameter_id >= ANO_PARAM_COUNT) return;
         bool calibration_read_only = parameter_id >= ARM_CALIBRATION_LEFT_MOTOR &&
@@ -2884,11 +2973,14 @@ static void handle(uint8_t source, uint8_t id, const uint8_t *d, uint16_t n, uin
 
         if (calibration_read_only) {
             accepted = false;
-        } else if (parameter_id == HOST_BAUD && isfinite(value) && value == (float)(uint32_t)value &&
+        } else if (App_Role_Get() == APP_ROLE_ARM && parameter_id == HOST_BAUD &&
+                   isfinite(value) && value == (float)(uint32_t)value &&
             baud_rate_is_valid((uint32_t)value)) {
             requested_baud_rate = (uint32_t)value;
             accepted = true;
-        } else if (App_Role_Get() == APP_ROLE_CAR && !parameter_is_visible(parameter_id)) {
+        } else if (App_Role_Get() == APP_ROLE_CAR &&
+                   (car_parameter_from_index(protocol_index) == NULL ||
+                    car_parameter_from_index(protocol_index)->id != parameter_id || v == NULL)) {
             accepted = false;
         } else if (parameter_id >= CAR_M1_DIRECTION && parameter_id <= CAR_M2_DIRECTION) {
             accepted = write_car_parameter(parameter_id, value);
@@ -2993,7 +3085,7 @@ void ANO_Host_Init(void)
         }
     }
     if (App_Role_Get() == APP_ROLE_ARM) start_arm_startup();
-    if (host_baud_rate != huart1.Init.BaudRate) apply_baud_rate(host_baud_rate);
+    if (App_Role_Get() == APP_ROLE_ARM && host_baud_rate != huart1.Init.BaudRate) apply_baud_rate(host_baud_rate);
     else HAL_UART_Receive_IT(&huart1, &rx_byte, 1U);
 }
 void ANO_Host_Process(void)
@@ -3008,7 +3100,8 @@ void ANO_Host_Process(void)
     else process_car_b0_calibration();
     start_tx();
     process_parameter_save();
-    if (pending_baud_rate != 0U && (int32_t)(HAL_GetTick() - baud_switch_at_ms) >= 0 &&
+    if (App_Role_Get() == APP_ROLE_ARM && pending_baud_rate != 0U &&
+        (int32_t)(HAL_GetTick() - baud_switch_at_ms) >= 0 &&
         !tx_active && response_count == 0U && tx_count == 0U)
     {
         uint32_t baud_rate = pending_baud_rate;
