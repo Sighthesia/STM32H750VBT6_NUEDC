@@ -117,6 +117,7 @@ void Car_Attitude_Control_Reset_Defaults(void)
     config.invert_y = 0.0f;
     config.invert_z = 0.0f;
     config.rate_feedback_inverted = 1.0f;
+    tracking_config.method = (float)CAR_TRACKING_METHOD_OPTICAL_IMU;
     tracking_config.layer1_weight_deg_s = 7.0f;
     tracking_config.layer2_weight_deg_s = 25.0f;
     tracking_config.layer3_weight_deg_s = 55.0f;
@@ -128,8 +129,10 @@ void Car_Attitude_Control_Reset_Defaults(void)
 
 bool Car_Attitude_Control_Apply_Tracking_Config(const car_tracking_config_t *next)
 {
-    if (next == NULL || !isfinite(next->layer1_weight_deg_s) || !isfinite(next->layer2_weight_deg_s) ||
+    if (next == NULL || !isfinite(next->method) || !isfinite(next->layer1_weight_deg_s) || !isfinite(next->layer2_weight_deg_s) ||
         !isfinite(next->layer3_weight_deg_s) || !isfinite(next->layer4_weight_deg_s) ||
+        next->method < (float)CAR_TRACKING_METHOD_OPTICAL_IMU ||
+        next->method > (float)CAR_TRACKING_METHOD_GEOMETRY || next->method != floorf(next->method) ||
         next->layer1_weight_deg_s < 0.0f || next->layer4_weight_deg_s > 720.0f)
     {
         return false;
@@ -191,6 +194,12 @@ bool Car_Attitude_Control_Set_Enabled(bool state)
 
 bool Car_Attitude_Control_Set_Arc_Rate(float target_rate_deg_s)
 {
+    if ((car_tracking_method_t)(uint8_t)tracking_config.method != CAR_TRACKING_METHOD_GEOMETRY)
+    {
+        arc_target_rate = 0.0f;
+        arc_commanded_rate = 0.0f;
+        return true;
+    }
     if (!isfinite(target_rate_deg_s) || target_rate_deg_s < -config.max_rate || target_rate_deg_s > config.max_rate)
     {
         return false;
@@ -260,13 +269,16 @@ void Car_Attitude_Control_Process(void)
     }
     unwrapped_heading += wrap_angle(heading - previous_heading);
     previous_heading = heading;
-    const float optical = Car_Tracking_Target_Offset(Gray_Sensor_Get_Stable(), tracking_config.layer1_weight_deg_s,
+    const uint8_t tracking_method = (uint8_t)tracking_config.method;
+    const float optical = Car_Tracking_Method_Target_Offset(Gray_Sensor_Get_Stable(), tracking_method,
+        tracking_config.layer1_weight_deg_s,
         tracking_config.layer2_weight_deg_s, tracking_config.layer3_weight_deg_s, tracking_config.layer4_weight_deg_s,
         CAR_CONTROL_TRACKING_LOOKAHEAD_S);
     target_heading = unwrapped_heading + optical;
     const float heading_error = unwrapped_heading - target_heading;
     float target_rate = PIDController_Update(&heading_pid, 0.0f, heading_error);
-    if (arc_target_rate != 0.0f || arc_commanded_rate != 0.0f)
+    if (tracking_method == (uint8_t)CAR_TRACKING_METHOD_GEOMETRY &&
+        (arc_target_rate != 0.0f || arc_commanded_rate != 0.0f))
     {
         const car_lap_arc_config_t *arc = Car_Lap_Task_Get_Arc_Config();
         arc_commanded_rate = Car_Tracking_Approach(arc_commanded_rate, arc_target_rate,

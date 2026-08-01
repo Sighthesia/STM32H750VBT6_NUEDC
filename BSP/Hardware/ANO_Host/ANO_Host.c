@@ -60,8 +60,9 @@
 #define ANO_ARM_ANGLE_STORAGE_VERSION 1U
 #define ANO_ARM_CALIBRATION_STORAGE_MAGIC 0x41433350UL
 #define ANO_ARM_CALIBRATION_STORAGE_VERSION 1U
-#define ANO_STORAGE_VERSION 22U
-#define ANO_GEOMETRY_DIAGNOSTIC_FLOAT_COUNT 23U
+#define ANO_STORAGE_VERSION 23U
+#define ANO_TRACKING_DIAGNOSTIC_FLOAT_COUNT 20U
+#define ANO_GEOMETRY_DIAGNOSTIC_FLOAT_COUNT 24U
 #define ARM_HOME_STATUS_PERIOD_MS 50U
 #define ARM_HOME_SETTLE_MS 100U
 #define ARM_STARTUP_HOME_TIMEOUT_MS 22000U
@@ -188,6 +189,7 @@ enum {
     ATTITUDE_LADRC_DIFFERENTIAL_SLEW,
     ATTITUDE_START_RAMP_MS,
     CAR_ARC_WHEEL_TRACK,
+    TRACKING_METHOD,
     ANO_PARAM_COUNT
 };
 
@@ -231,12 +233,13 @@ static const car_parameter_desc_t car_parameters[] = {
     {CAR_ARC_FEEDFORWARD_SLEW, "前馈变化率", "前馈角速度变化率，单位度每秒平方"},
     {CAR_ARC_DIFFERENTIAL_SLEW, "差速变化率", "左右轮差速变化率，单位速度单位每秒"},
     {ATTITUDE_START_RAMP_MS, "缓启动时间", "基础速度从零爬升至设定值的时间，单位毫秒"},
-    {CAR_ARC_WHEEL_TRACK, "两轮间距", "左右驱动轮中心距离，单位米；用于弯道理论轮速观测"}
+    {CAR_ARC_WHEEL_TRACK, "两轮间距", "左右驱动轮中心距离，单位米；用于弯道理论轮速观测"},
+    {TRACKING_METHOD, "循迹方法", "0光电加IMU，1中间双路锁线，2几何惯导前馈"}
 };
 
 #define CAR_PARAMETER_COUNT ((uint16_t)(sizeof(car_parameters) / sizeof(car_parameters[0])))
-_Static_assert(CAR_PARAMETER_COUNT == 32U,
-               "Car protocol table must contain all 32 protocol parameters");
+_Static_assert(CAR_PARAMETER_COUNT == 33U,
+               "Car protocol table must contain all 33 protocol parameters");
 
 typedef struct { uint8_t state, source, destination, id, sum, checksum; uint16_t length, index; uint8_t data[ANO_DATA_MAX]; } ano_parser_t;
 typedef struct { uint8_t cid[3]; const char *name; const char *info; } ano_command_desc_t;
@@ -1376,6 +1379,7 @@ static float *parameter(uint16_t id)
         };
         return arm_angle_values[id - ARM_ANGLE_KP];
     }
+    if (id == TRACKING_METHOD) return NULL;
     return id < ANO_PARAM_COUNT ? values[id] : NULL;
 }
 
@@ -1412,6 +1416,7 @@ static float *car_parameter_value(uint16_t id)
     case TRACKING_LAYER2_WEIGHT: return &tracking->layer2_weight_deg_s;
     case TRACKING_LAYER3_WEIGHT: return &tracking->layer3_weight_deg_s;
     case TRACKING_LAYER4_WEIGHT: return &tracking->layer4_weight_deg_s;
+    case TRACKING_METHOD: return &tracking->method;
     case GRAY_SENSOR_ACTIVE_LOW: return &gray_sensor_active_low;
     case CAR_ARC_STRAIGHT_LENGTH: return &arc->straight_length_m;
     case CAR_ARC_RADIUS: return &arc->arc_radius_m;
@@ -1575,6 +1580,7 @@ static bool write_tracking_parameter(uint16_t parameter_id, float value)
     case TRACKING_LAYER2_WEIGHT: next.layer2_weight_deg_s = value; break;
     case TRACKING_LAYER3_WEIGHT: next.layer3_weight_deg_s = value; break;
     case TRACKING_LAYER4_WEIGHT: next.layer4_weight_deg_s = value; break;
+    case TRACKING_METHOD: next.method = value; break;
     default: return false;
     }
     return Car_Attitude_Control_Apply_Tracking_Config(&next);
@@ -2744,8 +2750,11 @@ static void send_tracking_diagnostic(void)
     const car_attitude_control_debug_t *control = Car_Attitude_Control_Get_Debug();
     car_lap_status_t lap;
     const uint8_t gray = Gray_Sensor_Get_Stable();
-    uint8_t d[72];
+    uint8_t d[ANO_DATA_MAX];
     uint16_t i = 0U;
+
+    _Static_assert(ANO_TRACKING_DIAGNOSTIC_FLOAT_COUNT * sizeof(float) <= ANO_DATA_MAX,
+                   "Tracking diagnostic frame exceeds ANO data capacity");
 
     if (!tx_has_capacity(1U)) return;
 
@@ -2765,6 +2774,7 @@ static void send_tracking_diagnostic(void)
     put_float(d, &i, (float)lap.geometry_tracking_valid);
     put_float(d, &i, control->arc_feedforward_rate);
     put_float(d, &i, control->arc_optical_rate);
+    put_float(d, &i, Car_Attitude_Control_Get_Tracking_Config()->method);
     send_frame(ANO_ID_TRACKING_DIAGNOSTIC, d, i);
 }
 
@@ -2821,6 +2831,7 @@ static void send_geometry_diagnostic(void)
     put_float(d, &i, motor->speed[1]);
     put_float(d, &i, control->differential);
     put_float(d, &i, (float)control->status);
+    put_float(d, &i, Car_Attitude_Control_Get_Tracking_Config()->method);
     send_frame(ANO_ID_GEOMETRY_DIAGNOSTIC, d, i);
 }
 
@@ -2996,7 +3007,8 @@ static void handle(uint8_t source, uint8_t id, const uint8_t *d, uint16_t n, uin
             accepted = write_attitude_parameter(parameter_id, value);
         } else if (parameter_id >= STEPPER_FF_ENABLE && parameter_id <= STEPPER_FF_OUTPUT_LIMIT) {
             accepted = write_feedforward_parameter(parameter_id, value);
-        } else if (parameter_id >= TRACKING_LAYER1_WEIGHT && parameter_id <= TRACKING_LAYER4_WEIGHT) {
+        } else if ((parameter_id >= TRACKING_LAYER1_WEIGHT && parameter_id <= TRACKING_LAYER4_WEIGHT) ||
+                   parameter_id == TRACKING_METHOD) {
             accepted = write_tracking_parameter(parameter_id, value);
         } else if ((parameter_id >= CAR_ARC_STRAIGHT_LENGTH && parameter_id <= CAR_ARC_DIFFERENTIAL_SLEW) ||
                    parameter_id == CAR_ARC_WHEEL_TRACK) {

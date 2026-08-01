@@ -50,11 +50,19 @@ typedef struct
 
 typedef struct
 {
+    float method;
     float layer1_weight_deg_s;
     float layer2_weight_deg_s;
     float layer3_weight_deg_s;
     float layer4_weight_deg_s;
 } car_tracking_config_t;
+
+typedef enum
+{
+    CAR_TRACKING_METHOD_OPTICAL_IMU = 0,
+    CAR_TRACKING_METHOD_CENTER_LOCK = 1,
+    CAR_TRACKING_METHOD_GEOMETRY = 2
+} car_tracking_method_t;
 
 enum
 {

@@ -25,6 +25,12 @@ int main(void)
     assert(Car_Tracking_Target_Offset(0x81U, layer1, layer2, layer3, layer4, lookahead_s) == 0.0f);
     assert(Car_Tracking_Target_Offset(0x03U, layer1, layer2, layer3, layer4, lookahead_s) == 7.80f);
     assert(Car_Tracking_Target_Offset(0xC0U, layer1, layer2, layer3, layer4, lookahead_s) == -7.80f);
+    assert(Car_Tracking_Method_Target_Offset(0x19U, 0U, layer1, layer2, layer3, layer4,
+                                             lookahead_s) == 5.05f);
+    assert(Car_Tracking_Method_Target_Offset(0x19U, 1U, layer1, layer2, layer3, layer4,
+                                             lookahead_s) == 0.0f);
+    assert(Car_Tracking_Method_Target_Offset(0x08U, 1U, layer1, layer2, layer3, layer4,
+                                             lookahead_s) == 0.35f);
     assert(Car_Tracking_Display_Correction(0.35f) == 0.35f);
     assert(Car_Tracking_Display_Correction(-0.35f) == -0.35f);
     assert(Car_Tracking_Display_Correction(0.0f) == 0.0f);

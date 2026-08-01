@@ -23,6 +23,19 @@ static inline float Car_Tracking_Target_Offset(uint8_t sensor_state,
     return heading_rate * lookahead_time_s;
 }
 
+static inline float Car_Tracking_Method_Target_Offset(uint8_t sensor_state,
+                                                      uint8_t method,
+                                                      float layer1_weight,
+                                                      float layer2_weight,
+                                                      float layer3_weight,
+                                                      float layer4_weight,
+                                                      float lookahead_time_s)
+{
+    if (method == 1U && (sensor_state & 0x18U) == 0x18U) return 0.0f;
+    return Car_Tracking_Target_Offset(sensor_state, layer1_weight, layer2_weight,
+                                      layer3_weight, layer4_weight, lookahead_time_s);
+}
+
 static inline float Car_Tracking_Display_Correction(float target_offset)
 {
     return target_offset;
