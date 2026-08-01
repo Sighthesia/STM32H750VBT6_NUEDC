@@ -10,6 +10,20 @@
 
 static uint8_t active_test;
 
+static void draw_time(uint8_t y, uint32_t elapsed_ms)
+{
+    char text[12] = "TIME:000.0s";
+    uint32_t tenths = elapsed_ms / 100U;
+    uint32_t seconds = tenths / 10U;
+
+    if (seconds > 999U) seconds = 999U;
+    text[5] = (char)('0' + (seconds / 100U) % 10U);
+    text[6] = (char)('0' + (seconds / 10U) % 10U);
+    text[7] = (char)('0' + seconds % 10U);
+    text[9] = (char)('0' + tenths % 10U);
+    lcd_draw_utf8_string(4, y, text);
+}
+
 static void draw_hex(uint8_t y, const char *label, uint32_t value)
 {
     static const char hex[] = "0123456789ABCDEF";
@@ -26,12 +40,21 @@ static void draw_hex(uint8_t y, const char *label, uint32_t value)
 static void begin_test(uint8_t test_id)
 {
     active_test = test_id;
+    Board_Link_Select_Test(test_id);
+    if (test_id == 1U)
+    {
+        Board_Link_Start_Test();
+        return;
+    }
     if (test_id >= 3U)
     {
         (void)Arm_Competition_Task_Select((arm_competition_task_id_t)test_id);
-        if (!Arm_Competition_Task_Start()) return;
+        if (!Arm_Competition_Task_Start())
+        {
+            Board_Link_Stop_Test();
+            return;
+        }
     }
-    Board_Link_Select_Test(test_id);
     Board_Link_Start_Test();
 }
 
@@ -50,6 +73,7 @@ uint8_t Competition_Test_Refresh(uint8_t ui_frames, uint16_t elapsed_ms)
     (void)ui_frames;
     (void)elapsed_ms;
     if (!Board_Link_Is_Online()) state = "LINK OFF";
+    else if (Board_Link_Is_Finished()) state = "FINISHED";
     else if (Board_Link_Get_Command_Status() == BOARD_LINK_COMMAND_WAITING) state = "SENDING";
     else if (Board_Link_Get_Command_Status() == BOARD_LINK_COMMAND_OK) state = "RUNNING";
     else if (Board_Link_Get_Command_Status() == BOARD_LINK_COMMAND_REJECTED) state = "REJECTED";
@@ -58,10 +82,9 @@ uint8_t Competition_Test_Refresh(uint8_t ui_frames, uint16_t elapsed_ms)
     lcd_draw_utf8_string(4, 4, "TEST");
     lcd_draw_utf8_string(4, 26, active_test == 1U ? "1" : active_test == 2U ? "2" : active_test == 3U ? "3" : active_test == 4U ? "4" : active_test == 5U ? "5" : "6");
     lcd_draw_utf8_string(4, 48, (char *)state);
-    draw_hex(70, "CM", Board_Link_Get_Last_Command());
-    draw_hex(82, "AK", Board_Link_Get_Last_Ack());
-    draw_hex(94, "CR", Board_Link_Get_Peer_Diagnostic());
-    draw_hex(106, "RX", Board_Link_Get_Valid_Frame_Count());
-    draw_hex(118, "ER", Board_Link_Get_Last_Spi_Error());
+    draw_time(70, Board_Link_Get_Elapsed_Ms());
+    draw_hex(86, "CM", Board_Link_Get_Last_Command());
+    draw_hex(102, "AK", Board_Link_Get_Last_Ack());
+    draw_hex(118, "FB", Board_Link_Is_Finished() ? 1U : 0U);
     return 1U;
 }

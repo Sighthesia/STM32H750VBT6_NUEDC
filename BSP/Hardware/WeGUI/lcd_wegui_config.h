@@ -22,11 +22,12 @@
 #define WEGUI_PORT _GUI_KEY_PORT
 
 void wegui_stm32_input_init(void);
+void wegui_stm32_input_tick_1ms(void);
 void wegui_stm32_input_process(uint16_t elapsed_ms);
 
 #define wegui_port_init() wegui_stm32_input_init()
 #define wegui_port_task(stick) wegui_stm32_input_process(stick)
-#define wegui_port_ms_irq() do { } while (0)
+#define wegui_port_ms_irq() wegui_stm32_input_tick_1ms()
 
 #define COLOUR_MLIST_DEFAULT_0 0x530D
 #define COLOUR_MLIST_DEFAULT_1 0xEFBE

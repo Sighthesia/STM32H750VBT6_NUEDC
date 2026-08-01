@@ -14,7 +14,16 @@
 #define WEGUI_LCD_BL_PORT GPIOD
 #define WEGUI_LCD_BL_PIN GPIO_PIN_10
 #define WEGUI_LCD_SPI_TIMEOUT 100U
+#define WEGUI_BUTTON_DEBOUNCE_MS 20U
 #define WEGUI_LONG_PRESS_MS 700U
+
+static volatile uint8_t button_click_event;
+static volatile uint8_t button_long_event;
+static uint8_t button_raw;
+static uint8_t button_stable;
+static uint8_t button_debounce_ms;
+static uint16_t button_pressed_ms;
+static uint8_t button_long_reported;
 
 static void wegui_lcd_command(uint8_t value)
 {
@@ -151,17 +160,70 @@ void wegui_stm32_panel_self_test(void)
 
 void wegui_stm32_input_init(void)
 {
+    button_raw = HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_0) == GPIO_PIN_SET;
+    button_stable = button_raw;
+    button_debounce_ms = 0U;
+    button_pressed_ms = 0U;
+    button_long_reported = 0U;
+    button_click_event = 0U;
+    button_long_event = 0U;
     Encoder_Init();
+}
+
+void wegui_stm32_input_tick_1ms(void)
+{
+    uint8_t pressed = HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_0) == GPIO_PIN_SET;
+
+    if (pressed != button_raw)
+    {
+        button_raw = pressed;
+        button_debounce_ms = 0U;
+        return;
+    }
+    if (button_debounce_ms < WEGUI_BUTTON_DEBOUNCE_MS)
+    {
+        button_debounce_ms++;
+        if (button_debounce_ms != WEGUI_BUTTON_DEBOUNCE_MS) return;
+    }
+    if (button_stable != button_raw)
+    {
+        button_stable = button_raw;
+        if (button_stable != 0U)
+        {
+            button_pressed_ms = 0U;
+            button_long_reported = 0U;
+        }
+        else if (button_long_reported == 0U)
+        {
+            button_click_event = 1U;
+        }
+    }
+    if (button_stable != 0U && button_pressed_ms < 0xFFFFU)
+    {
+        button_pressed_ms++;
+        if (button_long_reported == 0U && button_pressed_ms >= WEGUI_LONG_PRESS_MS)
+        {
+            button_long_reported = 1U;
+            button_long_event = 1U;
+        }
+    }
 }
 
 void wegui_stm32_input_process(uint16_t elapsed_ms)
 {
-    static uint16_t pressed_ms;
-    static uint16_t release_ms;
-    static uint8_t click_count;
-    static uint8_t long_pressed;
-    uint8_t pressed = HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_0) == GPIO_PIN_SET;
+    uint8_t click_event;
+    uint8_t long_event;
+    uint32_t primask;
     encoder_state_t rotation = Encoder_Get_State_Change();
+
+    (void)elapsed_ms;
+    primask = __get_PRIMASK();
+    __disable_irq();
+    click_event = button_click_event;
+    long_event = button_long_event;
+    button_click_event = 0U;
+    button_long_event = 0U;
+    __set_PRIMASK(primask);
     if (rotation == ENCODER_INCREASE) {
         if (wegui.tip.state == ENTERING || wegui.tip.state == DISPLAYING) {
             if (wegui.tip.type == slider) wegui_tip_value_add();
@@ -176,29 +238,12 @@ void wegui_stm32_input_process(uint16_t elapsed_ms)
             wegui_mlist_cursor_Prev();
         }
     }
-    if (pressed) {
-        pressed_ms = (uint16_t)((pressed_ms + elapsed_ms > 0xFFFFU) ? 0xFFFFU : pressed_ms + elapsed_ms);
-        release_ms = 0U;
-        if (long_pressed == 0U && pressed_ms >= WEGUI_LONG_PRESS_MS) {
-            Competition_Test_Stop();
-            if (wegui.menu != &m_main) wegui_enter_menu(&m_main);
-            long_pressed = 1U;
-            click_count = 0U;
-        }
-    } else if (pressed_ms != 0U) {
-        if (long_pressed == 0U && pressed_ms >= 20U) click_count++;
-        pressed_ms = 0U;
-        long_pressed = 0U;
-    } else if (click_count != 0U) {
-        release_ms = (uint16_t)((release_ms + elapsed_ms > 0xFFFFU) ? 0xFFFFU : release_ms + elapsed_ms);
-    }
-    if (click_count != 0U && release_ms >= 220U) {
-        if (click_count == 1U) {
-            if (wegui.tip.state == ENTERING || wegui.tip.state == DISPLAYING) wegui_tip_save_and_quit();
-            else if (wegui.menu->menuType == mPorgram) Competition_Test_Stop();
-            else wegui_mlist_Enter_cursor();
-        }
-        click_count = 0U;
-        release_ms = 0U;
+    if (long_event != 0U) {
+        Competition_Test_Stop();
+        if (wegui.menu != &m_main) wegui_enter_menu(&m_main);
+    } else if (click_event != 0U) {
+        if (wegui.tip.state == ENTERING || wegui.tip.state == DISPLAYING) wegui_tip_save_and_quit();
+        else if (wegui.menu->menuType == mPorgram) Competition_Test_Stop();
+        else wegui_mlist_Enter_cursor();
     }
 }

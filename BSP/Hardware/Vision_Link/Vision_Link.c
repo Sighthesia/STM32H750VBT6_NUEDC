@@ -96,20 +96,25 @@ static bool Vision_Link_Parse_Line(char *line, float *position_cm, float *veloci
 {
     char *end;
     float position;
-    float velocity;
 
     line = (char *)Vision_Link_Skip_Space(line);
     if (line[0] != '0' || !isspace((unsigned char)line[1])) return false;
     line = (char *)Vision_Link_Skip_Space(line + 1);
     position = strtof(line, &end);
-    if (end == line || !isspace((unsigned char)*end)) return false;
+    if (end == line || !isfinite(position)) return false;
     line = (char *)Vision_Link_Skip_Space(end);
-    velocity = strtof(line, &end);
-    if (end == line || *Vision_Link_Skip_Space(end) != '\0' ||
-        !isfinite(position) || !isfinite(velocity)) return false;
+    if (*line == '\0')
+    {
+        *position_cm = position;
+        *velocity_cm_s = 0.0f;
+        return true;
+    }
+
+    *velocity_cm_s = strtof(line, &end);
+    if (end == line || *Vision_Link_Skip_Space(end) != '\0' || !isfinite(*velocity_cm_s))
+        return false;
 
     *position_cm = position;
-    *velocity_cm_s = velocity;
     return true;
 }
 

@@ -29,5 +29,7 @@ uint8_t Board_Link_Get_Last_Ack(void);
 uint8_t Board_Link_Get_Peer_Diagnostic(void);
 uint16_t Board_Link_Get_Valid_Frame_Count(void);
 uint32_t Board_Link_Get_Last_Spi_Error(void);
+uint32_t Board_Link_Get_Elapsed_Ms(void);
+bool Board_Link_Is_Finished(void);
 
 #endif /* BOARD_LINK_H */

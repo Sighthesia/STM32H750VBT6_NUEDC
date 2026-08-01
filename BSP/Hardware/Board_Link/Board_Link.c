@@ -9,14 +9,19 @@
 #define BOARD_LINK_PIN_B1        GPIO_PIN_11
 #define BOARD_LINK_PIN_B2_PORT   GPIOC
 #define BOARD_LINK_PIN_B2        GPIO_PIN_12
-#define BOARD_LINK_PIN_B3_PORT   GPIOC
-#define BOARD_LINK_PIN_B3        GPIO_PIN_3
+#define BOARD_LINK_FINISH_PORT   GPIOC
+#define BOARD_LINK_FINISH_PIN    GPIO_PIN_3
 
 #define BOARD_LINK_COMMAND_STOP  7U
 
 static uint8_t command_code;
 static uint8_t command_test;
 static uint32_t command_started_ms;
+static uint32_t task_started_ms;
+static uint32_t task_elapsed_ms;
+static uint8_t task_timer_active;
+static uint8_t finish_armed;
+static uint8_t task_finished;
 static board_link_command_status_t command_status;
 
 static void Board_Link_GPIO_Init(void)
@@ -30,10 +35,14 @@ static void Board_Link_GPIO_Init(void)
     gpio.Pull = GPIO_NOPULL;
     gpio.Speed = GPIO_SPEED_FREQ_LOW;
     HAL_GPIO_Init(BOARD_LINK_PIN_B0_PORT, &gpio);
-    gpio.Pin = BOARD_LINK_PIN_B1 | BOARD_LINK_PIN_B2 | BOARD_LINK_PIN_B3;
+    gpio.Pin = BOARD_LINK_PIN_B1 | BOARD_LINK_PIN_B2;
     HAL_GPIO_Init(GPIOC, &gpio);
+    gpio.Pin = BOARD_LINK_FINISH_PIN;
+    gpio.Mode = GPIO_MODE_INPUT;
+    gpio.Pull = GPIO_PULLDOWN;
+    HAL_GPIO_Init(BOARD_LINK_FINISH_PORT, &gpio);
     HAL_GPIO_WritePin(BOARD_LINK_PIN_B0_PORT, BOARD_LINK_PIN_B0, GPIO_PIN_RESET);
-    HAL_GPIO_WritePin(GPIOC, BOARD_LINK_PIN_B1 | BOARD_LINK_PIN_B2 | BOARD_LINK_PIN_B3, GPIO_PIN_RESET);
+    HAL_GPIO_WritePin(GPIOC, BOARD_LINK_PIN_B1 | BOARD_LINK_PIN_B2, GPIO_PIN_RESET);
 }
 
 static void Board_Link_Write_Code(uint8_t code)
@@ -44,8 +53,6 @@ static void Board_Link_Write_Code(uint8_t code)
                       (code & 0x02U) != 0U ? GPIO_PIN_SET : GPIO_PIN_RESET);
     HAL_GPIO_WritePin(BOARD_LINK_PIN_B2_PORT, BOARD_LINK_PIN_B2,
                       (code & 0x04U) != 0U ? GPIO_PIN_SET : GPIO_PIN_RESET);
-    HAL_GPIO_WritePin(BOARD_LINK_PIN_B3_PORT, BOARD_LINK_PIN_B3,
-                      (code & 0x08U) != 0U ? GPIO_PIN_SET : GPIO_PIN_RESET);
 }
 
 void Board_Link_Init(void)
@@ -54,15 +61,35 @@ void Board_Link_Init(void)
     command_code = 0U;
     command_test = 0U;
     command_started_ms = 0U;
+    task_started_ms = 0U;
+    task_elapsed_ms = 0U;
+    task_timer_active = 0U;
+    finish_armed = 0U;
+    task_finished = 0U;
     command_status = BOARD_LINK_COMMAND_IDLE;
 }
 
 void Board_Link_Process(void)
 {
+    uint32_t now = HAL_GetTick();
+
     if (command_code != 0U && (uint32_t)(HAL_GetTick() - command_started_ms) >= BOARD_LINK_CODE_HOLD_MS)
     {
         Board_Link_Write_Code(0U);
         command_code = 0U;
+        command_status = BOARD_LINK_COMMAND_OK;
+    }
+    if (task_timer_active == 0U) return;
+
+    task_elapsed_ms = now - task_started_ms;
+    if (HAL_GPIO_ReadPin(BOARD_LINK_FINISH_PORT, BOARD_LINK_FINISH_PIN) == GPIO_PIN_RESET)
+    {
+        finish_armed = 1U;
+    }
+    else if (finish_armed != 0U)
+    {
+        task_timer_active = 0U;
+        task_finished = 1U;
         command_status = BOARD_LINK_COMMAND_OK;
     }
 }
@@ -81,6 +108,11 @@ void Board_Link_Start_Test(void)
     if (command_test < 1U || command_test > 6U) return;
     command_code = command_test;
     command_started_ms = HAL_GetTick();
+    task_started_ms = command_started_ms;
+    task_elapsed_ms = 0U;
+    task_timer_active = 1U;
+    finish_armed = 0U;
+    task_finished = 0U;
     command_status = BOARD_LINK_COMMAND_WAITING;
     Board_Link_Write_Code(command_code);
 }
@@ -89,6 +121,8 @@ void Board_Link_Stop_Test(void)
 {
     command_code = BOARD_LINK_COMMAND_STOP;
     command_started_ms = HAL_GetTick();
+    if (task_timer_active != 0U) task_elapsed_ms = command_started_ms - task_started_ms;
+    task_timer_active = 0U;
     command_status = BOARD_LINK_COMMAND_WAITING;
     Board_Link_Write_Code(command_code);
 }
@@ -99,3 +133,5 @@ uint8_t Board_Link_Get_Last_Ack(void) { return command_status == BOARD_LINK_COMM
 uint8_t Board_Link_Get_Peer_Diagnostic(void) { return 0U; }
 uint16_t Board_Link_Get_Valid_Frame_Count(void) { return 0U; }
 uint32_t Board_Link_Get_Last_Spi_Error(void) { return 0U; }
+uint32_t Board_Link_Get_Elapsed_Ms(void) { return task_elapsed_ms; }
+bool Board_Link_Is_Finished(void) { return task_finished != 0U; }
