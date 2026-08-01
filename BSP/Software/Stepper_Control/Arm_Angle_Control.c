@@ -524,8 +524,8 @@ void Arm_Angle_Control_Process(void)
     debug.ball_position_p_output_cm_s = config.ball_position_kp * debug.ball_position_error_cm;
     if (config.ball_position_loop_enabled != 0.0f)
         target_velocity = PIDController_Update(&ball_position_controller,
-                                               debug.vision_position_cm,
-                                               config.ball_target_position_cm);
+                                               config.ball_target_position_cm,
+                                               debug.vision_position_cm);
     else
         target_velocity = config.ball_target_velocity_cm_s;
     target_velocity = clampf(target_velocity, -config.ball_velocity_limit_cm_s,
