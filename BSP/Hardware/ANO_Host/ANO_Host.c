@@ -75,6 +75,9 @@
 #define ARM_MOTOR_TELEMETRY_MAX_HZ 50.0f
 #define ARM_MOTOR_FEEDBACK_TIMEOUT_MS 200U
 #define ARM_MOTOR_QUERY_RESPONSE_TIMEOUT_MS 20U
+#define ARM_BALL_POSITION_STEP_TOLERANCE_CM 1.0f
+#define ARM_BALL_POSITION_STEP_SETTLE_MS 200U
+#define ARM_BALL_POSITION_STEP_PHASE_TIMEOUT_MS 2000U
 #define ARM_CALIBRATION_SAMPLE_COUNT 10U
 #define ARM_CALIBRATION_SAMPLE_TIMEOUT_MS 100U
 #define ARM_CALIBRATION_CAPTURE_TIMEOUT_MS 100U
@@ -247,6 +250,7 @@ static const ano_command_desc_t arm_commands[] = {
     {{0x03U, ANO_COMMAND_ARM_BALL_LOOP_START, 0x00U}, "启动小球闭环", "三点标定、电机位置和视觉有效且双环开启后立即进入闭环"},
     {{0x03U, ANO_COMMAND_ARM_BALL_LOOP_STOP, 0x00U}, "停止小球闭环", "立即撤销闭环授权、停止电机并清零PID"},
     {{0x03U, ANO_COMMAND_ARM_BALL_SPEED_STEP, 0x00U}, "小球速度阶跃", "按当前目标速度幅值执行0、正、0、负、0阶跃"},
+    {{0x03U, ANO_COMMAND_ARM_BALL_POSITION_STEP, 0x00U}, "小球位置阶跃", "按位置到达判定执行0、+5cm、-5cm阶跃并最终保持"},
     {{0x03U, ANO_COMMAND_ARM_DISABLE, 0x00U}, "关闭保持力矩", "停止并关闭臂杆电机保持力矩"},
     {{0x03U, ANO_COMMAND_ARM_ENABLE, 0x00U}, "开启保持力矩", "开启臂杆电机保持力矩"},
     {{0x03U, ANO_COMMAND_ARM_CAPTURE_LOW, 0x00U}, "设置当前为最低点", "采集当前电机绝对位置和有效IMU Pitch并写入Flash"},
@@ -393,6 +397,10 @@ static uint8_t arm_ball_speed_step_active;
 static uint8_t arm_ball_speed_step_phase;
 static uint32_t arm_ball_speed_step_started_ms;
 static float arm_ball_speed_step_amplitude;
+static uint8_t arm_ball_position_step_active;
+static uint8_t arm_ball_position_step_phase;
+static uint32_t arm_ball_position_step_started_ms;
+static uint32_t arm_ball_position_step_settled_ms;
 
 static float arm_coordinate_to_motor(float position)
 {
@@ -3068,6 +3076,8 @@ static bool handle_arm_command(uint8_t command_id)
     case ANO_COMMAND_ARM_DISABLE:
         if (zdt_stepper_motors[0] == NULL) return false;
         Arm_Angle_Control_Set_Authorized(false);
+        arm_ball_position_step_active = 0U;
+        arm_ball_speed_step_active = 0U;
         (void)stop_arm_debug(false);
         ZDT_Stepper_Enable(zdt_stepper_motors[0], ZDT_STEPPER_DISABLE, ZDT_STEPPER_SYNC_DISABLE);
         return true;
@@ -3089,6 +3099,8 @@ static bool handle_arm_command(uint8_t command_id)
     case ANO_COMMAND_ARM_BALL_LOOP_STOP:
         {
             arm_angle_control_config_t next = *Arm_Angle_Control_Get_Config();
+            arm_ball_position_step_active = 0U;
+            arm_ball_speed_step_active = 0U;
             next.ball_position_loop_enabled = 0.0f;
             next.ball_velocity_loop_enabled = 0.0f;
             return Arm_Angle_Control_Apply_Config(&next);
@@ -3096,6 +3108,7 @@ static bool handle_arm_command(uint8_t command_id)
     case ANO_COMMAND_ARM_BALL_SPEED_STEP:
         {
             arm_angle_control_config_t next = *Arm_Angle_Control_Get_Config();
+            arm_ball_position_step_active = 0U;
             arm_ball_speed_step_amplitude = fabsf(next.ball_target_velocity_cm_s);
             if (arm_ball_speed_step_amplitude < 0.1f) arm_ball_speed_step_amplitude = 2.0f;
             next.ball_position_loop_enabled = 0.0f;
@@ -3105,6 +3118,20 @@ static bool handle_arm_command(uint8_t command_id)
             arm_ball_speed_step_phase = 0U;
             arm_ball_speed_step_started_ms = HAL_GetTick();
             arm_ball_speed_step_active = 1U;
+            return true;
+        }
+    case ANO_COMMAND_ARM_BALL_POSITION_STEP:
+        {
+            arm_angle_control_config_t next = *Arm_Angle_Control_Get_Config();
+            arm_ball_speed_step_active = 0U;
+            next.ball_position_loop_enabled = 1.0f;
+            next.ball_velocity_loop_enabled = 1.0f;
+            next.ball_target_position_cm = 5.0f;
+            if (!Arm_Angle_Control_Apply_Config(&next)) return false;
+            arm_ball_position_step_phase = 0U;
+            arm_ball_position_step_started_ms = HAL_GetTick();
+            arm_ball_position_step_settled_ms = 0U;
+            arm_ball_position_step_active = 1U;
             return true;
         }
     default: return false;
@@ -3129,6 +3156,52 @@ static void process_arm_ball_speed_step(void)
     }
     (void)Arm_Angle_Control_Set_Ball_Velocity_Target(
         arm_ball_speed_step_amplitude * (float)multipliers[arm_ball_speed_step_phase]);
+}
+
+static void process_arm_ball_position_step(void)
+{
+    const arm_angle_control_debug_t *debug = Arm_Angle_Control_Get_Debug();
+    static const float targets[2] = {5.0f, -5.0f};
+    const uint32_t now = HAL_GetTick();
+
+    if (arm_ball_position_step_active == 0U) return;
+    if (debug->vision_valid == 0U)
+    {
+        arm_ball_position_step_active = 0U;
+        return;
+    }
+    if ((uint32_t)(now - arm_ball_position_step_started_ms) >=
+        ARM_BALL_POSITION_STEP_PHASE_TIMEOUT_MS)
+    {
+        arm_ball_position_step_active = 0U;
+        (void)Arm_Angle_Control_Set_Ball_Velocity_Target(0.0f);
+        return;
+    }
+
+    if (fabsf(debug->vision_position_cm - targets[arm_ball_position_step_phase]) <=
+            ARM_BALL_POSITION_STEP_TOLERANCE_CM &&
+        fabsf(debug->vision_velocity_cm_s) <= 1.0f)
+    {
+        if (arm_ball_position_step_settled_ms == 0U)
+            arm_ball_position_step_settled_ms = now;
+        if ((uint32_t)(now - arm_ball_position_step_settled_ms) <
+            ARM_BALL_POSITION_STEP_SETTLE_MS) return;
+        if (arm_ball_position_step_phase >= 1U)
+        {
+            arm_ball_position_step_active = 0U;
+            return;
+        }
+        arm_ball_position_step_phase++;
+        arm_ball_position_step_started_ms = now;
+        arm_ball_position_step_settled_ms = 0U;
+        arm_angle_control_config_t next = *Arm_Angle_Control_Get_Config();
+        next.ball_target_position_cm = targets[arm_ball_position_step_phase];
+        (void)Arm_Angle_Control_Apply_Config(&next);
+    }
+    else
+    {
+        arm_ball_position_step_settled_ms = 0U;
+    }
 }
 
 static void process_arm_debug(void)
@@ -3368,6 +3441,8 @@ static void send_arm_ball_telemetry(void)
     d[i++] = angle->ball_velocity_output_limited;
     d[i++] = arm_ball_speed_step_active;
     d[i++] = arm_ball_speed_step_phase;
+    d[i++] = arm_ball_position_step_active;
+    d[i++] = arm_ball_position_step_phase;
     send_frame(ANO_ID_ARM_BALL_TELEMETRY, d, i);
 }
 
@@ -3713,6 +3788,7 @@ static bool command(const uint8_t *d, uint16_t n)
                    d[1] == ANO_COMMAND_ARM_BALL_LOOP_START ||
                    d[1] == ANO_COMMAND_ARM_BALL_LOOP_STOP ||
                    d[1] == ANO_COMMAND_ARM_BALL_SPEED_STEP ||
+                   d[1] == ANO_COMMAND_ARM_BALL_POSITION_STEP ||
                    d[1] == ANO_COMMAND_ARM_TELEMETRY_ENABLE ||
                    d[1] == ANO_COMMAND_ARM_TELEMETRY_DISABLE ? handle_arm_command(d[1]) : false;
         }
@@ -3725,6 +3801,7 @@ static bool command(const uint8_t *d, uint16_t n)
                    d[0] == ANO_COMMAND_ARM_BALL_LOOP_START ||
                    d[0] == ANO_COMMAND_ARM_BALL_LOOP_STOP ||
                    d[0] == ANO_COMMAND_ARM_BALL_SPEED_STEP ||
+                   d[0] == ANO_COMMAND_ARM_BALL_POSITION_STEP ||
                    d[0] == ANO_COMMAND_ARM_TELEMETRY_ENABLE ||
                    d[0] == ANO_COMMAND_ARM_TELEMETRY_DISABLE ? handle_arm_command(d[0]) : false;
         }
@@ -3911,7 +3988,7 @@ void ANO_Host_Process(void)
         rx_head = (rx_head + 1U) % ANO_RX_QUEUE_SIZE;
         feed(b);
     }
-    if (App_Role_Get() == APP_ROLE_ARM) { process_arm_debug(); process_arm_ball_speed_step(); }
+    if (App_Role_Get() == APP_ROLE_ARM) { process_arm_debug(); process_arm_ball_speed_step(); process_arm_ball_position_step(); }
     else process_car_b0_calibration();
     start_tx();
     process_parameter_save();

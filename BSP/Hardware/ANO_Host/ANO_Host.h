@@ -39,6 +39,7 @@
 #define ANO_COMMAND_ARM_BALL_LOOP_START 0x42U
 #define ANO_COMMAND_ARM_BALL_LOOP_STOP 0x43U
 #define ANO_COMMAND_ARM_BALL_SPEED_STEP 0x44U
+#define ANO_COMMAND_ARM_BALL_POSITION_STEP 0x45U
 
 #define ANO_ID_ARM_MOTOR_TELEMETRY 0xF9U
 #define ANO_ID_VISION_TELEMETRY 0xFAU
@@ -76,7 +77,8 @@
  * (float), brake target acceleration cm/s2 (float), raw brake beam angle deg
  * (float), limited brake beam angle deg (float), combined motor offset deg
  * (float), motor target position deg (float), output-limit flags
- * (u8), speed-step active (u8), speed-step phase 0~4 (u8).
+ * (u8), speed-step active (u8), speed-step phase 0~4 (u8), position-step
+ * active (u8), position-step phase 0~1 (u8).
  * Multi-byte fields are little-endian. */
 
 void ANO_Host_Init(void);
