@@ -130,13 +130,6 @@ void Vision_Link_Set_Kalman_Enabled(bool enabled)
     Vision_Link_Reset_Kalman();
 }
 
-void Vision_Link_Set_Kalman_Parameters(float measurement_noise, float process_noise_position, float process_noise_velocity)
-{
-    kalman_measurement_noise = measurement_noise;
-    kalman_process_noise_position = process_noise_position;
-    kalman_process_noise_velocity = process_noise_velocity;
-}
-
 void Vision_Link_Reset_Kalman(void)
 {
     kalman_position = 0.0f;
