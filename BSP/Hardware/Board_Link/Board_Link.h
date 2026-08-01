@@ -27,5 +27,10 @@ void Board_Link_Select_Test(uint8_t test_id);
 void Board_Link_Start_Test(void);
 void Board_Link_Stop_Test(void);
 board_link_command_status_t Board_Link_Get_Command_Status(void);
+uint8_t Board_Link_Get_Last_Command(void);
+uint8_t Board_Link_Get_Last_Ack(void);
+uint8_t Board_Link_Get_Peer_Diagnostic(void);
+uint16_t Board_Link_Get_Valid_Frame_Count(void);
+uint32_t Board_Link_Get_Last_Spi_Error(void);
 
 #endif /* BOARD_LINK_H */

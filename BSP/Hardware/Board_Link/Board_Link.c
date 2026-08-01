@@ -35,6 +35,9 @@ static uint8_t command_start_requested;
 static uint8_t command_test;
 static uint32_t command_started_ms;
 static board_link_command_status_t command_status;
+static volatile uint8_t last_ack;
+static volatile uint16_t valid_frame_count;
+static volatile uint32_t last_spi_error;
 SPI_HandleTypeDef hspi3;
 
 #define BOARD_LINK_COMMAND_SELECT  0x10U
@@ -136,7 +139,9 @@ static void Board_Link_Parse_Frame(void)
         peer_role = rx_frame[3];
         peer_gray = rx_frame[5];
         peer_flags = rx_frame[6];
+        last_ack = rx_frame[7];
         last_rx_ms = HAL_GetTick();
+        valid_frame_count++;
         if (App_Role_Get() == APP_ROLE_ARM && command_pending != 0U && rx_frame[7] == command_pending)
         {
             if ((command_pending & 0xF0U) == BOARD_LINK_COMMAND_SELECT && command_start_requested != 0U)
@@ -192,6 +197,9 @@ void Board_Link_Init(void)
     command_start_requested = 0U;
     command_test = 0U;
     command_status = BOARD_LINK_COMMAND_IDLE;
+    last_ack = 0U;
+    valid_frame_count = 0U;
+    last_spi_error = HAL_SPI_ERROR_NONE;
     if (App_Role_Get() == APP_ROLE_ARM) Board_Link_Arm_Slave();
 }
 
@@ -263,6 +271,7 @@ void HAL_SPI_ErrorCallback(SPI_HandleTypeDef *hspi)
 {
     if (hspi->Instance == SPI3)
     {
+        last_spi_error = HAL_SPI_GetError(hspi);
         slave_transfer_active = 0U;
         if (App_Role_Get() == APP_ROLE_ARM) Board_Link_Arm_Slave();
     }
@@ -316,3 +325,9 @@ board_link_command_status_t Board_Link_Get_Command_Status(void)
 {
     return command_status;
 }
+
+uint8_t Board_Link_Get_Last_Command(void) { return command_pending; }
+uint8_t Board_Link_Get_Last_Ack(void) { return last_ack; }
+uint8_t Board_Link_Get_Peer_Diagnostic(void) { return peer_flags; }
+uint16_t Board_Link_Get_Valid_Frame_Count(void) { return valid_frame_count; }
+uint32_t Board_Link_Get_Last_Spi_Error(void) { return last_spi_error; }
