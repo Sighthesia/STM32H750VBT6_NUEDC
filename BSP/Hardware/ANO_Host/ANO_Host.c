@@ -1595,6 +1595,7 @@ static bool write_attitude_parameter(uint16_t parameter_id, float value)
     if (!isfinite(value)) return false;
     switch (parameter_id)
     {
+    case ATTITUDE_MODE: return value == (float)CAR_ATTITUDE_CONTROL_PID;
     case ATTITUDE_BASE_SPEED: next.base_speed = value; break;
     case ATTITUDE_START_RAMP_MS: next.start_ramp_ms = value; break;
     case ATTITUDE_HEADING_KP: next.heading_kp = value; break;
