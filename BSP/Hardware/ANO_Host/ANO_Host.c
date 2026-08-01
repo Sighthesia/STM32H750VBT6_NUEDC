@@ -276,7 +276,6 @@ typedef struct { uint8_t cid[3]; const char *name; const char *info; } ano_comma
 
 static const ano_command_desc_t car_commands[] = {
     {{0x03U, 0x03U, 0x00U}, "停止循迹任务", "立即停止任务2、5、6循迹并冻结任务状态"},
-    {{0x03U, ANO_COMMAND_CAR_RESTORE_DEFAULTS, 0x00U}, "恢复循迹默认", "恢复惯导循迹、任务几何与里程标定默认值"},
     {{0x03U, ANO_COMMAND_ATTITUDE_ENABLE, 0x00U}, "启动任务2循迹", "启动惯导闭环循迹，基础速度按缓启动参数爬升"},
     {{0x03U, ANO_COMMAND_ATTITUDE_DISABLE, 0x00U}, "停止任务2循迹", "停止惯导闭环循迹并将驱动速度置零"},
     {{0x03U, ANO_COMMAND_CAR_LAP_START, 0x00U}, "启动任务5/6一圈", "启动一圈循迹、里程、弯道前馈和回A停车"},
@@ -2194,33 +2193,6 @@ static bool apply_car_config(void)
     return Car_Motor_Apply_Config(&config);
 }
 
-static bool restore_defaults(void)
-{
-    storage_operation = 3U;
-    if (App_Role_Get() == APP_ROLE_CAR)
-    {
-        (void)Car_Lap_Task_Stop();
-    }
-    else
-    {
-        (void)stop_arm_debug(true);
-    }
-    if (!storage_ready || !W25Qxx_EraseSector(ANO_STORAGE_ADDRESS) ||
-        (App_Role_Get() == APP_ROLE_CAR && !Car_Motor_Restore_Defaults()))
-    {
-        return false;
-    }
-
-    reset_local_defaults();
-    if (host_baud_rate != ANO_DEFAULT_BAUD_RATE)
-    {
-        pending_baud_rate = ANO_DEFAULT_BAUD_RATE;
-        baud_switch_at_ms = HAL_GetTick() + ANO_BAUD_SWITCH_DELAY_MS;
-    }
-    storage_operation = 0U;
-    return true;
-}
-
 static bool stop_car_debug(void)
 {
     car_debug_active = 0U;
@@ -2993,7 +2965,6 @@ static bool command(const uint8_t *d, uint16_t n)
     if (App_Role_Get() == APP_ROLE_CAR)
     {
         if (n == 3U && d[0] == 0x03U && d[1] == 0x03U && d[2] == 0x00U) return Car_Lap_Task_Stop();
-        if (n == 3U && d[0] == 0x03U && d[1] == ANO_COMMAND_CAR_RESTORE_DEFAULTS && d[2] == 0x00U) return restore_defaults();
         if (n == 3U && d[0] == 0x03U && d[1] == ANO_COMMAND_ATTITUDE_ENABLE && d[2] == 0x00U) return Car_Attitude_Control_Set_Enabled(true);
         if (n == 3U && d[0] == 0x03U && d[1] == ANO_COMMAND_ATTITUDE_DISABLE && d[2] == 0x00U) return Car_Lap_Task_Stop();
         if (n == 3U && d[0] == 0x03U && d[1] == ANO_COMMAND_CAR_LAP_START && d[2] == 0x00U) return Car_Lap_Task_Start();
@@ -3003,7 +2974,6 @@ static bool command(const uint8_t *d, uint16_t n)
     if (n == 3U && d[0] == 0x03U && d[1] == ANO_COMMAND_CAR_READ_FLASH && d[2] == 0x00U) return Car_Motor_Read_Flash();
     if (n == 3U && d[0] == 0x03U && d[1] == ANO_COMMAND_CAR_FACTORY_RESET && d[2] == 0x00U) return Car_Motor_Factory_Reset();
     if (n == 3U && d[0] == 0x03U && d[1] == ANO_COMMAND_CAR_APPLY_CONFIG && d[2] == 0x00U) return apply_car_config();
-    if (n == 3U && d[0] == 0x03U && d[1] == ANO_COMMAND_CAR_RESTORE_DEFAULTS && d[2] == 0x00U) return restore_defaults();
     if (n == 3U && d[0] == 0x03U && d[1] == ANO_COMMAND_ATTITUDE_ENABLE && d[2] == 0x00U && car_b0_calibration_active == 0U) { car_debug_active = 0U; return Car_Attitude_Control_Set_Enabled(true); }
     if (n == 3U && d[0] == 0x03U && d[1] == ANO_COMMAND_ATTITUDE_DISABLE && d[2] == 0x00U) { if (car_b0_calibration_active != 0U) { stop_car_b0_calibration(4U); return true; } return Car_Lap_Task_Stop(); }
     if (n == 3U && d[0] == 0x03U && d[1] == ANO_COMMAND_STEPPER_FF_CALIBRATE && d[2] == 0x00U) { Stepper_Feedforward_Reset_Bias(); return true; }
