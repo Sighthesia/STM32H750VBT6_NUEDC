@@ -5,6 +5,7 @@
 
 #include "lcd_wegui_menu_app.h"
 #include "Board_Link.h"
+#include "Arm_Competition_Task.h"
 #include "lcd_driver.h"
 
 static uint8_t active_test;
@@ -25,6 +26,11 @@ static void draw_hex(uint8_t y, const char *label, uint32_t value)
 static void begin_test(uint8_t test_id)
 {
     active_test = test_id;
+    if (test_id >= 3U)
+    {
+        (void)Arm_Competition_Task_Select((arm_competition_task_id_t)test_id);
+        (void)Arm_Competition_Task_Start();
+    }
     Board_Link_Select_Test(test_id);
     Board_Link_Start_Test();
 }
@@ -35,8 +41,8 @@ void Competition_Test_3_Begin(void) { begin_test(3U); }
 void Competition_Test_4_Begin(void) { begin_test(4U); }
 void Competition_Test_5_Begin(void) { begin_test(5U); }
 void Competition_Test_6_Begin(void) { begin_test(6U); }
-void Competition_Test_Quit(void) { Board_Link_Stop_Test(); }
-void Competition_Test_Stop(void) { Board_Link_Stop_Test(); }
+void Competition_Test_Quit(void) { Arm_Competition_Task_Cancel(); Board_Link_Stop_Test(); }
+void Competition_Test_Stop(void) { Arm_Competition_Task_Cancel(); Board_Link_Stop_Test(); }
 
 uint8_t Competition_Test_Refresh(uint8_t ui_frames, uint16_t elapsed_ms)
 {
