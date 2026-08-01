@@ -40,7 +40,6 @@
 #define ANO_ID_CONTROL_OUTPUT 0xF3U
 #define ANO_ID_TRACKING_DIAGNOSTIC 0xF4U
 #define ANO_ID_DIAGNOSTIC 0xF5U
-#define ANO_ID_STEPPER_FF_DIAGNOSTIC 0xF6U
 #define ANO_ID_ARM_DEBUG_DIAGNOSTIC 0xF7U
 #define ANO_ID_B0_CALIBRATION 0xF8U
 #define ANO_RX_QUEUE_SIZE 128U
@@ -59,7 +58,7 @@
 #define ANO_ARM_CALIBRATION_STORAGE_B FLASH_ARM_CALIBRATION_STORAGE_B
 #define ANO_STORAGE_MAGIC 0x414E4F57UL
 #define ANO_ARM_ANGLE_STORAGE_MAGIC 0x41414331UL
-#define ANO_ARM_ANGLE_STORAGE_VERSION 3U
+#define ANO_ARM_ANGLE_STORAGE_VERSION 7U
 #define ANO_ARM_CALIBRATION_STORAGE_MAGIC 0x41433350UL
 #define ANO_ARM_CALIBRATION_STORAGE_VERSION 2U
 #define ANO_STORAGE_VERSION 18U
@@ -189,6 +188,21 @@ enum {
     ARM_PITCH_INVERTED,
     ARM_VISION_KALMAN_ENABLED,
     ARM_VISION_PREDICTION_ENABLED,
+    ARM_BALL_TARGET_VELOCITY,
+    ARM_MOTOR_POSITION_SPEED_RPM,
+    ARM_MOTOR_POSITION_OFFSET_LIMIT_DEG,
+    ARM_MOTOR_POSITION_COMMAND_PERIOD_MS,
+    ARM_VISION_FIXED_DELAY_MS,
+    ARM_VISION_GRAVITY_FEEDFORWARD_GAIN,
+    ARM_VISION_BEAM_ANGLE_DEADZONE_DEG,
+    ARM_VISION_PREDICTION_MAX_MS,
+    ARM_MOTOR_TRAJECTORY_ENABLED,
+    ARM_MOTOR_TRAJECTORY_MAX_SPEED_DEG_S,
+    ARM_MOTOR_TRAJECTORY_MAX_ACCELERATION_DEG_S2,
+    ARM_VISION_KALMAN_MEASUREMENT_NOISE,
+    ARM_VISION_KALMAN_PROCESS_NOISE_POSITION,
+    ARM_VISION_KALMAN_PROCESS_NOISE_VELOCITY,
+    ARM_BALL_VELOCITY_OUTPUT_INVERTED,
     ANO_PARAM_COUNT
 };
 
@@ -197,20 +211,31 @@ typedef struct { uint8_t cid[3]; const char *name; const char *info; } ano_comma
 
 static const uint16_t arm_parameter_ids[] = {
     ARM_BALL_POSITION_LOOP_ENABLE, ARM_BALL_VELOCITY_LOOP_ENABLE,
-    ARM_BALL_TARGET_POSITION,
+    ARM_BALL_TARGET_POSITION, ARM_BALL_TARGET_VELOCITY,
     ARM_ANGLE_KP, ARM_ANGLE_KI, ARM_ANGLE_KD,
     ARM_MOTOR_SPEED_KP, ARM_MOTOR_SPEED_KI, ARM_MOTOR_SPEED_KD,
     ARM_ANGLE_MAX_SPEED, ARM_ANGLE_DERIVATIVE_FILTER,
     ARM_CALIBRATION_LEFT_MOTOR, ARM_CALIBRATION_LEFT_PITCH,
     ARM_CALIBRATION_BALANCE_MOTOR, ARM_CALIBRATION_BALANCE_PITCH,
     ARM_CALIBRATION_RIGHT_MOTOR, ARM_CALIBRATION_RIGHT_PITCH,
-    ARM_PITCH_INVERTED, ARM_VISION_KALMAN_ENABLED, ARM_VISION_PREDICTION_ENABLED
+    ARM_PITCH_INVERTED, ARM_VISION_KALMAN_ENABLED, ARM_VISION_PREDICTION_ENABLED,
+    ARM_MOTOR_POSITION_SPEED_RPM, ARM_MOTOR_POSITION_OFFSET_LIMIT_DEG,
+    ARM_MOTOR_POSITION_COMMAND_PERIOD_MS, ARM_VISION_FIXED_DELAY_MS,
+    ARM_VISION_GRAVITY_FEEDFORWARD_GAIN, ARM_VISION_BEAM_ANGLE_DEADZONE_DEG,
+    ARM_VISION_PREDICTION_MAX_MS, ARM_MOTOR_TRAJECTORY_ENABLED,
+    ARM_MOTOR_TRAJECTORY_MAX_SPEED_DEG_S,
+    ARM_MOTOR_TRAJECTORY_MAX_ACCELERATION_DEG_S2,
+    ARM_VISION_KALMAN_MEASUREMENT_NOISE,
+    ARM_VISION_KALMAN_PROCESS_NOISE_POSITION,
+    ARM_VISION_KALMAN_PROCESS_NOISE_VELOCITY,
+    ARM_BALL_VELOCITY_OUTPUT_INVERTED
 };
 
 static const ano_command_desc_t arm_commands[] = {
     {{0x03U, ANO_COMMAND_ARM_CAPTURE_HIGH, 0x00U}, "设置当前为最高点", "采集当前电机绝对位置和有效IMU Pitch并写入Flash"},
     {{0x03U, ANO_COMMAND_ARM_BALL_LOOP_START, 0x00U}, "启动小球闭环", "三点标定、电机位置和视觉有效且双环开启后立即进入闭环"},
     {{0x03U, ANO_COMMAND_ARM_BALL_LOOP_STOP, 0x00U}, "停止小球闭环", "立即撤销闭环授权、停止电机并清零PID"},
+    {{0x03U, ANO_COMMAND_ARM_BALL_SPEED_STEP, 0x00U}, "小球速度阶跃", "按当前目标速度幅值执行0、正、0、负、0阶跃"},
     {{0x03U, ANO_COMMAND_ARM_DISABLE, 0x00U}, "关闭保持力矩", "停止并关闭臂杆电机保持力矩"},
     {{0x03U, ANO_COMMAND_ARM_ENABLE, 0x00U}, "开启保持力矩", "开启臂杆电机保持力矩"},
     {{0x03U, ANO_COMMAND_ARM_CAPTURE_LOW, 0x00U}, "设置当前为最低点", "采集当前电机绝对位置和有效IMU Pitch并写入Flash"},
@@ -353,6 +378,10 @@ static uint8_t arm_capture_pending;
 static uint8_t arm_capture_index;
 static uint32_t arm_capture_position_baseline_ms;
 static uint32_t arm_capture_requested_ms;
+static uint8_t arm_ball_speed_step_active;
+static uint8_t arm_ball_speed_step_phase;
+static uint32_t arm_ball_speed_step_started_ms;
+static float arm_ball_speed_step_amplitude;
 
 static float arm_coordinate_to_motor(float position)
 {
@@ -368,8 +397,11 @@ static void sync_arm_control_calibration(void)
 {
     if (arm_calibration_valid == 0U) return;
     (void)Arm_Angle_Control_Set_Motor_Calibration(arm_calibration_values[0],
+                                                  arm_calibration_values[1],
                                                   arm_calibration_values[2],
-                                                  arm_calibration_values[4]);
+                                                  arm_calibration_values[3],
+                                                  arm_calibration_values[4],
+                                                  arm_calibration_values[5]);
 }
 
 static void arm_motor_limits(float *minimum, float *maximum)
@@ -482,6 +514,93 @@ typedef struct
     arm_angle_control_config_t config;
     uint32_t checksum;
 } ano_arm_angle_storage_record_t;
+
+typedef struct
+{
+    uint32_t magic;
+    uint8_t version;
+    uint8_t reserved[3];
+    struct
+    {
+        float values[29];
+    } config;
+    uint32_t checksum;
+} ano_arm_angle_storage_record_v6_t;
+
+typedef struct
+{
+    uint32_t magic;
+    uint8_t version;
+    uint8_t reserved[3];
+    struct
+    {
+        float values[23];
+    } config;
+    uint32_t checksum;
+} ano_arm_angle_storage_record_v5_t;
+
+typedef struct
+{
+    float ball_position_loop_enabled;
+    float ball_velocity_loop_enabled;
+    float ball_target_position_cm;
+    float ball_target_velocity_cm_s;
+    float ball_position_kp;
+    float ball_position_ki;
+    float ball_position_kd;
+    float ball_velocity_kp;
+    float ball_velocity_ki;
+    float ball_velocity_kd;
+    float derivative_filter_s;
+    float ball_velocity_limit_cm_s;
+    float motor_position_offset_limit_deg;
+    float motor_position_speed_rpm;
+    float motor_position_command_threshold_deg;
+    float motor_position_command_period_ms;
+    float direction_inverted;
+    float vision_kalman_enabled;
+    float vision_prediction_enabled;
+} ano_arm_angle_control_config_v4_t;
+
+typedef struct
+{
+    uint32_t magic;
+    uint8_t version;
+    uint8_t reserved[3];
+    ano_arm_angle_control_config_v4_t config;
+    uint32_t checksum;
+} ano_arm_angle_storage_record_v4_t;
+
+typedef struct
+{
+    float ball_position_loop_enabled;
+    float ball_velocity_loop_enabled;
+    float ball_target_position_cm;
+    float ball_position_kp;
+    float ball_position_ki;
+    float ball_position_kd;
+    float ball_velocity_kp;
+    float ball_velocity_ki;
+    float ball_velocity_kd;
+    float derivative_filter_s;
+    float ball_velocity_limit_cm_s;
+    float motor_position_offset_limit_deg;
+    float motor_position_speed_rpm;
+    float motor_position_command_threshold_deg;
+    float motor_position_command_period_ms;
+    float direction_inverted;
+    float vision_kalman_enabled;
+    float vision_prediction_enabled;
+} ano_arm_angle_control_config_v3_t;
+
+typedef struct
+{
+    uint32_t magic;
+    uint8_t version;
+    uint8_t reserved[3];
+    ano_arm_angle_control_config_v3_t config;
+    uint32_t checksum;
+} ano_arm_angle_storage_record_v3_t;
 
 typedef struct
 {
@@ -667,6 +786,42 @@ static uint32_t arm_angle_storage_v1_checksum(const ano_arm_angle_storage_record
     return checksum;
 }
 
+static uint32_t arm_angle_storage_v3_checksum(const ano_arm_angle_storage_record_v3_t *record)
+{
+    const uint8_t *data = (const uint8_t *)record;
+    uint32_t checksum = 0x13579BDFU;
+    for (uint16_t i = 0U; i < sizeof(*record) - sizeof(record->checksum); i++)
+        checksum = (checksum << 5U) ^ (checksum >> 27U) ^ data[i];
+    return checksum;
+}
+
+static uint32_t arm_angle_storage_v4_checksum(const ano_arm_angle_storage_record_v4_t *record)
+{
+    const uint8_t *data = (const uint8_t *)record;
+    uint32_t checksum = 0x13579BDFU;
+    for (uint16_t i = 0U; i < sizeof(*record) - sizeof(record->checksum); i++)
+        checksum = (checksum << 5U) ^ (checksum >> 27U) ^ data[i];
+    return checksum;
+}
+
+static uint32_t arm_angle_storage_v5_checksum(const ano_arm_angle_storage_record_v5_t *record)
+{
+    const uint8_t *data = (const uint8_t *)record;
+    uint32_t checksum = 0x13579BDFU;
+    for (uint16_t i = 0U; i < sizeof(*record) - sizeof(record->checksum); i++)
+        checksum = (checksum << 5U) ^ (checksum >> 27U) ^ data[i];
+    return checksum;
+}
+
+static uint32_t arm_angle_storage_v6_checksum(const ano_arm_angle_storage_record_v6_t *record)
+{
+    const uint8_t *data = (const uint8_t *)record;
+    uint32_t checksum = 0x13579BDFU;
+    for (uint16_t i = 0U; i < sizeof(*record) - sizeof(record->checksum); i++)
+        checksum = (checksum << 5U) ^ (checksum >> 27U) ^ data[i];
+    return checksum;
+}
+
 static uint32_t arm_calibration_storage_checksum(const ano_arm_calibration_storage_record_t *record)
 {
     const uint8_t *data = (const uint8_t *)record;
@@ -752,6 +907,10 @@ static bool save_arm_angle_config(void)
 static void load_arm_angle_config(void)
 {
     ano_arm_angle_storage_record_t record = {0};
+    ano_arm_angle_storage_record_v6_t v6 = {0};
+    ano_arm_angle_storage_record_v5_t v5 = {0};
+    ano_arm_angle_storage_record_v4_t v4 = {0};
+    ano_arm_angle_storage_record_v3_t v3 = {0};
     ano_arm_angle_storage_record_v1_t legacy = {0};
 
     if (W25Qxx_Read(ANO_ARM_ANGLE_STORAGE_ADDRESS, (uint8_t *)&record, sizeof(record)) &&
@@ -772,6 +931,69 @@ static void load_arm_angle_config(void)
         arm_pitch_inverted = (float)record.reserved[0];
         Arm_Angle_Control_Set_Pitch_Inverted(arm_pitch_inverted != 0.0f);
         (void)Arm_Angle_Control_Apply_Config(&record.config);
+        return;
+    }
+    if (W25Qxx_Read(ANO_ARM_ANGLE_STORAGE_ADDRESS, (uint8_t *)&v6, sizeof(v6)) &&
+        v6.magic == ANO_ARM_ANGLE_STORAGE_MAGIC && v6.version == 6U &&
+        v6.checksum == arm_angle_storage_v6_checksum(&v6) && v6.reserved[0] <= 1U)
+    {
+        arm_angle_control_config_t next = *Arm_Angle_Control_Get_Config();
+        memcpy(&next, &v6.config, sizeof(v6.config));
+        next.ball_velocity_output_inverted = 0.0f;
+        arm_pitch_inverted = (float)v6.reserved[0];
+        Arm_Angle_Control_Set_Pitch_Inverted(arm_pitch_inverted != 0.0f);
+        (void)Arm_Angle_Control_Apply_Config(&next);
+        return;
+    }
+    if (W25Qxx_Read(ANO_ARM_ANGLE_STORAGE_ADDRESS, (uint8_t *)&v5, sizeof(v5)) &&
+        v5.magic == ANO_ARM_ANGLE_STORAGE_MAGIC && v5.version == 5U &&
+        v5.checksum == arm_angle_storage_v5_checksum(&v5) && v5.reserved[0] <= 1U)
+    {
+        arm_angle_control_config_t next = *Arm_Angle_Control_Get_Config();
+        memcpy(&next, &v5.config, sizeof(v5.config));
+        arm_pitch_inverted = (float)v5.reserved[0];
+        Arm_Angle_Control_Set_Pitch_Inverted(arm_pitch_inverted != 0.0f);
+        (void)Arm_Angle_Control_Apply_Config(&next);
+        return;
+    }
+    if (W25Qxx_Read(ANO_ARM_ANGLE_STORAGE_ADDRESS, (uint8_t *)&v4, sizeof(v4)) &&
+        v4.magic == ANO_ARM_ANGLE_STORAGE_MAGIC && v4.version == 4U &&
+        v4.checksum == arm_angle_storage_v4_checksum(&v4) && v4.reserved[0] <= 1U)
+    {
+        arm_angle_control_config_t next = *Arm_Angle_Control_Get_Config();
+        memcpy(&next, &v4.config, sizeof(v4.config));
+        arm_pitch_inverted = (float)v4.reserved[0];
+        Arm_Angle_Control_Set_Pitch_Inverted(arm_pitch_inverted != 0.0f);
+        (void)Arm_Angle_Control_Apply_Config(&next);
+        return;
+    }
+    if (W25Qxx_Read(ANO_ARM_ANGLE_STORAGE_ADDRESS, (uint8_t *)&v3, sizeof(v3)) &&
+        v3.magic == ANO_ARM_ANGLE_STORAGE_MAGIC && v3.version == 3U &&
+        v3.checksum == arm_angle_storage_v3_checksum(&v3) && v3.reserved[0] <= 1U)
+    {
+        arm_angle_control_config_t next = *Arm_Angle_Control_Get_Config();
+        next.ball_position_loop_enabled = v3.config.ball_position_loop_enabled;
+        next.ball_velocity_loop_enabled = v3.config.ball_velocity_loop_enabled;
+        next.ball_target_position_cm = v3.config.ball_target_position_cm;
+        next.ball_target_velocity_cm_s = 0.0f;
+        next.ball_position_kp = v3.config.ball_position_kp;
+        next.ball_position_ki = v3.config.ball_position_ki;
+        next.ball_position_kd = v3.config.ball_position_kd;
+        next.ball_velocity_kp = v3.config.ball_velocity_kp;
+        next.ball_velocity_ki = v3.config.ball_velocity_ki;
+        next.ball_velocity_kd = v3.config.ball_velocity_kd;
+        next.derivative_filter_s = v3.config.derivative_filter_s;
+        next.ball_velocity_limit_cm_s = v3.config.ball_velocity_limit_cm_s;
+        next.motor_position_offset_limit_deg = v3.config.motor_position_offset_limit_deg;
+        next.motor_position_speed_rpm = v3.config.motor_position_speed_rpm;
+        next.motor_position_command_threshold_deg = v3.config.motor_position_command_threshold_deg;
+        next.motor_position_command_period_ms = v3.config.motor_position_command_period_ms;
+        next.direction_inverted = v3.config.direction_inverted;
+        next.vision_kalman_enabled = v3.config.vision_kalman_enabled;
+        next.vision_prediction_enabled = v3.config.vision_prediction_enabled;
+        arm_pitch_inverted = (float)v3.reserved[0];
+        Arm_Angle_Control_Set_Pitch_Inverted(arm_pitch_inverted != 0.0f);
+        (void)Arm_Angle_Control_Apply_Config(&next);
         return;
     }
     if (!W25Qxx_Read(ANO_ARM_ANGLE_STORAGE_LEGACY_ADDRESS, (uint8_t *)&legacy, sizeof(legacy)) ||
@@ -1474,6 +1696,21 @@ static float *parameter(uint16_t id)
     if (id == ARM_BALL_POSITION_LOOP_ENABLE) return &arm_angle->ball_position_loop_enabled;
     if (id == ARM_BALL_VELOCITY_LOOP_ENABLE) return &arm_angle->ball_velocity_loop_enabled;
     if (id == ARM_BALL_TARGET_POSITION) return &arm_angle->ball_target_position_cm;
+    if (id == ARM_BALL_TARGET_VELOCITY) return &arm_angle->ball_target_velocity_cm_s;
+    if (id == ARM_MOTOR_POSITION_SPEED_RPM) return &arm_angle->motor_position_speed_rpm;
+    if (id == ARM_MOTOR_POSITION_OFFSET_LIMIT_DEG) return &arm_angle->motor_position_offset_limit_deg;
+    if (id == ARM_MOTOR_POSITION_COMMAND_PERIOD_MS) return &arm_angle->motor_position_command_period_ms;
+    if (id == ARM_VISION_FIXED_DELAY_MS) return &arm_angle->vision_fixed_delay_ms;
+    if (id == ARM_VISION_GRAVITY_FEEDFORWARD_GAIN) return &arm_angle->vision_gravity_feedforward_gain;
+    if (id == ARM_VISION_BEAM_ANGLE_DEADZONE_DEG) return &arm_angle->vision_beam_angle_deadzone_deg;
+    if (id == ARM_VISION_PREDICTION_MAX_MS) return &arm_angle->vision_prediction_max_ms;
+    if (id == ARM_MOTOR_TRAJECTORY_ENABLED) return &arm_angle->motor_trajectory_enabled;
+    if (id == ARM_MOTOR_TRAJECTORY_MAX_SPEED_DEG_S) return &arm_angle->motor_trajectory_max_speed_deg_s;
+    if (id == ARM_MOTOR_TRAJECTORY_MAX_ACCELERATION_DEG_S2) return &arm_angle->motor_trajectory_max_acceleration_deg_s2;
+    if (id == ARM_VISION_KALMAN_MEASUREMENT_NOISE) return &arm_angle->vision_kalman_measurement_noise;
+    if (id == ARM_VISION_KALMAN_PROCESS_NOISE_POSITION) return &arm_angle->vision_kalman_process_noise_position;
+    if (id == ARM_VISION_KALMAN_PROCESS_NOISE_VELOCITY) return &arm_angle->vision_kalman_process_noise_velocity;
+    if (id == ARM_BALL_VELOCITY_OUTPUT_INVERTED) return &arm_angle->ball_velocity_output_inverted;
     if (id == ARM_MOTOR_SPEED_KP) return &arm_angle->ball_velocity_kp;
     if (id == ARM_MOTOR_SPEED_KI) return &arm_angle->ball_velocity_ki;
     if (id == ARM_MOTOR_SPEED_KD) return &arm_angle->ball_velocity_kd;
@@ -1583,6 +1820,51 @@ static bool write_arm_parameter(uint16_t parameter_id, float value)
     case ARM_BALL_TARGET_POSITION:
         if (value < -12.5f || value > 12.5f) return false;
         break;
+    case ARM_BALL_TARGET_VELOCITY:
+        if (value < -100.0f || value > 100.0f) return false;
+        break;
+    case ARM_MOTOR_POSITION_SPEED_RPM:
+        if (value <= 0.0f || value > 100.0f) return false;
+        break;
+    case ARM_MOTOR_POSITION_OFFSET_LIMIT_DEG:
+        if (value <= 0.0f || value > 180.0f) return false;
+        break;
+    case ARM_MOTOR_POSITION_COMMAND_PERIOD_MS:
+        if (value < 10.0f || value > 1000.0f) return false;
+        break;
+    case ARM_VISION_FIXED_DELAY_MS:
+        if (value < 0.0f || value > 200.0f) return false;
+        break;
+    case ARM_VISION_GRAVITY_FEEDFORWARD_GAIN:
+        if (value < 0.0f || value > 2.0f) return false;
+        break;
+    case ARM_VISION_BEAM_ANGLE_DEADZONE_DEG:
+        if (value < 0.0f || value > 5.0f) return false;
+        break;
+    case ARM_VISION_PREDICTION_MAX_MS:
+        if (value < 10.0f || value > 500.0f) return false;
+        break;
+    case ARM_MOTOR_TRAJECTORY_ENABLED:
+        if (value != 0.0f && value != 1.0f) return false;
+        break;
+    case ARM_MOTOR_TRAJECTORY_MAX_SPEED_DEG_S:
+        if (value < 1.0f || value > 600.0f) return false;
+        break;
+    case ARM_MOTOR_TRAJECTORY_MAX_ACCELERATION_DEG_S2:
+        if (value < 1.0f || value > 5000.0f) return false;
+        break;
+    case ARM_VISION_KALMAN_MEASUREMENT_NOISE:
+        if (value < 0.001f || value > 0.2f) return false;
+        break;
+    case ARM_VISION_KALMAN_PROCESS_NOISE_POSITION:
+        if (value < 0.001f || value > 0.2f) return false;
+        break;
+    case ARM_VISION_KALMAN_PROCESS_NOISE_VELOCITY:
+        if (value < 0.01f || value > 5.0f) return false;
+        break;
+    case ARM_BALL_VELOCITY_OUTPUT_INVERTED:
+        if (value != 0.0f && value != 1.0f) return false;
+        break;
     case ARM_MOTOR_SPEED_KP:
     case ARM_MOTOR_SPEED_KI:
     case ARM_MOTOR_SPEED_KD:
@@ -1599,10 +1881,18 @@ static bool write_arm_parameter(uint16_t parameter_id, float value)
         return false;
     }
     *target = value;
+    if (parameter_id == ARM_BALL_TARGET_VELOCITY &&
+        !Arm_Angle_Control_Set_Ball_Velocity_Target(value))
+    {
+        *target = previous;
+        return false;
+    }
     if ((parameter_id >= ARM_BALL_POSITION_LOOP_ENABLE &&
          parameter_id <= ARM_MOTOR_SPEED_KD) ||
         parameter_id == ARM_VISION_KALMAN_ENABLED ||
-        parameter_id == ARM_VISION_PREDICTION_ENABLED)
+        parameter_id == ARM_VISION_PREDICTION_ENABLED ||
+         (parameter_id >= ARM_MOTOR_POSITION_SPEED_RPM &&
+          parameter_id <= ARM_BALL_VELOCITY_OUTPUT_INVERTED))
     {
         if (!Arm_Angle_Control_Apply_Config(Arm_Angle_Control_Get_Config()))
         {
@@ -1612,7 +1902,10 @@ static bool write_arm_parameter(uint16_t parameter_id, float value)
     }
     if ((parameter_id == ARM_PITCH_INVERTED ||
          parameter_id == ARM_VISION_KALMAN_ENABLED ||
-         parameter_id == ARM_VISION_PREDICTION_ENABLED) && !save_arm_angle_config())
+         parameter_id == ARM_VISION_PREDICTION_ENABLED ||
+         (parameter_id >= ARM_VISION_FIXED_DELAY_MS &&
+          parameter_id <= ARM_BALL_VELOCITY_OUTPUT_INVERTED)) &&
+        !save_arm_angle_config())
     {
         *target = previous;
         return false;
@@ -1925,7 +2218,9 @@ static void apply_parameter_after_ack(uint16_t parameter_id)
         else if (parameter_id == ARM_LIMIT_MIN || parameter_id == ARM_LIMIT_MAX ||
                  parameter_id == ARM_BALANCE_POSITION) invalidate_arm_reference();
         else if ((parameter_id >= ARM_BALL_POSITION_LOOP_ENABLE && parameter_id <= ARM_MOTOR_SPEED_KD) ||
-                 parameter_id == ARM_VISION_KALMAN_ENABLED || parameter_id == ARM_VISION_PREDICTION_ENABLED)
+                 parameter_id == ARM_VISION_KALMAN_ENABLED || parameter_id == ARM_VISION_PREDICTION_ENABLED ||
+                 parameter_id == ARM_BALL_TARGET_VELOCITY ||
+                 (parameter_id >= ARM_MOTOR_POSITION_SPEED_RPM && parameter_id <= ARM_BALL_VELOCITY_OUTPUT_INVERTED))
             (void)Arm_Angle_Control_Apply_Config(Arm_Angle_Control_Get_Config());
         else if (parameter_id == ARM_PITCH_INVERTED)
             Arm_Angle_Control_Set_Pitch_Inverted(arm_pitch_inverted != 0.0f);
@@ -2026,16 +2321,21 @@ static void send_param_info(uint16_t protocol_index)
     if (App_Role_Get() == APP_ROLE_ARM)
     {
         static const char *const names[] = {
-            "小球位置环开关", "小球速度环开关", "小球目标位置",
+             "小球位置环开关", "小球速度环开关", "小球目标位置", "小球目标速度",
             "小球位置环Kp", "小球位置环Ki", "小球位置环Kd",
             "小球速度环Kp", "小球速度环Ki", "小球速度环Kd",
             "小球速度限幅", "PID微分滤波",
             "最高点电机位置", "最高点Pitch角度", "平衡点电机位置",
-            "平衡点Pitch角度", "最低点电机位置", "最低点Pitch角度", "Pitch反转",
-            "视觉卡尔曼开关", "视觉帧间预测开关"
+            "平衡点Pitch角度", "最低点电机位置", "最低点Pitch角度",             "Pitch反转",
+            "视觉卡尔曼开关", "视觉帧间预测开关",
+             "电机位置速度", "角度修正限幅", "电机命令周期", "视觉固定延迟",
+             "重力前馈增益", "杆角死区", "预测时长上限", "位置轨迹开关",
+             "位置跟随速度", "位置跟随加速度",
+             "卡尔曼测量噪声", "卡尔曼位置噪声", "卡尔曼速度噪声",
+             "速度环输出反向"
         };
         static const char *const infos[] = {
-            "0关闭，1启用位置外环", "0关闭，1启用速度内环", "位置环目标，单位厘米",
+             "0关闭，1启用位置外环", "0关闭，1启用速度内环", "位置环目标，单位厘米", "位置环关闭时的速度目标，单位厘米每秒",
             "位置外环比例系数", "位置外环积分系数", "位置外环微分系数",
             "速度内环比例系数", "速度内环积分系数", "速度内环微分系数",
             "位置环输出速度限幅，单位厘米每秒", "两个小球环共用微分滤波时间，单位秒",
@@ -2043,7 +2343,21 @@ static void send_param_info(uint16_t protocol_index)
             "设置平衡点时自动采集，单位度，只读", "设置最低点时自动采集，单位度，只读", "设置最低点时自动采集，单位度，只读",
             "0正常，1仅反转臂杆控制和标定的Pitch角度",
             "0关闭，1使用MCU二维卡尔曼估计位置和速度",
-            "0关闭，1使用视觉帧间位置预测"
+            "0关闭，1使用视觉帧间位置预测",
+            "闭环电机位置命令转速，单位RPM，1至100",
+            "速度环输出到电机角度的最大修正量，单位度，1至180",
+             "电机位置命令最小间隔，单位毫秒，10至1000",
+             "视觉固定延迟，单位毫秒，0至200",
+             "重力前馈增益，0至2",
+             "杆角死区，单位度，0至5",
+             "预测时长上限，单位毫秒，10至500",
+             "0关闭，1启用位置速度加速度平滑",
+             "位置轨迹最大速度，单位度每秒，1至600",
+             "位置轨迹最大加速度，单位度每秒平方，1至5000",
+             "卡尔曼测量噪声，0.001至0.2，过大回正慢，过小跟随跳变，静止时减小",
+             "卡尔曼位置过程噪声，0.001至0.2，值越大跟随越快",
+             "卡尔曼速度过程噪声，0.01至5，过大静止时速度估计大，过小运动跟踪滞后",
+             "0速度与电机修正同号，1反向"
         };
         uint8_t d[ANO_DATA_MAX] = {0};
         uint16_t i = 0U;
@@ -2704,8 +3018,6 @@ static void process_arm_startup(ZDTStepperMotor *motor, uint32_t now)
 
 static bool handle_arm_command(uint8_t command_id)
 {
-    ZDTStepperMotor *motor = zdt_stepper_motors[0];
-
     switch (command_id)
     {
     case ANO_COMMAND_ARM_CAPTURE_HIGH: return request_arm_calibration_capture(0U);
@@ -2729,24 +3041,55 @@ static bool handle_arm_command(uint8_t command_id)
         return true;
     case ANO_COMMAND_ARM_CAPTURE_BALANCE: return request_arm_calibration_capture(2U);
     case ANO_COMMAND_ARM_BALL_LOOP_START:
-        if (motor == NULL || !arm_points_valid() ||
-            motor->data.current_position_ms == 0U ||
-            (uint32_t)(HAL_GetTick() - motor->data.current_position_ms) > arm_motor_feedback_timeout_ms() ||
-            !Vision_Link_Is_Online()) return false;
         {
-            const arm_angle_control_config_t *config = Arm_Angle_Control_Get_Config();
-            if (config->ball_position_loop_enabled == 0.0f ||
-                config->ball_velocity_loop_enabled == 0.0f ||
-                arm_motion_active != 0U || arm_home_active != 0U ||
-                arm_calibration_status == ANO_ARM_CALIBRATION_ACTIVE) return false;
+            arm_angle_control_config_t next = *Arm_Angle_Control_Get_Config();
+            next.ball_position_loop_enabled = 1.0f;
+            next.ball_velocity_loop_enabled = 1.0f;
+            return Arm_Angle_Control_Apply_Config(&next);
         }
-        Arm_Angle_Control_Set_Authorized(true);
-        return true;
     case ANO_COMMAND_ARM_BALL_LOOP_STOP:
-        Arm_Angle_Control_Set_Authorized(false);
-        return true;
+        {
+            arm_angle_control_config_t next = *Arm_Angle_Control_Get_Config();
+            next.ball_position_loop_enabled = 0.0f;
+            next.ball_velocity_loop_enabled = 0.0f;
+            return Arm_Angle_Control_Apply_Config(&next);
+        }
+    case ANO_COMMAND_ARM_BALL_SPEED_STEP:
+        {
+            arm_angle_control_config_t next = *Arm_Angle_Control_Get_Config();
+            arm_ball_speed_step_amplitude = fabsf(next.ball_target_velocity_cm_s);
+            if (arm_ball_speed_step_amplitude < 0.1f) arm_ball_speed_step_amplitude = 2.0f;
+            next.ball_position_loop_enabled = 0.0f;
+            next.ball_velocity_loop_enabled = 1.0f;
+            if (!Arm_Angle_Control_Apply_Config(&next) ||
+                !Arm_Angle_Control_Set_Ball_Velocity_Target(0.0f)) return false;
+            arm_ball_speed_step_phase = 0U;
+            arm_ball_speed_step_started_ms = HAL_GetTick();
+            arm_ball_speed_step_active = 1U;
+            return true;
+        }
     default: return false;
     }
+}
+
+static void process_arm_ball_speed_step(void)
+{
+    static const int8_t multipliers[5] = {0, 1, 0, -1, 0};
+    uint32_t now;
+
+    if (arm_ball_speed_step_active == 0U) return;
+    now = HAL_GetTick();
+    if ((uint32_t)(now - arm_ball_speed_step_started_ms) < 750U) return;
+    arm_ball_speed_step_started_ms = now;
+    arm_ball_speed_step_phase++;
+    if (arm_ball_speed_step_phase >= 5U)
+    {
+        arm_ball_speed_step_active = 0U;
+        (void)Arm_Angle_Control_Set_Ball_Velocity_Target(0.0f);
+        return;
+    }
+    (void)Arm_Angle_Control_Set_Ball_Velocity_Target(
+        arm_ball_speed_step_amplitude * (float)multipliers[arm_ball_speed_step_phase]);
 }
 
 static void process_arm_debug(void)
@@ -2918,7 +3261,7 @@ static void send_arm_motor_telemetry(void)
     uint16_t speed_age;
     uint16_t position_age;
     uint8_t valid = 0U;
-    uint8_t d[45];
+    uint8_t d[96];
     uint16_t i = 0U;
 
     if (motor == NULL || !tx_has_capacity(1U)) return;
@@ -2927,7 +3270,7 @@ static void send_arm_motor_telemetry(void)
     if (speed_age <= ARM_MOTOR_FEEDBACK_TIMEOUT_MS) valid |= ANO_ARM_MOTOR_SPEED_VALID;
     if (position_age <= ARM_MOTOR_FEEDBACK_TIMEOUT_MS) valid |= ANO_ARM_MOTOR_POSITION_VALID;
 
-    d[i++] = 4U;
+    d[i++] = 7U;
     d[i++] = motor->id;
     d[i++] = valid;
     d[i++] = motor->data.motor_status_flags;
@@ -2952,6 +3295,34 @@ static void send_arm_motor_telemetry(void)
     d[i++] = arm_calibration_valid;
     d[i++] = motor->data.last_control_error_status;
     send_frame(ANO_ID_ARM_MOTOR_TELEMETRY, d, i);
+}
+
+static void send_arm_ball_telemetry(void)
+{
+    const arm_angle_control_debug_t *angle = Arm_Angle_Control_Get_Debug();
+    uint8_t d[96];
+    uint16_t i = 0U;
+
+    if (!tx_has_capacity(1U)) return;
+    put_float(d, &i, angle->ball_target_position_cm);
+    put_float(d, &i, angle->ball_position_p_output_cm_s);
+    put_float(d, &i, angle->ball_target_velocity_cm_s);
+    put_float(d, &i, angle->ball_velocity_p_output_deg);
+    put_float(d, &i, angle->vision_velocity_cm_s);
+    put_float(d, &i, angle->vision_beam_angle_deg);
+    put_float(d, &i, angle->vision_feedforward_acceleration_cm_s2);
+    put_float(d, &i, angle->vision_prediction_ms);
+    put_float(d, &i, angle->ball_velocity_error_cm_s);
+    put_float(d, &i, angle->ball_velocity_i_output_deg);
+    put_float(d, &i, angle->ball_velocity_d_output_deg);
+    put_float(d, &i, angle->ball_velocity_raw_output_deg);
+    put_float(d, &i, angle->motor_position_offset_deg);
+    put_float(d, &i, angle->motor_trajectory_position_deg);
+    put_float(d, &i, angle->motor_trajectory_velocity_deg_s);
+    d[i++] = angle->ball_velocity_output_limited;
+    d[i++] = arm_ball_speed_step_active;
+    d[i++] = arm_ball_speed_step_phase;
+    send_frame(ANO_ID_ARM_BALL_TELEMETRY, d, i);
 }
 
 static void send_vision_telemetry(void)
@@ -3283,26 +3654,6 @@ static void send_storage_diagnostic(void)
     send_frame(ANO_ID_DIAGNOSTIC, d, i);
 }
 
-static void send_stepper_feedforward_diagnostic(void)
-{
-    const stepper_feedforward_debug_t *debug = Stepper_Feedforward_Get_Debug();
-    uint8_t d[40];
-    uint16_t i = 0U;
-
-    if (!tx_has_capacity(1U)) return;
-    put_float(d, &i, debug->raw_x_g);
-    put_float(d, &i, debug->raw_y_g);
-    put_float(d, &i, debug->filtered_x_g);
-    put_float(d, &i, debug->filtered_y_g);
-    put_float(d, &i, debug->pitch_output_rpm);
-    put_float(d, &i, debug->yaw_output_rpm);
-    put_float(d, &i, debug->pitch_total_rpm);
-    put_float(d, &i, debug->yaw_total_rpm);
-    put_float(d, &i, (float)debug->imu_valid);
-    put_float(d, &i, (float)debug->calibrated);
-    send_frame(ANO_ID_STEPPER_FF_DIAGNOSTIC, d, i);
-}
-
 static bool command(const uint8_t *d, uint16_t n)
 {
     if (App_Role_Get() == APP_ROLE_ARM)
@@ -3315,6 +3666,7 @@ static bool command(const uint8_t *d, uint16_t n)
                    d[1] == ANO_COMMAND_ARM_CAPTURE_BALANCE ||
                    d[1] == ANO_COMMAND_ARM_BALL_LOOP_START ||
                    d[1] == ANO_COMMAND_ARM_BALL_LOOP_STOP ||
+                   d[1] == ANO_COMMAND_ARM_BALL_SPEED_STEP ||
                    d[1] == ANO_COMMAND_ARM_TELEMETRY_ENABLE ||
                    d[1] == ANO_COMMAND_ARM_TELEMETRY_DISABLE ? handle_arm_command(d[1]) : false;
         }
@@ -3326,6 +3678,7 @@ static bool command(const uint8_t *d, uint16_t n)
                    d[0] == ANO_COMMAND_ARM_CAPTURE_BALANCE ||
                    d[0] == ANO_COMMAND_ARM_BALL_LOOP_START ||
                    d[0] == ANO_COMMAND_ARM_BALL_LOOP_STOP ||
+                   d[0] == ANO_COMMAND_ARM_BALL_SPEED_STEP ||
                    d[0] == ANO_COMMAND_ARM_TELEMETRY_ENABLE ||
                    d[0] == ANO_COMMAND_ARM_TELEMETRY_DISABLE ? handle_arm_command(d[0]) : false;
         }
@@ -3415,7 +3768,9 @@ static void handle(uint8_t source, uint8_t id, const uint8_t *d, uint16_t n, uin
                    parameter_id == ARM_ANGLE_MAX_SPEED) {
             accepted = write_arm_angle_parameter(parameter_id, value);
         } else if ((parameter_id >= ARM_BALL_POSITION_LOOP_ENABLE && parameter_id <= ARM_MOTOR_SPEED_KD) ||
-                   parameter_id == ARM_VISION_KALMAN_ENABLED || parameter_id == ARM_VISION_PREDICTION_ENABLED) {
+                   parameter_id == ARM_VISION_KALMAN_ENABLED || parameter_id == ARM_VISION_PREDICTION_ENABLED ||
+                   parameter_id == ARM_BALL_TARGET_VELOCITY ||
+                    (parameter_id >= ARM_MOTOR_POSITION_SPEED_RPM && parameter_id <= ARM_BALL_VELOCITY_OUTPUT_INVERTED)) {
             accepted = write_arm_parameter(parameter_id, value);
         } else if (parameter_id == ARM_PITCH_INVERTED) {
             accepted = write_arm_parameter(parameter_id, value);
@@ -3510,7 +3865,7 @@ void ANO_Host_Process(void)
         rx_head = (rx_head + 1U) % ANO_RX_QUEUE_SIZE;
         feed(b);
     }
-    if (App_Role_Get() == APP_ROLE_ARM) process_arm_debug();
+    if (App_Role_Get() == APP_ROLE_ARM) { process_arm_debug(); process_arm_ball_speed_step(); }
     else process_car_b0_calibration();
     start_tx();
     process_parameter_save();
@@ -3530,6 +3885,7 @@ void ANO_Host_Process(void)
         {
             arm_last_motor_telemetry_ms = HAL_GetTick();
             send_arm_motor_telemetry();
+            send_arm_ball_telemetry();
         }
     }
     if (App_Role_Get() == APP_ROLE_ARM)
@@ -3558,7 +3914,6 @@ void ANO_Host_Process(void)
         }
         else
         {
-            send_stepper_feedforward_diagnostic();
             send_arm_debug_diagnostic();
         }
     }

@@ -38,9 +38,11 @@
 #define ANO_COMMAND_ARM_CALIBRATION_CANCEL 0x41U
 #define ANO_COMMAND_ARM_BALL_LOOP_START 0x42U
 #define ANO_COMMAND_ARM_BALL_LOOP_STOP 0x43U
+#define ANO_COMMAND_ARM_BALL_SPEED_STEP 0x44U
 
 #define ANO_ID_ARM_MOTOR_TELEMETRY 0xF9U
 #define ANO_ID_VISION_TELEMETRY 0xFAU
+#define ANO_ID_ARM_BALL_TELEMETRY 0xF6U
 
 #define ANO_ARM_MOTOR_SPEED_VALID 0x01U
 #define ANO_ARM_MOTOR_POSITION_VALID 0x02U
@@ -53,12 +55,25 @@
 #define ANO_ARM_CALIBRATION_STORAGE_ERROR 5U
 #define ANO_ARM_CALIBRATION_POSITION_TIMEOUT 6U
 
-/* F9 payload v4: version, motor ID, valid flags, status flags,
- * speed RPM (float), position deg (float), speed/position age ms (u16),
+/* F9 payload v7: speed RPM (float), position deg (float),
+ * speed/position age ms (u16),
  * query/telemetry frequency Hz (u16), target/measured/error angle deg (float),
  * angle output RPM (float), angle status/enabled/authorized/IMU-valid (u8),
  * calibration status/stage/captured-mask/valid (u8), last Emm42 control
- * error status (u8, sticky until reset). The first 44 bytes retain the v3 layout.
+ * error status (u8, sticky until reset).
+ * Ball-loop and velocity-loop debug fields moved to 0xF6 (v7).
+ * Multi-byte fields are little-endian. */
+
+/* F6 payload v3 (was stepper-feedforward diagnostic): ball position target
+ * cm (float), position-loop P output cm/s (float), velocity-loop target
+ * velocity cm/s (float), velocity-loop P output deg (float), measured
+ * velocity cm/s (float), mapped beam angle deg (float), gravity feedforward
+ * acceleration cm/s2 (float), prediction horizon ms (float), velocity error
+ * cm/s (float), velocity-loop I output deg (float), velocity-loop D output
+ * deg (float), un-clamped P+I+D output deg (float), final motor position
+ * offset deg (float), trajectory position deg (float), trajectory velocity
+ * deg/s (float), output-limit flags
+ * (u8), speed-step active (u8), speed-step phase 0~4 (u8).
  * Multi-byte fields are little-endian. */
 
 void ANO_Host_Init(void);
