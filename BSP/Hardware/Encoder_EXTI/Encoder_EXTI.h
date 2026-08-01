@@ -33,6 +33,7 @@ extern volatile int16_t encoder_count;
  * @brief 编码器一键初始化函数
  */
 void Encoder_Init(void);
+void Encoder_Process(void);
 
 /** ***************************************************************************
  * @brief 获取编码器状态变化

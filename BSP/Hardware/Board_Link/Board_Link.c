@@ -31,7 +31,16 @@ static uint32_t initialized_ms;
 static uint8_t sequence;
 static uint8_t was_online;
 static uint8_t offline_stop_sent;
+static uint8_t command_pending;
+static uint8_t command_start_requested;
+static uint8_t command_test;
+static uint32_t command_started_ms;
+static board_link_command_status_t command_status;
 SPI_HandleTypeDef hspi3;
+
+#define BOARD_LINK_COMMAND_SELECT  0x10U
+#define BOARD_LINK_COMMAND_START   0x20U
+#define BOARD_LINK_COMMAND_STOP    0x30U
 
 static void Board_Link_SPI_Init(void)
 {
@@ -119,7 +128,7 @@ static void Board_Link_Build_Frame(void)
     tx_frame[4] = sequence++;
     tx_frame[5] = App_Role_Get() == APP_ROLE_CAR ? Gray_Sensor_Read() : 0U;
     tx_frame[6] = App_Role_Get() == APP_ROLE_ARM && Tracking_Link_Is_Online() ? 0x01U : 0U;
-    tx_frame[7] = 0U;
+    tx_frame[7] = App_Role_Get() == APP_ROLE_ARM ? command_pending : 0U;
     tx_frame[8] = Board_Link_Crc8(tx_frame, BOARD_LINK_FRAME_SIZE - 1U);
 }
 
@@ -133,6 +142,20 @@ static void Board_Link_Parse_Frame(void)
         peer_gray = rx_frame[5];
         peer_flags = rx_frame[6];
         last_rx_ms = HAL_GetTick();
+        if (App_Role_Get() == APP_ROLE_ARM && command_pending != 0U && rx_frame[7] == command_pending)
+        {
+            if ((command_pending & 0xF0U) == BOARD_LINK_COMMAND_SELECT && command_start_requested != 0U)
+            {
+                command_start_requested = 0U;
+                command_pending = (uint8_t)(BOARD_LINK_COMMAND_START | command_test);
+                command_started_ms = HAL_GetTick();
+            }
+            else
+            {
+                command_pending = 0U;
+                command_status = BOARD_LINK_COMMAND_OK;
+            }
+        }
     }
 }
 
@@ -163,6 +186,10 @@ void Board_Link_Init(void)
     sequence = 0U;
     was_online = 0U;
     offline_stop_sent = 0U;
+    command_pending = 0U;
+    command_start_requested = 0U;
+    command_test = 0U;
+    command_status = BOARD_LINK_COMMAND_IDLE;
 
 }
 
@@ -170,6 +197,14 @@ void Board_Link_Process(void)
 {
     uint32_t now = HAL_GetTick();
     uint8_t online = Board_Link_Is_Online() ? 1U : 0U;
+
+    if (App_Role_Get() == APP_ROLE_ARM && command_pending != 0U &&
+        (uint32_t)(now - command_started_ms) > BOARD_LINK_TIMEOUT_MS)
+    {
+        command_pending = 0U;
+        command_start_requested = 0U;
+        command_status = BOARD_LINK_COMMAND_ERROR;
+    }
 
     if (online != 0U)
     {
@@ -252,4 +287,38 @@ uint8_t Board_Link_Get_Peer_Role(void)
 uint8_t Board_Link_Get_Peer_Gray(void)
 {
     return Board_Link_Is_Online() ? peer_gray : 0U;
+}
+
+void Board_Link_Select_Test(uint8_t test_id)
+{
+    if (App_Role_Get() != APP_ROLE_ARM || test_id < 1U || test_id > 6U) return;
+    command_test = test_id;
+    command_pending = (uint8_t)(BOARD_LINK_COMMAND_SELECT | test_id);
+    command_start_requested = 0U;
+    command_started_ms = HAL_GetTick();
+    command_status = BOARD_LINK_COMMAND_WAITING;
+}
+
+void Board_Link_Start_Test(void)
+{
+    if (App_Role_Get() == APP_ROLE_ARM && command_test >= 1U && command_test <= 6U)
+    {
+        command_start_requested = 1U;
+    }
+}
+
+void Board_Link_Stop_Test(void)
+{
+    if (App_Role_Get() == APP_ROLE_ARM && command_test >= 1U && command_test <= 6U)
+    {
+        command_pending = (uint8_t)(BOARD_LINK_COMMAND_STOP | command_test);
+        command_start_requested = 0U;
+        command_started_ms = HAL_GetTick();
+        command_status = BOARD_LINK_COMMAND_WAITING;
+    }
+}
+
+board_link_command_status_t Board_Link_Get_Command_Status(void)
+{
+    return command_status;
 }

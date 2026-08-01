@@ -14,46 +14,35 @@
 #include "Encoder_EXTI.h"
 
 /* --------------------------------- 私有变量 ----------------------------------- */
-volatile int16_t encoder_count = 0;                                // 编码器计数变量
-static volatile encoder_state_t encoder_state = ENCODER_NO_CHANGE; // 编码器状态变化标志
+volatile int16_t encoder_count = 0;
+static volatile encoder_state_t encoder_state = ENCODER_NO_CHANGE;
+static uint8_t last_state;
+static int8_t phase_accumulator;
 
-/* --------------------------------- 私有函数 ----------------------------------- */
-/** ***************************************************************************
- * @brief GPIO外部中断回调函数
- * @param GPIO_Pin 触发中断的GPIO引脚
- */
-void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
+static void encoder_sample(void)
 {
-    static uint8_t last_state = 0;
-    static float increment = 0.1f; // 每次触发增加/减少的数值
-
-    if (GPIO_Pin == GPIO_PIN_8)
+    static const int8_t transition[16] =
     {
-        // 读取当前 A、B 相状态（0或1）
-        uint8_t a = HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_8);
-        uint8_t b = 0U;
+        0, -1, 1, 0, 1, 0, 0, -1, -1, 0, 0, 1, 0, 1, -1, 0
+    };
+    uint8_t current_state = (HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_4) == GPIO_PIN_SET ? 1U : 0U) |
+                            (HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_5) == GPIO_PIN_SET ? 2U : 0U);
+    int8_t delta = transition[(last_state << 2) | current_state];
 
-        // 构造当前状态（bit0=A, bit1=B）
-        uint8_t current_state = (a << 0) | (b << 1);
-
-        // 只在A相从低到高（上升沿）时判断方向并计数
-        if ((last_state & 0x01) == 0 && (current_state & 0x01) == 1) // A相上升沿
-        {
-            if (b == 0) // B相为低电平时，逆时针
-            {
-                encoder_count -= increment;
-                encoder_state = ENCODER_DECREASE;
-            }
-            else // B相为高电平时，顺时针
-            {
-                encoder_count += increment;
-                encoder_state = ENCODER_INCREASE;
-            }
-        }
-
-        // 更新上次状态
-        last_state = current_state;
+    phase_accumulator = (int8_t)(phase_accumulator + delta);
+    if (phase_accumulator >= 4)
+    {
+        encoder_count++;
+        encoder_state = ENCODER_INCREASE;
+        phase_accumulator = 0;
     }
+    else if (phase_accumulator <= -4)
+    {
+        encoder_count--;
+        encoder_state = ENCODER_DECREASE;
+        phase_accumulator = 0;
+    }
+    last_state = current_state;
 }
 
 /* --------------------------------- 公共函数 ----------------------------------- */
@@ -62,7 +51,14 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
  */
 void Encoder_Init(void)
 {
-    HAL_NVIC_EnableIRQ(EXTI9_5_IRQn);
+    last_state = (HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_4) == GPIO_PIN_SET ? 1U : 0U) |
+                 (HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_5) == GPIO_PIN_SET ? 2U : 0U);
+    phase_accumulator = 0;
+}
+
+void Encoder_Process(void)
+{
+    encoder_sample();
 }
 
 /** ***************************************************************************

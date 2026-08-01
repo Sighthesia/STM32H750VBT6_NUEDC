@@ -24,10 +24,18 @@ limitations under the License.
 *************************************************/
 #include "wegui_menu_demo.h"
 #include "Car_Motor_USART.h"
+#include "lcd_wegui_menu_app.h"
 
 #include <stdio.h>
 
 uint8_t demo_bool=1;
+
+menu_t m_Competition_Test1;
+menu_t m_Competition_Test2;
+menu_t m_Competition_Test3;
+menu_t m_Competition_Test4;
+menu_t m_Competition_Test5;
+menu_t m_Competition_Test6;
 uint16_t demo_value=0;
 uint32_t demo_timer=0;
 int16_t slider_demo_value=-5;
@@ -421,7 +429,7 @@ void Set_language_English()
 menu_t m_main =
 {
 	.fatherMenu=0x00,//父菜单
-	.subMenu=&m_App_CarStatus,//(首个)子菜单
+	.subMenu=&m_Competition_Test1,//(首个)子菜单
 	.nextMenu=0x00,//同级下一个菜单
 	.titel=
 	{
@@ -441,6 +449,24 @@ menu_t m_main =
 		.quit_fun=0x00, //菜单退出 执行一次
 	},
 };
+
+#define COMPETITION_MENU(ID, NEXT, DESC, BEGIN) \
+menu_t m_Competition_Test##ID = { \
+    .fatherMenu=&m_main, .subMenu=0x00, .nextMenu=NEXT, \
+    .titel={.str_zh_CN="赛题" #ID, .str_en_US="TEST " #ID}, \
+    .discribe={.str_zh_CN=DESC, .str_en_US="Test " #ID}, \
+    .menuType=mPorgram, \
+    .menuPar.mPorgram_Par={.begin_fun=BEGIN, .loop_fun=0x00, .quit_fun=Competition_Test_Quit, .refresh_fun=Competition_Test_Refresh} \
+}
+
+COMPETITION_MENU(1, &m_Competition_Test2, "图传监测", Competition_Test_1_Begin);
+COMPETITION_MENU(2, &m_Competition_Test3, "循迹一圈停车", Competition_Test_2_Begin);
+COMPETITION_MENU(3, &m_Competition_Test4, "摆球往返", Competition_Test_3_Begin);
+COMPETITION_MENU(4, &m_Competition_Test5, "A到B保持", Competition_Test_4_Begin);
+COMPETITION_MENU(5, &m_Competition_Test6, "整圈中心保持", Competition_Test_5_Begin);
+COMPETITION_MENU(6, &m_App_CarStatus, "整圈指定位置", Competition_Test_6_Begin);
+
+#undef COMPETITION_MENU
 
 menu_t m_App_CarStatus =
 {

@@ -2,6 +2,8 @@
 #include "lcd_wegui_menu_mlist.h"
 #include "lcd_wegui_tip.h"
 #include "Encoder_EXTI.h"
+#include "lcd_wegui_menu_app.h"
+#include "wegui_menu_demo.h"
 #include "gpio.h"
 #include "spi.h"
 
@@ -12,6 +14,7 @@
 #define WEGUI_LCD_BL_PORT GPIOD
 #define WEGUI_LCD_BL_PIN GPIO_PIN_10
 #define WEGUI_LCD_SPI_TIMEOUT 100U
+#define WEGUI_LONG_PRESS_MS 700U
 
 static void wegui_lcd_command(uint8_t value)
 {
@@ -156,7 +159,8 @@ void wegui_stm32_input_process(uint16_t elapsed_ms)
     static uint16_t pressed_ms;
     static uint16_t release_ms;
     static uint8_t click_count;
-    uint8_t pressed = HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_4) == GPIO_PIN_RESET;
+    static uint8_t long_pressed;
+    uint8_t pressed = HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_0) == GPIO_PIN_SET;
     encoder_state_t rotation = Encoder_Get_State_Change();
     if (rotation == ENCODER_INCREASE) {
         if (wegui.tip.state == ENTERING || wegui.tip.state == DISPLAYING) {
@@ -175,19 +179,24 @@ void wegui_stm32_input_process(uint16_t elapsed_ms)
     if (pressed) {
         pressed_ms = (uint16_t)((pressed_ms + elapsed_ms > 0xFFFFU) ? 0xFFFFU : pressed_ms + elapsed_ms);
         release_ms = 0U;
+        if (long_pressed == 0U && pressed_ms >= WEGUI_LONG_PRESS_MS) {
+            Competition_Test_Stop();
+            if (wegui.menu != &m_main) wegui_enter_menu(&m_main);
+            long_pressed = 1U;
+            click_count = 0U;
+        }
     } else if (pressed_ms != 0U) {
-        if (pressed_ms >= 20U) click_count++;
+        if (long_pressed == 0U && pressed_ms >= 20U) click_count++;
         pressed_ms = 0U;
+        long_pressed = 0U;
     } else if (click_count != 0U) {
         release_ms = (uint16_t)((release_ms + elapsed_ms > 0xFFFFU) ? 0xFFFFU : release_ms + elapsed_ms);
     }
     if (click_count != 0U && release_ms >= 220U) {
         if (click_count == 1U) {
             if (wegui.tip.state == ENTERING || wegui.tip.state == DISPLAYING) wegui_tip_save_and_quit();
+            else if (wegui.menu->menuType == mPorgram) Competition_Test_Stop();
             else wegui_mlist_Enter_cursor();
-        } else {
-            if (wegui.tip.state == ENTERING || wegui.tip.state == DISPLAYING) wegui_tip_quit();
-            else wegui_mlist_Back_menu();
         }
         click_count = 0U;
         release_ms = 0U;
