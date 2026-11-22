@@ -23,6 +23,13 @@ CTestTestfile.cmake
 Makefile
 *.cmake
 
+# Telemetry exports
+/Telemetry/
+
+# Python caches
+__pycache__/
+*.pyc
+
 # IDE
 .vscode/
 .idea/
