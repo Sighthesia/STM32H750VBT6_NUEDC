@@ -82,6 +82,7 @@ typedef struct
     float commanded_base_speed;
     float target_rate;
     float measured_rate;
+    float heading_error;
     float heading_p;
     float heading_i;
     float heading_d;

@@ -56,6 +56,15 @@
  * calibration status/stage/captured-mask/valid (u8).
  * Multi-byte fields are little-endian. */
 
+/* Flexible data frame: parameter FLEXIBLE_FRAME_SELECT (ANO parameter id 106)
+ * selects the transmitted slot, 0 disables it and 1..10 selects frame id
+ * 0xF1..0xFA; the default is 1 (0xF1) and the frame is sent every 20 ms on the
+ * car role.
+ * Payload is 12 floats in this order: target_heading, tracking_angle,
+ * heading_error, heading_p, heading_i, heading_d, target_rate, measured_rate,
+ * target_rate - measured_rate, rate_p, rate_i, rate_d. Multi-byte fields are
+ * little-endian. */
+
 void ANO_Host_Init(void);
 void ANO_Host_Process(void);
 void ANO_Host_UART_RxCplt_Callback(void);

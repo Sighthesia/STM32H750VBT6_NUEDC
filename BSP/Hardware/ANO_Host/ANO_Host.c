@@ -34,7 +34,6 @@
 #define ANO_ID_PARAM_VALUE 0xE1U
 #define ANO_ID_PARAM_INFO 0xE2U
 #define ANO_ID_DEVICE_INFO 0xE3U
-#define ANO_ID_TELEMETRY 0xF1U
 #define ANO_ID_CONTROL_PID 0xF2U
 #define ANO_ID_CONTROL_OUTPUT 0xF3U
 #define ANO_ID_TRACKING_DIAGNOSTIC 0xF4U
@@ -60,7 +59,7 @@
 #define ANO_ARM_ANGLE_STORAGE_VERSION 1U
 #define ANO_ARM_CALIBRATION_STORAGE_MAGIC 0x41433350UL
 #define ANO_ARM_CALIBRATION_STORAGE_VERSION 1U
-#define ANO_STORAGE_VERSION 18U
+#define ANO_STORAGE_VERSION 19U
 #define ARM_HOME_STATUS_PERIOD_MS 50U
 #define ARM_HOME_SETTLE_MS 100U
 #define ARM_STARTUP_HOME_TIMEOUT_MS 22000U
@@ -185,6 +184,7 @@ enum {
     CAR_ARC_DIFFERENTIAL_SLEW,
     ATTITUDE_LADRC_TARGET_RATE_SLEW,
     ATTITUDE_LADRC_DIFFERENTIAL_SLEW,
+    FLEXIBLE_FRAME_SELECT,
     ANO_PARAM_COUNT
 };
 
@@ -295,6 +295,7 @@ static float car_lap_stop_delay_ms;
 static float arm_balance_position;
 static float car_lap_counts_per_meter = 285053.625f;
 static float gray_sensor_active_low = 1.0f;
+static float flexible_frame_select = 1.0f;
 static uint8_t arm_debug_active;
 static uint8_t arm_zero_valid;
 static uint8_t arm_motion_active;
@@ -379,9 +380,28 @@ typedef struct
     float car_lap_counts_per_meter;
     car_tracking_config_t tracking;
     car_lap_arc_config_t arc;
+    float flexible_frame_select;
     uint8_t reserved_2[4];
     uint32_t checksum;
 } ano_storage_record_t;
+
+typedef struct
+{
+    uint32_t magic;
+    uint8_t version;
+    uint32_t baud_rate;
+    uint8_t reserved[3];
+    float values[HOST_BAUD];
+    float directions[2];
+    car_attitude_control_config_t attitude;
+    stepper_feedforward_config_t feedforward;
+    ano_arm_debug_config_t arm_debug;
+    float car_lap_counts_per_meter;
+    car_tracking_config_t tracking;
+    car_lap_arc_config_t arc;
+    uint8_t reserved_2[4];
+    uint32_t checksum;
+} ano_storage_record_v18_t;
 
 typedef struct
 {
@@ -509,6 +529,7 @@ static void reset_local_defaults(void)
     car_lap_stop_delay_ms = 0.0f;
     car_lap_counts_per_meter = 285053.625f;
     gray_sensor_active_low = 1.0f;
+    flexible_frame_select = 1.0f;
     Gray_Sensor_Set_Active_Low(1U);
     (void)Car_Lap_Task_Set_Stop_Delay(0U);
     (void)Car_Lap_Task_Set_Counts_Per_Meter(car_lap_counts_per_meter);
@@ -561,6 +582,15 @@ static uint32_t storage_record_checksum(const ano_storage_record_t *record)
     const uint8_t *data = (const uint8_t *)record;
     uint32_t checksum = 0x6D2B79F5U;
     for (uint16_t i = 0U; i < sizeof(*record) - sizeof(record->checksum); i++) checksum = (checksum << 5U) ^ (checksum >> 27U) ^ data[i];
+    return checksum;
+}
+
+static uint32_t storage_record_v18_checksum(const ano_storage_record_v18_t *record)
+{
+    const uint8_t *data = (const uint8_t *)record;
+    uint32_t checksum = 0x6D2B79F5U;
+    for (uint16_t i = 0U; i < sizeof(*record) - sizeof(record->checksum); i++)
+        checksum = (checksum << 5U) ^ (checksum >> 27U) ^ data[i];
     return checksum;
 }
 
@@ -688,6 +718,7 @@ static bool save_storage(uint32_t baud_rate)
     record.arm_debug.home_mode = arm_home_mode;
     record.arm_debug.balance_position = arm_balance_position;
     record.car_lap_counts_per_meter = car_lap_counts_per_meter;
+    record.flexible_frame_select = flexible_frame_select;
     record.reserved[0] = (uint8_t)gray_sensor_active_low;
     record.reserved[1] = 0xA5U;
     record.checksum = storage_record_checksum(&record);
@@ -711,7 +742,32 @@ static void load_storage(void)
     {
         return;
     }
-    if (record.version == 17U)
+    if (record.version == 18U)
+    {
+        ano_storage_record_v18_t legacy = {0};
+        if (!W25Qxx_Read(ANO_STORAGE_ADDRESS, (uint8_t *)&legacy, sizeof(legacy)) ||
+            !baud_rate_is_valid(legacy.baud_rate) ||
+            legacy.checksum != storage_record_v18_checksum(&legacy))
+        {
+            return;
+        }
+        memset(&record, 0, sizeof(record));
+        record.magic = legacy.magic;
+        record.version = ANO_STORAGE_VERSION;
+        record.baud_rate = legacy.baud_rate;
+        memcpy(record.reserved, legacy.reserved, sizeof(record.reserved));
+        memcpy(record.values, legacy.values, sizeof(record.values));
+        memcpy(record.directions, legacy.directions, sizeof(record.directions));
+        record.attitude = legacy.attitude;
+        record.feedforward = legacy.feedforward;
+        record.arm_debug = legacy.arm_debug;
+        record.car_lap_counts_per_meter = legacy.car_lap_counts_per_meter;
+        record.tracking = legacy.tracking;
+        record.arc = legacy.arc;
+        memcpy(record.reserved_2, legacy.reserved_2, sizeof(record.reserved_2));
+        record.flexible_frame_select = 1.0f;
+    }
+    else if (record.version == 17U)
     {
         ano_storage_record_v17_t legacy = {0};
         if (!W25Qxx_Read(ANO_STORAGE_ADDRESS, (uint8_t *)&legacy, sizeof(legacy)) ||
@@ -736,6 +792,7 @@ static void load_storage(void)
         record.tracking = legacy.tracking;
         record.arc = legacy.arc;
         memcpy(record.reserved_2, legacy.reserved_2, sizeof(record.reserved_2));
+        record.flexible_frame_select = 1.0f;
     }
     else if (record.version != ANO_STORAGE_VERSION ||
              !baud_rate_is_valid(record.baud_rate) ||
@@ -781,6 +838,12 @@ static void load_storage(void)
         {
             gray_sensor_active_low = (float)record.reserved[0];
             Gray_Sensor_Set_Active_Low(record.reserved[0]);
+        }
+        if (isfinite(record.flexible_frame_select) && record.flexible_frame_select >= 0.0f &&
+            record.flexible_frame_select <= 10.0f &&
+            record.flexible_frame_select == floorf(record.flexible_frame_select))
+        {
+            flexible_frame_select = record.flexible_frame_select;
         }
 #if 0
     else if (record.version == 13U)
@@ -1321,6 +1384,7 @@ static float *parameter(uint16_t id)
         return &attitude->ladrc_target_rate_slew_deg_s2;
     if (id == ATTITUDE_LADRC_DIFFERENTIAL_SLEW)
         return &attitude->ladrc_differential_slew_s2;
+    if (id == FLEXIBLE_FRAME_SELECT) return &flexible_frame_select;
     if (id == ARM_MOTOR_CONTROL_MODE) return &arm_angle->motor_control_mode;
     if (id == ARM_MOTOR_POSITION_LIMIT) return &arm_angle->motor_position_limit;
     if (id == ARM_MOTOR_SPEED_LIMIT) return &arm_angle->motor_speed_limit;
@@ -1793,6 +1857,20 @@ static void send_param_info(uint16_t id)
         const char *info = id == ATTITUDE_LADRC_TARGET_RATE_SLEW ?
                            "LADRC目标角速度变化率，单位度每秒平方" :
                            "LADRC差速输出变化率，单位速度单位每秒";
+        uint8_t d[ANO_DATA_MAX] = {0};
+        uint16_t i = 0U;
+        put_u16(d, &i, id);
+        d[i++] = 8U;
+        strncpy((char *)&d[i], name, 20U); i += 20U;
+        strncpy((char *)&d[i], info, sizeof(d) - i - 1U);
+        i += (uint16_t)strlen((const char *)&d[i]);
+        send_frame(ANO_ID_PARAM_INFO, d, i);
+        return;
+    }
+    if (id == FLEXIBLE_FRAME_SELECT)
+    {
+        const char *name = "灵活数据帧";
+        const char *info = "0关闭，1-10选择0xF1-0xFA，载荷为航向角环与角速度内环";
         uint8_t d[ANO_DATA_MAX] = {0};
         uint16_t i = 0U;
         put_u16(d, &i, id);
@@ -2739,15 +2817,25 @@ static void send_car_b0_calibration_telemetry(void)
     send_frame(ANO_ID_B0_CALIBRATION, d, i);
 }
 
-static void send_telemetry(void)
+static void send_flexible_frame(void)
 {
-    const car_motor_telemetry_t *car = Car_Motor_Get_Telemetry(); uint8_t d[ANO_DATA_MAX]; uint16_t i = 0U;
-    for (uint8_t n = 0U; n < 2U; n++) put_float(d, &i, car->encoder_upload_active ? (float)car->total_encoder[n] : 0.0f);
-    for (uint8_t n = 0U; n < 2U; n++) put_float(d, &i, car->encoder_upload_active ? (float)car->encoder_delta_10ms[n] : 0.0f);
-    for (uint8_t n = 0U; n < 2U; n++) put_float(d, &i, car->encoder_upload_active ? car->speed[n] : 0.0f);
-    put_float(d, &i, car->voltage);
-    put_float(d, &i, (float)car->voltage_valid);
-    send_frame(ANO_ID_TELEMETRY, d, i);
+    const car_attitude_control_debug_t *control = Car_Attitude_Control_Get_Debug();
+    uint8_t select = (uint8_t)flexible_frame_select;
+    uint8_t d[48]; uint16_t i = 0U;
+    if (select == 0U || select > 10U || !tx_has_capacity(1U)) return;
+    put_float(d, &i, control->target_heading);
+    put_float(d, &i, control->tracking_angle);
+    put_float(d, &i, control->heading_error);
+    put_float(d, &i, control->heading_p);
+    put_float(d, &i, control->heading_i);
+    put_float(d, &i, control->heading_d);
+    put_float(d, &i, control->target_rate);
+    put_float(d, &i, control->measured_rate);
+    put_float(d, &i, control->target_rate - control->measured_rate);
+    put_float(d, &i, control->rate_p);
+    put_float(d, &i, control->rate_i);
+    put_float(d, &i, control->rate_d);
+    send_frame((uint8_t)(0xF0U + select), d, i);
 }
 
 static void send_control_telemetry(void)
@@ -3021,6 +3109,10 @@ static void handle(uint8_t source, uint8_t id, const uint8_t *d, uint16_t n, uin
             if (accepted) car_lap_counts_per_meter = value;
         } else if (parameter_id == GRAY_SENSOR_ACTIVE_LOW) {
             accepted = write_gray_sensor_parameter(value);
+        } else if (parameter_id == FLEXIBLE_FRAME_SELECT) {
+            accepted = v != NULL && isfinite(value) && value == floorf(value) &&
+                       value >= 0.0f && value <= 10.0f;
+            if (accepted) *v = value;
         } else if (v != NULL && isfinite(value) && value >= -1000.0f && value <= 1000.0f) {
             *v = value;
             accepted = true;
@@ -3143,10 +3235,10 @@ void ANO_Host_Process(void)
             send_arm_debug_diagnostic();
         }
     }
-    if (App_Role_Get() == APP_ROLE_CAR && HAL_GetTick() - last_telemetry_ms >= 100U)
+    if (App_Role_Get() == APP_ROLE_CAR && HAL_GetTick() - last_telemetry_ms >= 20U)
     {
         last_telemetry_ms = HAL_GetTick();
-        send_telemetry();
+        send_flexible_frame();
     }
     if (HAL_GetTick() - last_diagnostic_ms >= 500U)
     {

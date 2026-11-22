@@ -568,6 +568,7 @@ void Car_Attitude_Control_Process(void)
         debug.tracking_angle = heading_error;
     }
     debug.target_heading = target_heading;
+    debug.heading_error = heading_error;
     debug.measured_rate = measured_rate;
     if (!heading_pid_initialized)
     {
