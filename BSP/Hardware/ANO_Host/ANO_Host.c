@@ -2573,6 +2573,11 @@ static uint16_t feedback_age_ms(uint32_t now, uint32_t updated_ms)
     return age > UINT16_MAX ? UINT16_MAX : (uint16_t)age;
 }
 
+static uint16_t counter_u16(uint32_t value)
+{
+    return value > UINT16_MAX ? UINT16_MAX : (uint16_t)value;
+}
+
 static void send_arm_motor_telemetry(void)
 {
     ZDTStepperMotor *motor = zdt_stepper_motors[0];
@@ -2581,7 +2586,7 @@ static void send_arm_motor_telemetry(void)
     uint16_t speed_age;
     uint16_t position_age;
     uint8_t valid = 0U;
-    uint8_t d[44];
+    uint8_t d[60];
     uint16_t i = 0U;
 
     if (motor == NULL || !tx_has_capacity(1U)) return;
@@ -2590,7 +2595,7 @@ static void send_arm_motor_telemetry(void)
     if (speed_age <= ARM_MOTOR_FEEDBACK_TIMEOUT_MS) valid |= ANO_ARM_MOTOR_SPEED_VALID;
     if (position_age <= ARM_MOTOR_FEEDBACK_TIMEOUT_MS) valid |= ANO_ARM_MOTOR_POSITION_VALID;
 
-    d[i++] = 3U;
+    d[i++] = 4U;
     d[i++] = motor->id;
     d[i++] = valid;
     d[i++] = motor->data.motor_status_flags;
@@ -2612,6 +2617,16 @@ static void send_arm_motor_telemetry(void)
     d[i++] = arm_calibration_stage;
     d[i++] = arm_calibration_captured_mask;
     d[i++] = arm_calibration_valid;
+    d[i++] = motor->data.last_command;
+    d[i++] = motor->data.last_command_status;
+    d[i++] = motor->data.command_lifecycle;
+    d[i++] = motor->data.pending_command;
+    put_u16(d, &i, feedback_age_ms(now, motor->data.last_command_ms));
+    put_u16(d, &i, counter_u16(motor->data.command_timeout_count));
+    put_u16(d, &i, counter_u16(motor->data.rx_invalid_count));
+    put_u16(d, &i, counter_u16(motor->data.rx_unmatched_count));
+    put_u16(d, &i, counter_u16(motor->data.tx_dropped_count));
+    put_u16(d, &i, counter_u16(motor->data.tx_error_count));
     send_frame(ANO_ID_ARM_MOTOR_TELEMETRY, d, i);
 }
 
