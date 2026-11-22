@@ -163,6 +163,7 @@ void Arm_Angle_Control_Process(void)
     uint32_t now = HAL_GetTick();
     float output;
 
+    ZDT_Stepper_Update_Communication_Status(motor);
     Vision_Link_Process();
     debug.vision_valid = Vision_Link_Get_Sample(&vision_sample) ? 1U : 0U;
     if (debug.vision_valid != 0U)
